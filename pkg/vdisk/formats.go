@@ -19,6 +19,11 @@ const (
 	VHDFormat                 Format = "vhd"
 	VMDKSparseFormat          Format = "vmdk-sparse"
 	VMDKStreamOptimizedFormat Format = "vmdk-stream-optimized"
+	GCPFArchiveFormat         Format = "gcp"
+
+	// case VHDFormat:
+	// case VHDFormat2:
+	// case XVAFormat:
 )
 
 func AllFormatStrings() []string {
@@ -39,6 +44,7 @@ var (
 		VHDFormat:                 ".vhd",
 		VMDKSparseFormat:          ".vmdk",
 		VMDKStreamOptimizedFormat: ".vmdk",
+		GCPFArchiveFormat:         ".tar.gz",
 	}
 
 	alignments = map[Format]int64{
@@ -47,6 +53,7 @@ var (
 		VHDFormat:                 0x200000,
 		VMDKSparseFormat:          0x200000,
 		VMDKStreamOptimizedFormat: 0x200000,
+		GCPFArchiveFormat:         0x40000000,
 	}
 
 	buildFuncs = map[Format]func(context.Context, io.WriteSeeker, *vimg.Builder) error{
@@ -54,6 +61,7 @@ var (
 		VMDKFormat:                buildSparseVMDK,
 		VMDKSparseFormat:          buildSparseVMDK,
 		VMDKStreamOptimizedFormat: buildStreamOptimizedVMDK,
+		GCPFArchiveFormat:         buildGCPArchive,
 		// TODO: other formats
 	}
 )

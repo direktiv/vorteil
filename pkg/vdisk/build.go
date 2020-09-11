@@ -6,6 +6,7 @@ import (
 	"io"
 
 	"github.com/vorteil/vorteil/pkg/ext"
+	"github.com/vorteil/vorteil/pkg/gcparchive"
 	"github.com/vorteil/vorteil/pkg/vcfg"
 	"github.com/vorteil/vorteil/pkg/vimg"
 	"github.com/vorteil/vorteil/pkg/vmdk"
@@ -31,9 +32,9 @@ func Build(ctx context.Context, w io.WriteSeeker, args *BuildArgs) error {
 	case VMDKSparseFormat:
 	case VMDKStreamOptimizedFormat:
 	// case VHDFormat:
-	// case VMDKFormat2:
 	// case VHDFormat2:
 	// case XVAFormat
+	case GCPFArchiveFormat:
 	default:
 		return fmt.Errorf("build function does not support this disk format: '%s'", args.Format)
 	}
@@ -147,6 +148,22 @@ func buildSparseVMDK(ctx context.Context, w io.WriteSeeker, b *vimg.Builder) err
 	defer vw.Close()
 
 	err = b.Build(ctx, vw)
+	if err != nil {
+		return err
+	}
+	return nil
+
+}
+
+func buildGCPArchive(ctx context.Context, w io.WriteSeeker, b *vimg.Builder) error {
+
+	gw, err := gcparchive.NewWriter(w, b)
+	if err != nil {
+		return err
+	}
+	defer gw.Close()
+
+	err = b.Build(ctx, gw)
 	if err != nil {
 		return err
 	}

@@ -1,2 +1,2 @@
 # vorteil
-Rapidly create tiny virtual machines.
+Quickly create tiny virtual machines.

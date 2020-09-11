@@ -11,6 +11,7 @@ import (
 	"github.com/vorteil/vorteil/pkg/vimg"
 	"github.com/vorteil/vorteil/pkg/vmdk"
 	"github.com/vorteil/vorteil/pkg/vpkg"
+	"github.com/vorteil/vorteil/pkg/xva"
 )
 
 type KernelOptions struct {
@@ -86,7 +87,7 @@ func Build(ctx context.Context, w io.WriteSeeker, args *BuildArgs) error {
 		return err
 	}
 
-	err = args.Format.build(ctx, w, vimgBuilder)
+	err = args.Format.build(ctx, w, vimgBuilder, cfg)
 	if err != nil {
 		return err
 	}
@@ -115,7 +116,7 @@ func lcm(a, b int64, integers ...int64) int64 {
 	return result
 }
 
-func buildRAW(ctx context.Context, w io.WriteSeeker, b *vimg.Builder) error {
+func buildRAW(ctx context.Context, w io.WriteSeeker, b *vimg.Builder, cfg *vcfg.VCFG) error {
 	err := b.Build(ctx, w)
 	if err != nil {
 		return err
@@ -123,7 +124,7 @@ func buildRAW(ctx context.Context, w io.WriteSeeker, b *vimg.Builder) error {
 	return nil
 }
 
-func buildStreamOptimizedVMDK(ctx context.Context, w io.WriteSeeker, b *vimg.Builder) error {
+func buildStreamOptimizedVMDK(ctx context.Context, w io.WriteSeeker, b *vimg.Builder, cfg *vcfg.VCFG) error {
 
 	vw, err := vmdk.NewStreamOptimizedWriter(w, b)
 	if err != nil {
@@ -139,7 +140,7 @@ func buildStreamOptimizedVMDK(ctx context.Context, w io.WriteSeeker, b *vimg.Bui
 
 }
 
-func buildSparseVMDK(ctx context.Context, w io.WriteSeeker, b *vimg.Builder) error {
+func buildSparseVMDK(ctx context.Context, w io.WriteSeeker, b *vimg.Builder, cfg *vcfg.VCFG) error {
 
 	vw, err := vmdk.NewSparseWriter(w, b)
 	if err != nil {
@@ -155,9 +156,25 @@ func buildSparseVMDK(ctx context.Context, w io.WriteSeeker, b *vimg.Builder) err
 
 }
 
-func buildGCPArchive(ctx context.Context, w io.WriteSeeker, b *vimg.Builder) error {
+func buildGCPArchive(ctx context.Context, w io.WriteSeeker, b *vimg.Builder, cfg *vcfg.VCFG) error {
 
 	gw, err := gcparchive.NewWriter(w, b)
+	if err != nil {
+		return err
+	}
+	defer gw.Close()
+
+	err = b.Build(ctx, gw)
+	if err != nil {
+		return err
+	}
+	return nil
+
+}
+
+func buildXVA(ctx context.Context, w io.WriteSeeker, b *vimg.Builder, cfg *vcfg.VCFG) error {
+
+	gw, err := xva.NewWriter(w, b, cfg)
 	if err != nil {
 		return err
 	}

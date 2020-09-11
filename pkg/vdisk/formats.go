@@ -22,9 +22,8 @@ const (
 	GCPFArchiveFormat         Format = "gcp"
 	XVAFormat                 Format = "xva"
 	VHDFormat                 Format = "vhd"
-
-	// case VHDFormat:
-	// case VHDFormat2:
+	VHDFixedFormat            Format = "vhd-fixed"
+	VHDDynamicFormat          Format = "vhd-dynamic"
 )
 
 func AllFormatStrings() []string {
@@ -47,6 +46,8 @@ var (
 		GCPFArchiveFormat:         ".tar.gz",
 		XVAFormat:                 ".xva",
 		VHDFormat:                 ".vhd",
+		VHDFixedFormat:            ".vhd",
+		VHDDynamicFormat:          ".vhd",
 	}
 
 	alignments = map[Format]int64{
@@ -57,6 +58,8 @@ var (
 		GCPFArchiveFormat:         0x40000000,
 		XVAFormat:                 0x200000,
 		VHDFormat:                 0x200000,
+		VHDFixedFormat:            0x200000,
+		VHDDynamicFormat:          0x200000,
 	}
 
 	buildFuncs = map[Format]func(context.Context, io.WriteSeeker, *vimg.Builder, *vcfg.VCFG) error{
@@ -66,7 +69,9 @@ var (
 		VMDKStreamOptimizedFormat: buildStreamOptimizedVMDK,
 		GCPFArchiveFormat:         buildGCPArchive,
 		XVAFormat:                 buildXVA,
-		// TODO: other formats
+		VHDFormat:                 buildFixedVHD,
+		VHDFixedFormat:            buildFixedVHD,
+		VHDDynamicFormat:          buildDynamicVHD,
 	}
 )
 

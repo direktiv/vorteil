@@ -8,6 +8,7 @@ import (
 	"github.com/vorteil/vorteil/pkg/ext"
 	"github.com/vorteil/vorteil/pkg/gcparchive"
 	"github.com/vorteil/vorteil/pkg/vcfg"
+	"github.com/vorteil/vorteil/pkg/vhd"
 	"github.com/vorteil/vorteil/pkg/vimg"
 	"github.com/vorteil/vorteil/pkg/vmdk"
 	"github.com/vorteil/vorteil/pkg/vpkg"
@@ -181,6 +182,38 @@ func buildXVA(ctx context.Context, w io.WriteSeeker, b *vimg.Builder, cfg *vcfg.
 	defer gw.Close()
 
 	err = b.Build(ctx, gw)
+	if err != nil {
+		return err
+	}
+	return nil
+
+}
+
+func buildFixedVHD(ctx context.Context, w io.WriteSeeker, b *vimg.Builder, cfg *vcfg.VCFG) error {
+
+	vw, err := vhd.NewFixedWriter(w, b)
+	if err != nil {
+		return err
+	}
+	defer vw.Close()
+
+	err = b.Build(ctx, vw)
+	if err != nil {
+		return err
+	}
+	return nil
+
+}
+
+func buildDynamicVHD(ctx context.Context, w io.WriteSeeker, b *vimg.Builder, cfg *vcfg.VCFG) error {
+
+	vw, err := vhd.NewDynamicWriter(w, b)
+	if err != nil {
+		return err
+	}
+	defer vw.Close()
+
+	err = b.Build(ctx, vw)
 	if err != nil {
 		return err
 	}

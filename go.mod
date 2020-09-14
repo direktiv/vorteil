@@ -9,6 +9,7 @@ require (
 	github.com/cirruslabs/echelon v1.2.2
 	github.com/containers/image v3.0.2+incompatible
 	github.com/coreos/go-semver v0.3.0
+	github.com/davecgh/go-spew v1.1.1
 	github.com/djherbis/buffer v1.1.0
 	github.com/djherbis/nio v2.0.3+incompatible
 	github.com/docker/distribution v2.7.1+incompatible

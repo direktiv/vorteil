@@ -28,7 +28,6 @@ func (v *Virtualizer) Start() error {
 
 	case "ready":
 		v.state = virtualizers.Changing
-		// v.subServer.SubServer.Publish(graph.VMUpdater)
 
 		err := v.initLogging()
 		if err != nil {
@@ -64,7 +63,6 @@ func (v *Virtualizer) Start() error {
 				time.Sleep(time.Second * 1)
 			}
 			v.state = virtualizers.Alive
-			// v.subServer.SubServer.Publish(graph.VMUpdater)
 
 			_, err = v.command.Process.Wait()
 			if err == nil || err.Error() != fmt.Errorf("wait: no child processes").Error() {
@@ -74,7 +72,6 @@ func (v *Virtualizer) Start() error {
 				if v.state == virtualizers.Alive {
 					if !socketFound {
 						v.state = virtualizers.Broken
-						// v.subServer.SubServer.Publish(graph.VMUpdater)
 
 					} else {
 						err = v.Stop()

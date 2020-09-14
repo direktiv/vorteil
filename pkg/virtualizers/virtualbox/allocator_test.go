@@ -4,8 +4,8 @@ import (
 	"reflect"
 	"testing"
 
-	"code.vorteil.io/vorteil/tools/cli/pkg/compiler"
 	"github.com/vorteil/vorteil/pkg/vcfg"
+	"github.com/vorteil/vorteil/pkg/vdisk"
 	"github.com/vorteil/vorteil/pkg/virtualizers"
 )
 
@@ -66,7 +66,7 @@ func TestAlloc(t *testing.T) {
 }
 
 func TestDiskAlignment(t *testing.T) {
-	size := 2 * size.MiB
+	size := 2 * vcfg.MiB
 	align := Allocator.DiskAlignment()
 
 	if align != size {
@@ -76,7 +76,7 @@ func TestDiskAlignment(t *testing.T) {
 
 func TestDiskFormat(t *testing.T) {
 	format := Allocator.DiskFormat()
-	exactFormat := compiler.ImageFormatVMDK
+	exactFormat := vdisk.ImageFormatVMDK
 	if format != exactFormat {
 		t.Errorf("disk format does not match %v got %v instead", exactFormat, format)
 	}

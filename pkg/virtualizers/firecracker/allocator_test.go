@@ -1,4 +1,4 @@
-package hyperv
+package firecracker
 
 import (
 	"reflect"
@@ -9,49 +9,11 @@ import (
 	"github.com/vorteil/vorteil/pkg/virtualizers"
 )
 
-var cFail = &Config{
-	SwitchName: "Failed Switch",
-	Headless:   true,
-}
-var c = &Config{
-	SwitchName: "Default Switch",
-	Headless:   true,
-}
-
-var config Config
-
 func TestRegister(t *testing.T) {
 	virtualizers.Register(VirtualizerID, Allocator)
 	alloc := virtualizers.RegisteredVirtualizers()
 	if alloc[VirtualizerID] == nil {
 		t.Errorf("registering virtualizer failed, as map lookup returned nil")
-	}
-}
-func TestMarshalAndUnmarshal(t *testing.T) {
-	data := c.Marshal()
-	err := config.Unmarshal(data)
-	if err != nil {
-		t.Errorf("unmarshal failed, received error \"%v\"", err)
-	}
-	if !config.Headless {
-		t.Errorf("marshal on umarshal failed, expected %v but got %v", true, c.Headless)
-	}
-	if config.SwitchName != "Default Switch" {
-		t.Errorf("marshal on umarshal failed, expected %v but got %v", "DefaultSwitch", c.SwitchName)
-	}
-}
-
-func TestValidateArgs(t *testing.T) {
-	data := c.Marshal()
-	err := Allocator.ValidateArgs(data)
-	if err != nil {
-		t.Errorf("validating args failed, unable to validate config struct got err: %v", err)
-	}
-
-	data = cFail.Marshal()
-	err = Allocator.ValidateArgs(data)
-	if err == nil {
-		t.Errorf("validating args failed, expected to error out but didn't")
 	}
 }
 
@@ -73,7 +35,7 @@ func TestDiskAlignment(t *testing.T) {
 
 func TestDiskFormat(t *testing.T) {
 	format := Allocator.DiskFormat()
-	exactFormat := vdisk.ImageFormatFixedVHD
+	exactFormat := vdisk.RAWFormat
 	if format != exactFormat {
 		t.Errorf("disk format does not match %v got %v instead", exactFormat, format)
 	}

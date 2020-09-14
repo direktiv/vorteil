@@ -6,9 +6,9 @@ import (
 	"regexp"
 	"time"
 
-	"github.com/sisatech/goapi/pkg/file"
 	"github.com/vorteil/vorteil/pkg/vcfg"
 	"github.com/vorteil/vorteil/pkg/vdisk"
+	"github.com/vorteil/vorteil/pkg/vio"
 	logger "github.com/vorteil/vorteil/pkg/virtualizers/logging"
 	"golang.org/x/sync/syncmap"
 )
@@ -28,7 +28,7 @@ type Virtualizer interface {
 	Initialize(data []byte) error                   // Initialize the virtualizer using the data provided from the alloc
 	Prepare(args *PrepareArgs) *VirtualizeOperation // Prepare the vm setup args etc
 	State() string                                  // Return the state the vm is currently in
-	Download() (file.File, error)                   // Download the disk of the vm
+	Download() (vio.File, error)                    // Download the disk of the vm
 	ConvertToVM() interface{}                       // A simple helper function to convert the new virtualizer details to a vm object that was previously used for some backwards compat on apis
 	Detach(string) error                            // removes the vm from the active vms section and moves vm contents to different location
 	Start() error                                   // Start the vm
@@ -67,8 +67,8 @@ type PrepareArgs struct {
 	Start   bool       // to control whether its to start automatically
 	Config  *vcfg.VCFG // the vcfg attached to the VM
 	Source  interface{}
-	Image   file.File // TODO: Change to GERM BUILD
-	VMDrive string    // path to store disks for vms
+	Image   vio.File // TODO: Change to GERM BUILD
+	VMDrive string   // path to store disks for vms
 }
 
 // VirtualizeOperation is a struct that contains ways to log for the operation

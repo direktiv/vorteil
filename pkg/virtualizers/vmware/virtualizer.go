@@ -17,14 +17,11 @@ import (
 	"sync"
 	"time"
 
-	"code.vorteil.io/vorteil/tools/cli/pkg/daemon/api"
-	"code.vorteil.io/vorteil/tools/cli/pkg/daemon/graph"
-	"github.com/vorteil/vorteil/pkg/vio"
+	"github.com/thanhpk/randstr"
 	"github.com/vorteil/vorteil/pkg/vcfg"
+	"github.com/vorteil/vorteil/pkg/vio"
 	"github.com/vorteil/vorteil/pkg/virtualizers"
 	logger "github.com/vorteil/vorteil/pkg/virtualizers/logging"
-	"github.com/vorteil/vorteil/pkg/vcfg"
-	"github.com/thanhpk/randstr"
 )
 
 // vmwareType workstation by default switch to fusion when on a darwin system
@@ -54,9 +51,8 @@ type Virtualizer struct {
 	startCommand *exec.Cmd      // The execute command to start the vmware instance
 	sock         net.Conn       // net connection to read serial from
 
-	routes    []api.NetworkInterface
-	config    *vcfg.VCFG
-	subServer *graph.Graph
+	routes []virtualizers.NetworkInterface
+	config *vcfg.VCFG
 
 	vmdrive string // store disks in this directory
 
@@ -244,7 +240,6 @@ func (v *Virtualizer) Close(force bool) error {
 	}
 
 	v.state = virtualizers.Deleted
-	v.subServer.SubServer.Publish(graph.VMUpdater)
 
 	if v.sock != nil {
 		v.sock.Close()
@@ -288,7 +283,7 @@ func (v *Virtualizer) Detach(source string) error {
 		}
 		return err
 	}
-	
+
 	command := exec.Command("vmrun", "-T", vmwareType, "deleteVM", v.vmxPath)
 	output, err := v.execute(command)
 	if err != nil {
@@ -307,7 +302,6 @@ func (v *Virtualizer) Detach(source string) error {
 	}
 
 	v.state = virtualizers.Deleted
-	v.subServer.SubServer.Publish(graph.VMUpdater)
 
 	if v.sock != nil {
 		v.sock.Close()
@@ -335,7 +329,6 @@ func (v *Virtualizer) ForceStop() error {
 		v.log("info", "%s", output)
 	}
 	v.state = virtualizers.Ready
-	v.subServer.SubServer.Publish(graph.VMUpdater)
 
 	return nil
 }
@@ -357,7 +350,6 @@ func (v *Virtualizer) Stop() error {
 		}
 
 		v.state = virtualizers.Ready
-		v.subServer.SubServer.Publish(graph.VMUpdater)
 
 	}
 	return nil
@@ -395,7 +387,6 @@ func (v *Virtualizer) Start() error {
 			v.log("info", "%s", output)
 		}
 		v.state = virtualizers.Alive
-		v.subServer.SubServer.Publish(graph.VMUpdater)
 
 		go v.lookForIP()
 		go v.checkRunning()
@@ -500,8 +491,6 @@ func (v *Virtualizer) Prepare(args *virtualizers.PrepareArgs) *virtualizers.Virt
 	op := new(operation)
 	v.name = args.Name
 	v.pname = args.PName
-	v.subServer = args.Subserver
-	v.subServer.SubServer.Publish(graph.VMUpdater)
 	v.vmdrive = args.VMDrive
 	v.created = time.Now()
 	v.config = args.Config
@@ -528,15 +517,15 @@ func (v *Virtualizer) Prepare(args *virtualizers.PrepareArgs) *virtualizers.Virt
 	return o
 }
 
-// Download returns the disk as a file.File
-func (v *Virtualizer) Download() (file.File, error) {
+// Download returns the disk as a vio.File
+func (v *Virtualizer) Download() (vio.File, error) {
 	v.log("debug", "Downloading Disk")
 
 	if !(v.state == virtualizers.Ready) {
 		return nil, fmt.Errorf("the machine must be in a stopped or ready state")
 	}
 
-	f, err := file.LazyOpen(v.disk.Name())
+	f, err := vio.LazyOpen(v.disk.Name())
 	if err != nil {
 		return nil, err
 	}
@@ -550,17 +539,17 @@ func (v *Virtualizer) ConvertToVM() interface{} {
 	info := v.config.Info
 	vm := v.config.VM
 	system := v.config.System
-	programs := make([]api.ProgramSummaries, 0)
+	programs := make([]virtualizers.ProgramSummaries, 0)
 
 	for _, p := range v.config.Programs {
-		programs = append(programs, api.ProgramSummaries{
+		programs = append(programs, virtualizers.ProgramSummaries{
 			Binary: p.Binary,
 			Args:   string(p.Args),
 			Env:    p.Env,
 		})
 	}
 
-	machine := &api.VirtualMachine{
+	machine := &virtualizers.VirtualMachine{
 		ID:       v.name,
 		Author:   info.Author,
 		CPUs:     int(vm.CPUs),
@@ -572,7 +561,7 @@ func (v *Virtualizer) ConvertToVM() interface{} {
 		Kernel:   vm.Kernel.String(),
 		Name:     info.Name,
 		Summary:  info.Summary,
-		Source:   v.source.(api.Source),
+		Source:   v.source.(virtualizers.Source),
 		URL:      string(info.URL),
 		Version:  info.Version,
 		Programs: programs,
@@ -628,9 +617,9 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	// generate vmx'
 
 	// align size to 4 MiB
-	o.config.VM.RAM.Align(size.MiB * 4)
+	o.config.VM.RAM.Align(vcfg.MiB * 4)
 
-	vmxString := GenerateVMX(strconv.Itoa(int(o.config.VM.CPUs)), strconv.Itoa(o.config.VM.RAM.Units(size.MiB)), o.disk.Name(), o.name, o.folder, len(o.routes), o.networkType, o.id)
+	vmxString := GenerateVMX(strconv.Itoa(int(o.config.VM.CPUs)), strconv.Itoa(o.config.VM.RAM.Units(vcfg.MiB)), o.disk.Name(), o.name, o.folder, len(o.routes), o.networkType, o.id)
 	// o.Virtualizer.log("info", "VMX Start:\n%s\nVMX End", vmxString)
 
 	vmxPath := filepath.Join(o.folder, o.name+".vmx")
@@ -674,8 +663,6 @@ func (v *Virtualizer) checkRunning() {
 		}
 		if !running {
 			v.state = virtualizers.Ready
-			v.subServer.SubServer.Publish(graph.VMUpdater)
-
 			break
 		}
 		time.Sleep(time.Second * 1)
@@ -723,7 +710,7 @@ func (v *Virtualizer) isRunning() (bool, error) {
 
 // Routes converts the VCFG.routes to the apiNetworkInterface which allows
 // us to easiler return to currently written graphql APIs
-func (v *Virtualizer) Routes() []api.NetworkInterface {
+func (v *Virtualizer) Routes() []virtualizers.NetworkInterface {
 
 	routes := virtualizers.Routes{}
 	var nics = v.config.Networks
@@ -765,9 +752,9 @@ func (v *Virtualizer) Routes() []api.NetworkInterface {
 			routes.NIC[i].Protocol[p] = existingPorts
 		}
 	}
-	apiNics := make([]api.NetworkInterface, 0)
+	apiNics := make([]virtualizers.NetworkInterface, 0)
 	for i, net := range v.config.Networks {
-		newNetwork := api.NetworkInterface{
+		newNetwork := virtualizers.NetworkInterface{
 			Name:    "",
 			IP:      net.IP,
 			Mask:    net.Mask,
@@ -783,7 +770,7 @@ func (v *Virtualizer) Routes() []api.NetworkInterface {
 					}
 				}
 			}
-			newNetwork.UDP = append(newNetwork.UDP, api.RouteMap{
+			newNetwork.UDP = append(newNetwork.UDP, virtualizers.RouteMap{
 				Port:    port,
 				Address: addr,
 			})
@@ -798,7 +785,7 @@ func (v *Virtualizer) Routes() []api.NetworkInterface {
 					}
 				}
 			}
-			newNetwork.TCP = append(newNetwork.TCP, api.RouteMap{
+			newNetwork.TCP = append(newNetwork.TCP, virtualizers.RouteMap{
 				Port:    port,
 				Address: addr,
 			})
@@ -813,7 +800,7 @@ func (v *Virtualizer) Routes() []api.NetworkInterface {
 					}
 				}
 			}
-			newNetwork.HTTP = append(newNetwork.HTTP, api.RouteMap{
+			newNetwork.HTTP = append(newNetwork.HTTP, virtualizers.RouteMap{
 				Port:    port,
 				Address: addr,
 			})
@@ -828,7 +815,7 @@ func (v *Virtualizer) Routes() []api.NetworkInterface {
 					}
 				}
 			}
-			newNetwork.HTTPS = append(newNetwork.HTTPS, api.RouteMap{
+			newNetwork.HTTPS = append(newNetwork.HTTPS, virtualizers.RouteMap{
 				Port:    port,
 				Address: addr,
 			})

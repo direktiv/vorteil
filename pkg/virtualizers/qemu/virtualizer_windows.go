@@ -12,12 +12,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	"code.vorteil.io/vorteil/tools/cli/pkg/daemon/graph"
-	"github.com/vorteil/vorteil/pkg/vcfg"
-	"github.com/vorteil/vorteil/pkg/virtualizers"
 	"github.com/mattn/go-shellwords"
 	"github.com/natefinch/npipe"
 	"github.com/thanhpk/randstr"
+	"github.com/vorteil/vorteil/pkg/vcfg"
+	"github.com/vorteil/vorteil/pkg/virtualizers"
 )
 
 // Start creates the virtualmachine and runs it
@@ -28,7 +27,6 @@ func (v *Virtualizer) Start() error {
 	switch v.State() {
 	case "ready":
 		v.state = virtualizers.Changing
-		v.subServer.SubServer.Publish(graph.VMUpdater)
 
 		err := v.initLogging()
 		if err != nil {
@@ -47,7 +45,6 @@ func (v *Virtualizer) Start() error {
 			v.sock = conn
 			go io.Copy(ioutil.Discard, conn)
 			v.state = virtualizers.Alive
-			v.subServer.SubServer.Publish(graph.VMUpdater)
 
 			_, err = v.command.Process.Wait()
 			if err == nil || err.Error() != fmt.Errorf("wait: no child processes").Error() {
@@ -128,7 +125,7 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	diskpath := filepath.ToSlash(o.disk.Name())
 	diskformat := "raw"
 
-	argsCommand := createArgs(o.config.VM.CPUs, o.config.VM.RAM.Units(size.MiB), o.headless, diskpath, diskformat)
+	argsCommand := createArgs(o.config.VM.CPUs, o.config.VM.RAM.Units(vcfg.MiB), o.headless, diskpath, diskformat)
 	argsCommand += fmt.Sprintf(" -monitor pipe:%s", o.id)
 
 	params, err := shellwords.Parse(argsCommand)

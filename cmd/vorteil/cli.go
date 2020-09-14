@@ -25,6 +25,7 @@ import (
 var (
 	flagCompressionLevel uint
 	flagForce            bool
+	flagExcludeDefault   bool
 	flagFormat           string
 	flagOutput           string
 	flagOS               bool
@@ -1709,11 +1710,59 @@ var convertContainerCmd = &cobra.Command{
 }
 
 var importSharedObjectsCmd = &cobra.Command{
-	Use: "import-shared-objects",
+	Use:   "import-shared-objects [PROJECT]",
+	Short: "Import shared objects required by the binary targeted within the project.",
+	Args:  cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		// Do Stuff Here
-		fmt.Println("TODO")
+		var projectPath string = "."
+		var err error
+
+		// Get Project Path
+		if len(args) != 0 {
+			projectPath, err = filepath.Abs(args[0])
+			if err != nil {
+				log.Error(err.Error())
+				os.Exit(1)
+			}
+		}
+
+		// Set up logging functions
+		logWarn := func(format string, a ...interface{}) {
+			log.Warn(fmt.Sprintf(format, a...))
+		}
+
+		logInfo := func(format string, a ...interface{}) {
+			log.Info(fmt.Sprintf(format, a...))
+		}
+
+		logDebug := func(format string, a ...interface{}) {
+			log.Info(fmt.Sprintf(format, a...))
+		}
+
+		// Create Import Operation
+		importOperation, err := vproj.NewImportSharedObject(projectPath, vproj.ImportSharedObjectsOptions{
+			ExcludeDefaultLibs: flagExcludeDefault,
+			LoggerWarn:         logWarn,
+			LoggerInfo:         logInfo,
+			LoggerDebug:        logDebug,
+		})
+
+		if err != nil {
+			log.Error(err.Error())
+			os.Exit(2)
+		}
+
+		// Start Import Operation
+		if err = importOperation.Start(); err != nil {
+			log.Error(err.Error())
+			os.Exit(3)
+		}
 	},
+}
+
+func init() {
+	f := importSharedObjectsCmd.Flags()
+	f.BoolVarP(&flagExcludeDefault, "no-defaults", "e", false, "exclude default shared objects")
 }
 
 var provisionersCmd = &cobra.Command{

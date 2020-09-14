@@ -31,6 +31,17 @@ var (
 
 	DataPartitionName = []byte{0x76, 0x0, 0x6f, 0x0, 0x72, 0x0, 0x74, 0x0, 0x65, 0x0, 0x69, 0x0,
 		0x6c, 0x0, 0x2d, 0x0, 0x72, 0x0, 0x6f, 0x0, 0x6f, 0x0, 0x74, 0x0} // "vorteil-root" in utf16
+
+	// Part2UUID for second partition. used to define rooot partition in kernel args
+	Part2UUID = []byte{
+		0x7d, 0x44, 0x48, 0x40,
+		0x9d, 0xc0, 0x11, 0xd1,
+		0xb2, 0x45, 0x5f, 0xfd,
+		0xce, 0x74, 0xfa, 0xd2,
+	}
+
+	// Part2UUIDString string value of Part2UUID
+	Part2UUIDString = "4048447D-C09D-D111-B245-5FFDCE74FAD2"
 )
 
 func (b *Builder) writePartitions(ctx context.Context, w io.WriteSeeker) error {
@@ -324,11 +335,6 @@ func (b *Builder) generateGPTEntries() error {
 	copy(p0.PartitionGUID[:], uid0)
 	copy(p0.Name[:], RootPartitionName)
 
-	uid1, err := b.generateUID()
-	if err != nil {
-		return err
-	}
-
 	p1 := GPTEntry{
 		TypeGUID: [16]byte{0xE3, 0xBC, 0x68, 0x4F, 0xCD, 0xE8,
 			0xB1, 0x4D, 0x96, 0xE7, 0xFB, 0xCA, 0xF9, 0x84, 0xB7, 0x09}, // Linux x86-64 root filesystem partition
@@ -336,7 +342,7 @@ func (b *Builder) generateGPTEntries() error {
 		LastLBA:  uint64(b.rootLastLBA),
 	}
 
-	copy(p1.PartitionGUID[:], uid1)
+	copy(p1.PartitionGUID[:], Part2UUID)
 	copy(p1.Name[:], DataPartitionName)
 
 	entriesBuffer := new(bytes.Buffer)

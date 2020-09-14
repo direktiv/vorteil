@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
+	"fmt"
 	"io"
 	"strconv"
 	"strings"
@@ -322,6 +323,10 @@ func (b *Builder) processLinuxArgs() error {
 
 	if _, ok := m["init"]; !ok {
 		args = append(args, "init=/vorteil/vinitd")
+	}
+
+	if _, ok := m["root"]; !ok {
+		args = append(args, fmt.Sprintf("root=PARTUUID=%s", Part2UUIDString))
 	}
 
 	args = append(args, "i8042.noaux i8042.nomux i8042.nopnp i8042.dumbkbd vt.color=0x00")

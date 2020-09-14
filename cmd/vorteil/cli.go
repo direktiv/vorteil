@@ -15,6 +15,7 @@ import (
 	"github.com/vorteil/vorteil/pkg/vcfg"
 
 	"github.com/spf13/cobra"
+	"github.com/vorteil/vorteil/pkg/vconvert"
 	"github.com/vorteil/vorteil/pkg/vdecompiler"
 	"github.com/vorteil/vorteil/pkg/vdisk"
 	"github.com/vorteil/vorteil/pkg/vpkg"
@@ -118,14 +119,14 @@ var buildCmd = &cobra.Command{
 	Long: `Create a virtual disk image for a Vorteil app.
 
 BUILDABLE refers to anything that can be resolved into a usable source for
-building a Vorteil disk vdecompiler. This can include Vorteil project directories and 
-Vorteil package files. Paths to project directories may optionally include a 
-direction to determine which project target to build by appending a colon 
-followed by the target name. In addition to objects available on the local 
-file-system, BUILDABLE can be a URI identifying an app in a repository by 
-specifying the repository name followed by a colon and then the bucket, app, 
-and optional tag as forward-slash separated strings. If BUILDABLE is not 
-provided it will be substituted with ".", i.e. the current directory, which 
+building a Vorteil disk vdecompiler. This can include Vorteil project directories and
+Vorteil package files. Paths to project directories may optionally include a
+direction to determine which project target to build by appending a colon
+followed by the target name. In addition to objects available on the local
+file-system, BUILDABLE can be a URI identifying an app in a repository by
+specifying the repository name followed by a colon and then the bucket, app,
+and optional tag as forward-slash separated strings. If BUILDABLE is not
+provided it will be substituted with ".", i.e. the current directory, which
 must be a valid Vorteil project.
 
 Supported disk formats include:
@@ -1681,12 +1682,29 @@ var projectsCmd = &cobra.Command{
 	Use: "projects",
 }
 
+func init() {
+	f := convertContainerCmd.Flags()
+	f.StringP("user", "u", "", "container registry user")
+	f.StringP("password", "p", "", "container registry password")
+	f.StringP("config", "c", "", "container registry configuration list")
+}
+
 var convertContainerCmd = &cobra.Command{
-	Use: "convert-container",
+	Use:  "convert-container REPO:APP DESTFOLDER",
+	Args: cobra.ExactValidArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
 
-		// Do Stuff Here
-		fmt.Println("TODO")
+		// in case of an error we pass empty user/pwd/config in
+		user, _ := cmd.Flags().GetString("user")
+		pwd, _ := cmd.Flags().GetString("password")
+		config, _ := cmd.Flags().GetString("config")
+
+		err := vconvert.ConvertContainer(args[0], args[1], user, pwd, config)
+		if err != nil {
+			log.Error(err.Error())
+			os.Exit(1)
+		}
+
 	},
 }
 

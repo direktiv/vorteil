@@ -1,6 +1,10 @@
 package elog
 
-import "github.com/cirruslabs/echelon"
+import (
+	"encoding/json"
+
+	"github.com/cirruslabs/echelon"
+)
 
 type LogLevel uint32
 
@@ -22,11 +26,19 @@ type Logger interface {
 	Scoped(scope string) Logger
 	Tracef(format string, args ...interface{})
 	Warnf(format string, args ...interface{})
+	SetStatus(key string, val interface{})
 }
 
 type EchelonLogger struct {
 	*echelon.Logger
+	status   string
 	finished bool
+}
+
+func NewEchelonLogger() *EchelonLogger {
+	return &EchelonLogger{
+		status: "{}",
+	}
 }
 
 func (elog *EchelonLogger) IsLogLevelEnabled(level LogLevel) bool {
@@ -49,4 +61,22 @@ func (elog *EchelonLogger) Finish(success bool) {
 	}
 	elog.finished = true
 	elog.Logger.Finish(success)
+}
+
+func (elog *EchelonLogger) SetStatus(key string, val interface{}) {
+
+	m := make(map[string]interface{})
+	err := json.Unmarshal([]byte(elog.status), &m)
+	if err != nil {
+		panic(err)
+	}
+
+	m[key] = val
+	data, err := json.Marshal(m)
+	if err != nil {
+		panic(err)
+	}
+
+	elog.status = string(data)
+
 }

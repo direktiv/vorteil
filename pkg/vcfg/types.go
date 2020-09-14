@@ -420,7 +420,7 @@ type StdoutMode int
 
 // ..
 const (
-	StdoutModeUnspecified StdoutMode = iota
+	StdoutModeDefault StdoutMode = iota
 	StdoutModeStandard
 	StdoutModeScreenOnly
 	StdoutModeSerialOnly

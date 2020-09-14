@@ -34,6 +34,13 @@ var (
 	flagTouched          bool
 )
 
+const (
+	platformQEMU        = "qemu"
+	platformVirtualBox  = "virtualbox"
+	platformHyperV      = "hyper-v"
+	platformFirecracker = "firecracker"
+)
+
 func commandInit() {
 
 	// Here we attack VCFG modification flags to relevant commands. Because of
@@ -1802,7 +1809,7 @@ var provisionersNewGoogleCmd = &cobra.Command{
 var initFirecrackerCmd = &cobra.Command{
 	Use:    "init firecracker",
 	Short:  "Initialize firecracker by spawning a Bridge Device and a DHCP server",
-	Long:   ``,
+	Long:   `The init firecracker command is a convenience function to quickly setup the bridge device and DHCP server that firecracker will use`,
 	Hidden: true,
 	Args:   cobra.MaximumNArgs(0),
 	Run: func(cmd *cobra.Command, args []string) {
@@ -1898,32 +1905,32 @@ and cleaning up the instance when it's done.`,
 		}
 
 		switch flagPlatform {
-		case "qemu":
+		case platformQEMU:
 			err = runQEMU(f.Name(), cfg, flagGUI)
 			if err != nil {
 				log.Error(err.Error())
 				os.Exit(1)
 			}
-		case "virtualbox":
+		case platformVirtualBox:
 			err = runVirtualBox(f.Name(), cfg, flagGUI)
 			if err != nil {
 				log.Error(err.Error())
 				os.Exit(1)
 			}
-		case "hyper-v":
+		case platformHyperV:
 			err = runHyperV(f.Name(), cfg, flagGUI)
 			if err != nil {
 				log.Error(err.Error())
 				os.Exit(1)
 			}
-		case "firecracker":
+		case platformFirecracker:
 			err = runFirecracker(f.Name(), cfg, flagGUI)
 			if err != nil {
 				log.Error(err.Error())
 				os.Exit(1)
 			}
 		default:
-			log.Error(fmt.Errorf("platform '%s' not supported").Error())
+			log.Error(fmt.Errorf("platform '%s' not supported", flagPlatform).Error())
 			os.Exit(1)
 		}
 

@@ -28,15 +28,19 @@ type BuildArgs struct {
 
 func Build(ctx context.Context, w io.WriteSeeker, args *BuildArgs) error {
 
+	defaultMTU := uint(1500)
+
 	switch args.Format {
 	case RAWFormat:
 	case VMDKFormat:
 	case VMDKSparseFormat:
 	case VMDKStreamOptimizedFormat:
-	// case VHDFormat:
-	// case VHDFormat2:
-	// case XVAFormat
 	case GCPFArchiveFormat:
+		defaultMTU = 1460
+	case XVAFormat:
+	case VHDFormat:
+	case VHDFixedFormat:
+	case VHDDynamicFormat:
 	default:
 		return fmt.Errorf("build function does not support this disk format: '%s'", args.Format)
 	}
@@ -62,6 +66,8 @@ func Build(ctx context.Context, w io.WriteSeeker, args *BuildArgs) error {
 		return err
 	}
 	defer vimgBuilder.Close()
+
+	vimgBuilder.SetDefaultMTU(defaultMTU)
 
 	size := vimgBuilder.MinimumSize()
 	if !cfg.VM.DiskSize.IsDelta() {

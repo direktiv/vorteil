@@ -7,8 +7,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"strconv"
 	"strings"
+
+	"github.com/vorteil/vorteil/pkg/vcfg"
 
 	"github.com/mattn/go-shellwords"
 	"github.com/vorteil/vorteil/pkg/vkern"
@@ -113,7 +116,123 @@ func (b *Builder) calculateOSPartitionSize() error {
 	return nil
 }
 
+func (b *Builder) setConfigDefaults() error {
+
+	for i := range b.vcfg.Programs {
+
+		p := &b.vcfg.Programs[i]
+
+		if p.Cwd == "" {
+			p.Cwd = "/"
+		}
+
+		if p.Stdout == "" {
+			p.Stdout = "/dev/vtty"
+		}
+
+		if p.Stderr == "" {
+			p.Stderr = "/dev/vtty"
+		}
+
+		if string(p.Privilege) == "" {
+			p.Privilege = vcfg.RootPrivilege
+		}
+
+	}
+
+	for i := range b.vcfg.Networks {
+
+		n := &b.vcfg.Networks[i]
+
+		if n.MTU == 0 {
+			n.MTU = b.defaultMTU
+		}
+
+		if n.IP == "" {
+			n.IP = "dhcp"
+		}
+
+	}
+
+	if len(b.vcfg.System.DNS) == 0 {
+		b.vcfg.System.DNS = []string{"8.8.8.8"}
+	}
+
+	if b.vcfg.System.MaxFDs == 0 {
+		b.vcfg.System.MaxFDs = 1024
+	}
+
+	if b.vcfg.System.User == "" {
+		b.vcfg.System.User = "root"
+	}
+
+	return nil
+}
+
+func (b *Builder) validateConfig() error {
+
+	for i, p := range b.vcfg.Programs {
+
+		if p.Binary == "" && p.Args == "" {
+			return fmt.Errorf("missing binary and arguments for program %d", i)
+		}
+
+		switch p.Privilege {
+		case vcfg.RootPrivilege:
+		case vcfg.SuperuserPrivilege:
+		case vcfg.UserPrivilege:
+		default:
+			fmt.Println(p.Privilege)
+			return fmt.Errorf("invalid privilege setting for program %d: %s (should be 'root', 'superuser', or 'user')", i, p.Privilege)
+		}
+
+		// TODO: validate bootstrap?
+
+	}
+
+	for i, n := range b.vcfg.Networks {
+
+		if n.IP == "dhcp" {
+			if n.Mask != "" {
+				return fmt.Errorf("network %d should not have a mask set when using dhcp", i)
+			}
+
+			if n.Gateway != "" {
+				return fmt.Errorf("network %d should not have a mask set when using dhcp", i)
+			}
+
+			continue
+		}
+
+		if net.ParseIP(n.IP) == nil {
+			return fmt.Errorf("network %d has an invalid static ip: %s", i, n.IP)
+		}
+
+		if net.ParseIP(n.Mask) == nil {
+			return fmt.Errorf("network %d has an invalid mask: %s", i, n.Mask)
+		}
+
+		if net.ParseIP(n.Gateway) == nil {
+			return fmt.Errorf("network %d has an invalid gateway: %s", i, n.Gateway)
+		}
+
+	}
+
+	return nil
+
+}
+
 func (b *Builder) generateConfig() error {
+
+	err := b.setConfigDefaults()
+	if err != nil {
+		return err
+	}
+
+	err = b.validateConfig()
+	if err != nil {
+		return err
+	}
 
 	data, err := json.Marshal(b.vcfg)
 	if err != nil {

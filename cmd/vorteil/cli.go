@@ -1874,13 +1874,13 @@ and cleaning up the instance when it's done.`,
 
 		switch flagPlatform {
 		case platformQEMU:
-			err = runQEMU(pkgReader, cfg, flagGUI, flagShell)
+			err = runQEMU(pkgReader, cfg)
 			if err != nil {
 				log.Error(err.Error())
 				os.Exit(1)
 			}
 		case platformVirtualBox:
-			err = runVirtualBox(pkgReader, cfg, flagGUI, flagShell)
+			err = runVirtualBox(pkgReader, cfg)
 			if err != nil {
 				log.Error(err.Error())
 				os.Exit(1)

@@ -600,7 +600,7 @@ func (v *Virtualizer) createAndConfigure(diskpath string) error {
 	}
 
 	cmd = exec.Command("VBoxManage", "storagectl", v.name,
-		"--name", "SCSI", "--add", "virtio-scsi", "--portcount", "16",
+		"--name", fmt.Sprintf("SCSI-%s", diskpath), "--add", "virtio-scsi", "--portcount", "16",
 		"--bootable", "on")
 	err = v.execute(cmd)
 	if err != nil {
@@ -608,7 +608,7 @@ func (v *Virtualizer) createAndConfigure(diskpath string) error {
 	}
 
 	cmd = exec.Command("VBoxManage", "storageattach", v.name,
-		"--storagectl", "SCSI", "--port", "0", "--device", "0",
+		"--storagectl", fmt.Sprintf("SCSI-%s", diskpath), "--port", "0", "--device", "0",
 		"--type", "hdd", "--medium", diskpath)
 	err = v.execute(cmd)
 	if err != nil {

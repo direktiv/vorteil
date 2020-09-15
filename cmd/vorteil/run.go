@@ -86,13 +86,13 @@ import (
 // 	return run(virt, diskpath, cfg)
 // }
 
-func runVirtualBox(pkgReader vpkg.Reader, cfg *vcfg.VCFG, shell, gui bool) error {
+func runVirtualBox(pkgReader vpkg.Reader, cfg *vcfg.VCFG) error {
 
 	if !virtualbox.Allocator.IsAvailable() {
 		return errors.New("virtualbox not found installed on system")
 	}
 
-	f, err := ioutil.TempFile("", "vorteil.disk")
+	f, err := ioutil.TempFile(os.TempDir(), "vorteil.disk")
 	if err != nil {
 		log.Error(err.Error())
 		os.Exit(1)
@@ -129,7 +129,7 @@ func runVirtualBox(pkgReader vpkg.Reader, cfg *vcfg.VCFG, shell, gui bool) error
 	defer virt.Close(true)
 
 	config := virtualbox.Config{
-		Headless:    !gui,
+		Headless:    !flagGUI,
 		NetworkType: "nat",
 	}
 
@@ -141,13 +141,13 @@ func runVirtualBox(pkgReader vpkg.Reader, cfg *vcfg.VCFG, shell, gui bool) error
 	return run(virt, f.Name(), cfg)
 }
 
-func runQEMU(pkgReader vpkg.Reader, cfg *vcfg.VCFG, shell, gui bool) error {
+func runQEMU(pkgReader vpkg.Reader, cfg *vcfg.VCFG) error {
 
 	if !qemu.Allocator.IsAvailable() {
 		return errors.New("qemu not installed on system")
 	}
 
-	f, err := ioutil.TempFile("", "vorteil.disk")
+	f, err := ioutil.TempFile(os.TempDir(), "vorteil.disk")
 	if err != nil {
 		log.Error(err.Error())
 		os.Exit(1)
@@ -184,7 +184,7 @@ func runQEMU(pkgReader vpkg.Reader, cfg *vcfg.VCFG, shell, gui bool) error {
 	defer virt.Close(true)
 
 	config := qemu.Config{
-		Headless: !gui,
+		Headless: !flagGUI,
 	}
 
 	err = virt.Initialize(config.Marshal())

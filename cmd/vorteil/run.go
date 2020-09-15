@@ -207,14 +207,25 @@ func runQEMU(pkgReader vpkg.Reader, cfg *vcfg.VCFG) error {
 	if !qemu.Allocator.IsAvailable() {
 		return errors.New("qemu not installed on system")
 	}
+	// Create base folder to store virtualbox vms so the socket can be grouped
+	parent := fmt.Sprintf("%s-%s", qemu.VirtualizerID, randstr.Hex(5))
+	parent = filepath.Join(os.TempDir(), parent)
 
-	f, err := ioutil.TempFile(os.TempDir(), "vorteil.disk")
+	// Create parent directory as it doesn't exist
+	err := os.MkdirAll(parent, os.ModePerm)
+	if err != nil {
+		log.Error(err.Error())
+		os.Exit(1)
+	}
+
+	f, err := ioutil.TempFile(parent, "vorteil.disk")
 	if err != nil {
 		log.Error(err.Error())
 		os.Exit(1)
 	}
 	defer os.Remove(f.Name())
 	defer f.Close()
+	defer os.Remove(parent)
 
 	err = vdisk.Build(context.Background(), f, &vdisk.BuildArgs{
 		PackageReader: pkgReader,

@@ -673,7 +673,6 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	}
 	o.folder = filepath.Dir(args.ImagePath)
 	o.id = strings.Split(filepath.Base(o.folder), "-")[1]
-	fmt.Printf("ID: %s", o.id)
 	diskpath := filepath.ToSlash(args.ImagePath)
 
 	logger := log.New()

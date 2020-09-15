@@ -2,23 +2,30 @@ package vconvert
 
 // v1 "github.com/google/go-containerregistry/pkg/v1"
 import (
+	"archive/tar"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"log"
+	"net/http"
 	"os"
 	"strings"
 	"sync"
 
+	"github.com/vorteil/vorteil/pkg/elog"
+	"github.com/vorteil/vorteil/pkg/vcfg"
+
+	"github.com/containerd/containerd/archive"
+	"github.com/containerd/containerd/archive/compression"
 	cmanifest "github.com/containers/image/manifest"
 	"github.com/docker/distribution"
 	"github.com/docker/distribution/manifest/schema2"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
-	"github.com/gosuri/uiprogress"
 	"github.com/heroku/docker-registry-client/registry"
 	parser "github.com/novln/docker-parser"
-	"github.com/vorteil/vorteil/pkg/vcfg"
+	log "github.com/sirupsen/logrus"
+	"github.com/vbauerster/mpb"
 )
 
 const (
@@ -26,16 +33,19 @@ const (
 	configURL     = "url"
 	workers       = 5
 	tarExpression = "%s/%s.tar"
+
+	defaultDiskSize = "+256 MB"
+	defaultRAMSize  = "256 MB"
 )
 
 var (
-	inbox = make(chan job)
-	wg    sync.WaitGroup
+	jobs = make(chan job)
+	wg   sync.WaitGroup
 )
 
 type job struct {
 	layer  interface{}
-	bar    *uiprogress.Bar
+	bar    *mpb.Bar
 	number int
 }
 
@@ -48,23 +58,74 @@ type imageHandler struct {
 	registry    *registry.Registry
 }
 
+func newHandler(app, user, pwd, dest string) (*imageHandler, error) {
+
+	// get the ref first
+	ref, err := parser.Parse(app)
+	if err != nil {
+		return nil, err
+	}
+
+	tmp, err := prepDirectories(dest)
+	if err != nil {
+		return nil, err
+	}
+
+	return &imageHandler{
+		imageRef: ref,
+		tmpDir:   tmp,
+		user:     user,
+		pwd:      pwd,
+	}, nil
+
+}
+
+// although there is a New(...) function in the registry
+// but there is no way to set the log function before
+// this function is basically a copy of the original New(...) function
+func newRegistry(registryURL, user, pwd string) (*registry.Registry, error) {
+
+	url := strings.TrimSuffix(registryURL, "/")
+	transport := http.DefaultTransport
+	transport = registry.WrapTransport(transport, url, user, pwd)
+	registry := &registry.Registry{
+		URL: url,
+		Client: &http.Client{
+			Transport: transport,
+		},
+		Logf: log.Debugf,
+	}
+
+	if err := registry.Ping(); err != nil {
+		return nil, err
+	}
+
+	return registry, nil
+}
+
 func (ih *imageHandler) createVMFromRemote() error {
 
-	repos, err := fetchURL(ih.imageRef.Registry())
+	var url string
+
+	repos, err := fetchRepoConfig(ih.imageRef.Registry())
 	if err != nil {
 		return err
 	}
 
-	url := repos[configURL]
-	logFn("registry url: %s", url)
-
-	hub, err := registry.New(url.(string), ih.user, ih.pwd)
-	if err != nil {
+	if repos[configURL] == nil {
 		return err
 	}
 
+	url = repos[configURL].(string)
+	log.Infof("connecting to registry url: %s", url)
+
+	hub, err := newRegistry(url, ih.user, ih.pwd)
+	if err != nil {
+		return err
+	}
 	ih.registry = hub
 
+	log.Infof("fetching manifest for %s", ih.imageRef.ShortName())
 	manifest, err := hub.ManifestV2(ih.imageRef.ShortName(), ih.imageRef.Tag())
 	if err != nil {
 		return err
@@ -72,7 +133,7 @@ func (ih *imageHandler) createVMFromRemote() error {
 
 	err = ih.downloadManifest(manifest.Manifest)
 	if err != nil {
-		logFn("can not download manifest: %s", err.Error())
+		return err
 	}
 
 	ih.downloadBlobs(manifest.Manifest)
@@ -83,7 +144,7 @@ func (ih *imageHandler) createVMFromRemote() error {
 
 func (ih *imageHandler) downloadManifest(manifest schema2.Manifest) error {
 
-	logFn("downloading manifest")
+	log.Infof("downloading manifest file")
 	reader, err := ih.registry.DownloadBlob(ih.imageRef.ShortName(), manifest.Target().Digest)
 	defer reader.Close()
 	if err != nil {
@@ -93,14 +154,12 @@ func (ih *imageHandler) downloadManifest(manifest schema2.Manifest) error {
 	buf := new(bytes.Buffer)
 	n, err := buf.ReadFrom(reader)
 	if err != nil {
-		logFn("can not read from stream: %s", err.Error())
 		return err
 	}
 
 	var img cmanifest.Schema2V1Image
 	err = json.Unmarshal(buf.Bytes()[:n], &img)
 	if err != nil {
-		logFn("can not unmarshal manifest blob: %s\n%s", err.Error(), buf.String())
 		return err
 	}
 
@@ -122,9 +181,9 @@ func (ih *imageHandler) downloadManifest(manifest schema2.Manifest) error {
 
 func (ih *imageHandler) downloadBlobs(manifest schema2.Manifest) {
 
-	logFn("downloading to %s\n", ih.tmpDir)
-	logFn("downloading %d layer(s) for %s", len(manifest.Layers), ih.imageRef.ShortName())
-	log.SetOutput(ioutil.Discard)
+	if !elog.IsJSON {
+		log.SetOutput(ioutil.Discard)
+	}
 
 	var ifs = make([]interface{}, len(manifest.Layers))
 	for i, d := range manifest.Layers {
@@ -132,63 +191,67 @@ func (ih *imageHandler) downloadBlobs(manifest schema2.Manifest) {
 	}
 	ih.layers = ifs
 
-	wg.Add(workers)
-	go foreman(ifs)
+	p := mpb.New(mpb.WithWaitGroup(&wg))
+	wg.Add(len(ih.layers))
+
+	go distributor(ifs, p)
 	for i := 0; i < workers; i++ {
-		go ih.worker(ih.tmpDir)
+		go worker(ih.tmpDir, ih.imageRef.ShortName(), ih.registry)
 	}
 
-	wg.Wait()
-	uiprogress.Stop()
-	log.SetOutput(os.Stdout)
+	p.Wait()
 
-}
-
-func (ih *imageHandler) worker(dir string) {
-
-	for {
-		job, opened := <-inbox
-		if !opened {
-			break
-		}
-
-		layer := job.layer.(distribution.Descriptor)
-		reader, err := ih.registry.DownloadBlob(ih.imageRef.ShortName(), layer.Digest)
-		if err != nil {
-			log.SetOutput(os.Stdout)
-			log.Fatalf("can not download layer %s: %s", layer.Digest, err.Error())
-			os.Exit(1)
-		}
-		defer reader.Close()
-
-		if err != nil {
-			log.SetOutput(os.Stdout)
-			log.Fatalf("can not download layer %s: %s", layer.Digest, err.Error())
-			os.Exit(1)
-		}
-		writeFile(fmt.Sprintf(tarExpression, dir, layer.Digest[7:15]), reader, job.bar, float64(layer.Size))
+	if !elog.IsJSON {
+		log.SetOutput(os.Stdout)
 	}
-	wg.Done()
 }
 
 func (ih *imageHandler) untarLayers(targetDir string) error {
 
-	var filename string
-	for _, l := range ih.layers {
-		switch l.(type) {
-		case v1.Layer:
-			d, err := l.(v1.Layer).Digest()
-			if err != nil {
-				return err
-			}
-			filename = fmt.Sprintf(tarExpression, ih.tmpDir, d.Hex[7:15])
-			break
-		default:
-			filename = fmt.Sprintf(tarExpression, ih.tmpDir, l.(distribution.Descriptor).Digest[7:15])
+	for _, layer := range ih.layers {
+
+		filename := fmt.Sprintf(tarExpression, ih.tmpDir, layer.(distribution.Descriptor).Digest[7:15])
+
+		log.Infof("untar layer %s into %s", filename, targetDir)
+
+		fn, err := os.Open(filename)
+		if err != nil {
+			return err
 		}
 
-		untarLayer(filename, targetDir)
+		r, err := compression.DecompressStream(fn)
+		if err != nil {
+			return err
+		}
 
+		if _, err := archive.Apply(context.TODO(), targetDir, r, archive.WithFilter(func(hdr *tar.Header) (bool, error) {
+
+			// we set everything to 1000, not important on windows
+			hdr.Uid = 1000
+			hdr.Gid = 1000
+
+			// check if Directory
+			if hdr.Mode&040000 != 0 {
+				// check if in our skip list
+				for _, f := range folders {
+					// check 3 different variations of the folder
+					// /folder folder /folder/
+					fmts := []string{"/%s", "/%s/", "%s"}
+					for _, f1 := range fmts {
+						if hdr.Name == fmt.Sprintf(f1, f) {
+							log.Debugf("skipping directory %s", f)
+							return false, nil
+						}
+					}
+				}
+			}
+			return true, nil
+
+		})); err != nil {
+			r.Close()
+			return err
+		}
+		r.Close()
 	}
 
 	return nil
@@ -198,10 +261,10 @@ func (ih *imageHandler) createVCFG(targetDir string) error {
 
 	vcfgFile := new(vcfg.VCFG)
 
-	ds, _ := vcfg.ParseBytes("+256 MB")
+	ds, _ := vcfg.ParseBytes(defaultDiskSize)
 	vcfgFile.VM.DiskSize = ds
 
-	ram, _ := vcfg.ParseBytes("256 MB")
+	ram, _ := vcfg.ParseBytes(defaultRAMSize)
 	vcfgFile.VM.RAM = ram
 
 	vcfgFile.Programs = make([]vcfg.Program, 1)
@@ -277,7 +340,7 @@ func (ih *imageHandler) createVCFG(targetDir string) error {
 	ioutil.WriteFile(fmt.Sprintf("%s/.vorteilproject", targetDir), []byte(defaultProjectFile), 0644)
 	ioutil.WriteFile(fmt.Sprintf("%s/default.vcfg", targetDir), b, 0644)
 
-	logFn("vcfg file:\n%v\n", string(b))
+	log.Debugf("vcfg file:\n%v\n", string(b))
 
 	return nil
 

@@ -1872,7 +1872,7 @@ and cleaning up the instance when it's done.`,
 			os.Exit(1)
 		}
 
-		f, err := ioutil.TempFile("", "vorteil.disk")
+		f, err := ioutil.TempFile(os.TempDir(), "vorteil.disk")
 		if err != nil {
 			log.Error(err.Error())
 			os.Exit(1)

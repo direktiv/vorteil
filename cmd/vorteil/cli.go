@@ -1564,22 +1564,6 @@ var provisionCmd = &cobra.Command{
 			}
 
 			prov = p
-
-			// ctx := context.TODO()
-			// err = p.Provision(&provisioners.ProvisionArgs{
-			// 	Name: provisionName,
-			// 	// Logger // TODO
-			// 	// Description     string
-			// 	// Force           bool // TODO
-			// 	Context: ctx,
-			// 	// Image           file.File
-			// 	// ReadyWhenUsable bool
-			// })
-			// if err != nil {
-			// 	log.Error(err.Error())
-			// 	os.Exit(7)
-			// }
-
 		}
 
 		buildablePath := "."

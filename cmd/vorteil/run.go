@@ -103,7 +103,8 @@ func runVirtualBox(diskpath string, cfg *vcfg.VCFG, gui bool) error {
 	defer virt.Close(true)
 
 	config := virtualbox.Config{
-		Headless: !gui,
+		Headless:    !gui,
+		NetworkType: "nat",
 	}
 
 	err = virt.Initialize(config.Marshal())
@@ -154,10 +155,15 @@ func run(virt virtualizers.Virtualizer, disk vio.File, cfg *vcfg.VCFG) error {
 	})
 
 	serial := virt.Serial()
+	virtualizerLogs := virt.Logs()
+	defer virtualizerLogs.Close()
 	defer serial.Close()
+	virtSubscription := virtualizerLogs.Subscribe()
 	serialSubscription := serial.Subscribe()
+	defer virtSubscription.Close()
 	defer serialSubscription.Close()
 	s := serialSubscription.Inbox()
+	v := virtSubscription.Inbox()
 
 	signalChannel, chBool := listenForInterupt()
 
@@ -169,6 +175,12 @@ func run(virt virtualizers.Virtualizer, disk vio.File, cfg *vcfg.VCFG) error {
 				virt.Close(false)
 				return nil
 			}
+		case msg, more := <-v:
+			if !more {
+				virt.Close(true)
+				return nil
+			}
+			fmt.Print(string(msg))
 		case msg, more := <-s:
 			if !more {
 				virt.Close(false)

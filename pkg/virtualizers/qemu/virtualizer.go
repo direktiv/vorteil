@@ -389,9 +389,6 @@ func (v *Virtualizer) Close(force bool) error {
 				return err
 			}
 		}
-	} else {
-		// windows sleep to allow me to clean up the files
-		time.Sleep(time.Second * 4)
 	}
 
 	// remove contents when closing

@@ -73,6 +73,7 @@ func (w *SparseWriter) writeSparseHeader() error {
 
 	// Overhead is measured in grains, not sectors.
 	// Includes everything before the start of the disk contents.
+	// TODO: this seems like a bug...
 	hdr.OverHead = (((uint64(2*(w.totalGDSectors+w.totalGTSectors)) + hdr.RGDOffset) + SectorsPerGrain - 1) / SectorsPerGrain) * SectorsPerGrain
 
 	hdr.Capacity = uint64(w.totalDataSectors)
@@ -114,7 +115,8 @@ func (w *SparseWriter) writeGrainData() error {
 	}
 
 	// rgt
-	_, err = w.w.Seek(firstTableSector*SectorSize, io.SeekStart)
+	offset = firstTableSector * SectorSize
+	_, err = w.w.Seek(offset, io.SeekStart)
 	if err != nil {
 		return err
 	}
@@ -159,7 +161,8 @@ func (w *SparseWriter) writeGrainData() error {
 	}
 
 	// gt
-	_, err = w.w.Seek(firstTableSector*SectorSize, io.SeekStart)
+	offset = firstTableSector * SectorSize
+	_, err = w.w.Seek(offset, io.SeekStart)
 	if err != nil {
 		return err
 	}
@@ -184,6 +187,7 @@ func (w *SparseWriter) writeGrainData() error {
 	}
 
 	// pad
+	offset = firstDataSector * SectorSize
 	_, err = w.w.Seek(firstDataSector*SectorSize, io.SeekStart)
 	if err != nil {
 		return err
@@ -256,6 +260,7 @@ func (w *SparseWriter) Seek(offset int64, whence int) (int64, error) {
 	delta := abs % GrainSize
 	x := w.grainOffsets[grain] + delta
 	_, err := w.w.Seek(x, io.SeekStart)
+	w.cursor = abs
 	if err != nil {
 		return 0, err
 	}

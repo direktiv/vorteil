@@ -37,7 +37,7 @@ func runFirecracker(pkgReader vpkg.Reader, cfg *vcfg.VCFG) error {
 	// Check if bridge device exists
 	_, err := tenus.BridgeFromName("vorteil-bridge")
 	if err != nil {
-		return errors.New("try running 'vorteil firecracker init' before using firecracker")
+		return errors.New("try running 'vorteil init firecracker' before using firecracker")
 	}
 	// Create base folder to store virtualbox vms so the socket can be grouped
 	parent := fmt.Sprintf("%s-%s", firecracker.VirtualizerID, randstr.Hex(5))

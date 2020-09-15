@@ -1,20 +1,23 @@
 package vconvert
 
 import (
-	"archive/tar"
-	"compress/gzip"
 	"fmt"
 	"io"
-	"log"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/cloudfoundry/bytefmt"
 	"github.com/docker/distribution"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
-	"github.com/gosuri/uiprogress"
+	"github.com/heroku/docker-registry-client/registry"
 	"github.com/mitchellh/go-homedir"
+	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
+	"github.com/vbauerster/mpb"
+	"github.com/vbauerster/mpb/decor"
+	"github.com/vorteil/vorteil/pkg/elog"
 )
 
 const (
@@ -28,13 +31,10 @@ var (
   vcfgs = ["default.vcfg"]`
 
 	// ignore folders
-	folders = []string{"dev/", "/dev/", "proc/", "/proc/",
-		"sys/", "/sys/", "boot/", "/boot/", "media/", "/media/",
-		"mnt/", "/mnt/"}
+	folders = []string{"dev", "proc", "sys", "boot", "media", "mnt"}
 )
 
-// reads in config file
-// uses defaults if not found
+// reads in config file, uses defaults if not found
 func initConfig(cfgFile string) {
 
 	if cfgFile != "" {
@@ -50,12 +50,12 @@ func initConfig(cfgFile string) {
 
 loadDefaults:
 	if err := viper.ReadInConfig(); err == nil {
-		logFn("using config file: %s", viper.ConfigFileUsed())
+		log.Debugf("using config file: %s", viper.ConfigFileUsed())
 	} else {
 		if err != nil {
-			logFn("%s\n", err.Error())
+			log.Debugf("%s\n", err.Error())
 		}
-		logFn("using default repositories")
+		log.Debugf("using default repositories")
 		viper.SetDefault("repositories",
 			map[string]interface{}{
 				"docker.io":         map[string]interface{}{"url": "https://registry-1.docker.io"},
@@ -66,10 +66,9 @@ loadDefaults:
 }
 
 // write function to write out tar layers
-func writeFile(name string, r io.Reader, b *uiprogress.Bar, total float64) error {
+func writeFile(name string, r io.Reader) error {
 
 	buf := make([]byte, 32768)
-	read := 0
 
 	f, err := os.Create(name)
 	if err != nil {
@@ -84,11 +83,6 @@ func writeFile(name string, r io.Reader, b *uiprogress.Bar, total float64) error
 			break
 		}
 
-		if b != nil {
-			read += n
-			b.Set(int((float64(read) / total) * 100))
-		}
-
 		if _, err := f.Write(buf[:n]); err != nil {
 			return err
 		}
@@ -97,9 +91,24 @@ func writeFile(name string, r io.Reader, b *uiprogress.Bar, total float64) error
 	return nil
 }
 
-func fetchURL(repo string) (map[string]interface{}, error) {
+// if bars are used, this generates the name of the bar displayed
+func barName(layer interface{}, nr int) string {
+	digest := ""
+	switch layer.(type) {
+	case v1.Layer:
+		d, err := layer.(v1.Layer).Digest()
+		if err == nil {
+			digest = d.Hex[7:15]
+		}
+		return fmt.Sprintf("layer %d (%s): ", nr, digest)
+	default:
+		digest = fmt.Sprintf("%s", layer.(distribution.Descriptor).Digest[7:15])
+	}
+	return fmt.Sprintf("layer %d (%s): ", nr, digest)
+}
 
-	// fetch url
+func fetchRepoConfig(repo string) (map[string]interface{}, error) {
+
 	repositoriesMap := viper.Get(configRepo)
 	if repositoriesMap == nil {
 		return nil, fmt.Errorf("No repositories specified")
@@ -114,168 +123,7 @@ func fetchURL(repo string) (map[string]interface{}, error) {
 	return repositoryMap.(map[string]interface{}), nil
 }
 
-func foreman(layers []interface{}) {
-
-	uiprogress.Start()
-	for i, layer := range layers {
-		job := job{
-			layer:  layer,
-			bar:    uiprogress.AddBar(100).AppendCompleted(),
-			number: i,
-		}
-		job.bar.PrependFunc(func(b *uiprogress.Bar) string {
-			digest := ""
-			switch job.layer.(type) {
-			case v1.Layer:
-				d, err := job.layer.(v1.Layer).Digest()
-				if err == nil {
-					digest = d.Hex[7:15]
-				}
-				return fmt.Sprintf("layer %d (%s): ", job.number, digest)
-			default:
-				digest = fmt.Sprintf("%s", job.layer.(distribution.Descriptor).Digest[7:15])
-			}
-			return fmt.Sprintf("layer %d (%s): ", job.number, digest)
-		})
-		inbox <- job
-	}
-	close(inbox)
-}
-
-func skipFolder(folder string) bool {
-
-	for _, f := range folders {
-		if strings.HasPrefix(folder, f) {
-			return true
-		}
-	}
-
-	return false
-}
-
-func removeDirContents(dir string) error {
-	d, err := os.Open(dir)
-	if err != nil {
-		return err
-	}
-	defer d.Close()
-	names, err := d.Readdirnames(-1)
-	if err != nil {
-		return err
-	}
-	for _, name := range names {
-		err = os.RemoveAll(filepath.Join(dir, name))
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func untarLayer(fileName, toDir string) error {
-
-	log.Printf("untar %s\n", fileName)
-	var tr *tar.Reader
-
-	f, err := os.Open(fileName)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	// check if it is a .gz.tar or tar
-	gzr, err := gzip.NewReader(f)
-	if err != nil {
-		f.Seek(0, 0)
-		tr = tar.NewReader(f)
-		goto tar
-	} else {
-		tr = tar.NewReader(gzr)
-		defer gzr.Close()
-	}
-
-tar:
-	for {
-		header, err := tr.Next()
-
-		switch {
-		case err == io.EOF:
-			return nil
-		case err != nil:
-			return err
-		case header == nil:
-			continue
-		}
-
-		target := filepath.Join(toDir, header.Name)
-
-		if skipFolder(header.Name) {
-			continue
-		}
-
-		if strings.Contains(header.Name, ".wh..wh..opq") {
-			parent := strings.ReplaceAll(header.Name, ".wh..wh..opq", "")
-			removeDirContents(parent)
-			continue
-		}
-
-		if strings.Contains(header.Name, ".wh.") {
-			file := strings.ReplaceAll(target, ".wh.", "")
-			err := os.RemoveAll(file)
-			if err != nil {
-				log.Fatalf("can not process .wh.: %s", err.Error())
-			}
-			continue
-		}
-
-		switch header.Typeflag {
-		case tar.TypeSymlink:
-			var err error
-			if strings.HasPrefix(header.Linkname, "/") {
-				rel, errRel := filepath.Rel(filepath.Dir(target), filepath.Join(toDir, header.Linkname))
-				if errRel != nil {
-					return errRel
-				}
-				err = os.Symlink(rel, target)
-			} else {
-				err = os.Symlink(header.Linkname, target)
-			}
-			if err != nil && !os.IsExist(err) {
-				log.Printf("can not create symlink %s -> %s, %s", header.Linkname, target, err.Error())
-				continue
-			}
-			break
-		case tar.TypeDir:
-			if _, err := os.Stat(target); err != nil {
-				if err := os.MkdirAll(target, 0755); err != nil {
-					return err
-				}
-			}
-			break
-		case tar.TypeReg:
-			f, err := os.OpenFile(target, os.O_CREATE|os.O_RDWR, os.FileMode(0755))
-			f.Truncate(0)
-			if err != nil {
-				return err
-			}
-			if _, err := io.Copy(f, tr); err != nil {
-				return err
-			}
-			f.Close()
-			break
-		case tar.TypeLink:
-			err := os.Link(filepath.Join(toDir, header.Linkname), target)
-			if err != nil && !os.IsExist(err) {
-				log.Printf("can not create link %s: %s", header.Name, err.Error())
-			}
-			break
-		default:
-			log.Printf("unknown file type in tar: %s, type %v", header.Name, header.Typeflag)
-		}
-	}
-
-}
-
+// findBinary tries to find the executable in the expanded container image
 func findBinary(name string, env []string, cwd string, targetDir string) (string, error) {
 
 	if strings.HasPrefix(name, "./") {
@@ -321,4 +169,88 @@ func findBinary(name string, env []string, cwd string, targetDir string) (string
 	}
 
 	return "", fmt.Errorf("can not find binary %s", name)
+}
+
+func prepDirectories(targetDir string) (string, error) {
+
+	// check if it exists and empty
+	if _, err := os.Stat(targetDir); err != nil {
+		os.MkdirAll(targetDir, 0755)
+	}
+
+	fi, err := ioutil.ReadDir(targetDir)
+	if err != nil {
+		return "", err
+	}
+	if len(fi) > 0 {
+		return "", fmt.Errorf("target directory %s not empty", targetDir)
+	}
+
+	// create temporary extract folder
+	dir, err := ioutil.TempDir(os.TempDir(), "image")
+	if err != nil {
+		return "", err
+	}
+
+	return dir, nil
+
+}
+
+func distributor(layers []interface{}, p *mpb.Progress) {
+
+	log.Infof("downloading %d layers", len(layers))
+	for i, layer := range layers {
+
+		job := job{
+			layer:  layer,
+			number: i,
+		}
+
+		if !elog.IsJSON {
+			job.bar = p.AddBar(int64(layer.(distribution.Descriptor).Size),
+				mpb.PrependDecorators(
+					decor.Name(barName(layer, i)),
+				),
+				mpb.AppendDecorators(
+					decor.OnComplete(
+						decor.CountersKiloByte("%.1f / %.1f"), "downloaded",
+					),
+				),
+			)
+		}
+		jobs <- job
+	}
+
+	close(jobs)
+}
+
+func worker(dir, image string, registry *registry.Registry) {
+
+	for {
+		job, opened := <-jobs
+		if !opened {
+			break
+		}
+
+		layer := job.layer.(distribution.Descriptor)
+		reader, err := registry.DownloadBlob(image, layer.Digest)
+		if err != nil {
+			log.Fatalf("can not download layer %s: %s", layer.Digest, err.Error())
+			os.Exit(1)
+		}
+
+		// if we use json we don't show bars
+		var proxyReader io.ReadCloser
+		if !elog.IsJSON {
+			proxyReader = job.bar.ProxyReader(reader)
+		} else {
+			log.Infof("downloading layer %s (%s)", image, bytefmt.ByteSize((uint64)(job.layer.(distribution.Descriptor).Size)))
+			proxyReader = reader
+		}
+		defer proxyReader.Close()
+
+		writeFile(fmt.Sprintf(tarExpression, dir, layer.Digest[7:15]), proxyReader)
+		wg.Done()
+	}
+
 }

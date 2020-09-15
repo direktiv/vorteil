@@ -600,7 +600,7 @@ func (v *Virtualizer) createAndConfigure(diskpath string) error {
 	}
 
 	cmd = exec.Command("VBoxManage", "storagectl", v.name,
-		"--name", fmt.Sprintf("SCSI-%s", diskpath), "--add", "virtio-scsi", "--portcount", "16",
+		"--name", fmt.Sprintf("SCSI-%s", filepath.Base(diskpath)), "--add", "virtio-scsi", "--portcount", "16",
 		"--bootable", "on")
 	err = v.execute(cmd)
 	if err != nil {
@@ -608,7 +608,7 @@ func (v *Virtualizer) createAndConfigure(diskpath string) error {
 	}
 
 	cmd = exec.Command("VBoxManage", "storageattach", v.name,
-		"--storagectl", fmt.Sprintf("SCSI-%s", diskpath), "--port", "0", "--device", "0",
+		"--storagectl", fmt.Sprintf("SCSI-%s", filepath.Base(diskpath)), "--port", "0", "--device", "0",
 		"--type", "hdd", "--medium", diskpath)
 	err = v.execute(cmd)
 	if err != nil {
@@ -714,18 +714,19 @@ func (v *Virtualizer) createAndConfigure(diskpath string) error {
 // prepare sets the fields and arguments to spawn the virtual machine
 func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	var returnErr error
-
+	var err error
 	o.updateStatus(fmt.Sprintf("Preparing virtualbox files..."))
 	defer func() {
 		o.finished(returnErr)
 	}()
 	o.name = args.Name
 	o.id = randstr.Hex(5)
-	o.folder = filepath.Join(o.vmdrive, fmt.Sprintf("%s-%s", o.id, o.Type()))
-	err := os.MkdirAll(o.folder, os.ModePerm)
-	if err != nil {
-		returnErr = err
-	}
+	o.folder = filepath.Dir(args.ImagePath)
+	// o.folder = filepath.Join(o.vmdrive, fmt.Sprintf("%s-%s", o.id, o.Type()))
+	// err := os.MkdirAll(o.folder, os.ModePerm)
+	// if err != nil {
+	// 	returnErr = err
+	// }
 	if o.networkType == "bridged" {
 		devices, err := virtualizers.BridgedDevices()
 		if err != nil {

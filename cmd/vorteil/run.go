@@ -9,9 +9,11 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"time"
 
 	isatty "github.com/mattn/go-isatty"
+	"github.com/thanhpk/randstr"
 	"github.com/vorteil/vorteil/pkg/vcfg"
 	"github.com/vorteil/vorteil/pkg/vdisk"
 	"github.com/vorteil/vorteil/pkg/virtualizers"
@@ -92,13 +94,26 @@ func runVirtualBox(pkgReader vpkg.Reader, cfg *vcfg.VCFG) error {
 		return errors.New("virtualbox not found installed on system")
 	}
 
-	f, err := ioutil.TempFile(os.TempDir(), "vorteil.disk")
+	// Create base folder to store virtualbox vms so the socket can be grouped
+	parent := fmt.Sprintf("%s-%s", virtualbox.VirtualizerID, randstr.Hex(5))
+	parent = filepath.Join(os.TempDir(), parent)
+
+	// Create parent directory as it doesn't exist
+	err := os.MkdirAll(parent, os.ModePerm)
+	if err != nil {
+		log.Error(err.Error())
+		os.Exit(1)
+	}
+
+	f, err := ioutil.TempFile(parent, "vorteil.disk")
 	if err != nil {
 		log.Error(err.Error())
 		os.Exit(1)
 	}
 	defer os.Remove(f.Name())
 	defer f.Close()
+
+	defer os.Remove(parent)
 
 	err = vdisk.Build(context.Background(), f, &vdisk.BuildArgs{
 		PackageReader: pkgReader,

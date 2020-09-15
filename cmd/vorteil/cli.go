@@ -12,13 +12,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/vorteil/vorteil/pkg/vcfg"
-
 	"github.com/spf13/cobra"
+	"github.com/vorteil/vorteil/pkg/vcfg"
 	"github.com/vorteil/vorteil/pkg/vconvert"
 	"github.com/vorteil/vorteil/pkg/vdecompiler"
 	"github.com/vorteil/vorteil/pkg/vdisk"
-	"github.com/vorteil/vorteil/pkg/virtualizers"
+	"github.com/vorteil/vorteil/pkg/virtualizers/firecracker"
 	"github.com/vorteil/vorteil/pkg/vpkg"
 	"github.com/vorteil/vorteil/pkg/vproj"
 )
@@ -1814,7 +1813,7 @@ var initFirecrackerCmd = &cobra.Command{
 	Hidden: true,
 	Args:   cobra.MaximumNArgs(0),
 	Run: func(cmd *cobra.Command, args []string) {
-		err := virtualizers.SetupBridgeAndDHCPServer()
+		err := firecracker.SetupBridgeAndDHCPServer()
 		if err != nil {
 			log.Error(err.Error())
 			os.Exit(1)

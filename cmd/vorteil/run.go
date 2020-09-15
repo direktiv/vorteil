@@ -35,7 +35,7 @@ func runFirecracker(pkgReader vpkg.Reader, cfg *vcfg.VCFG) error {
 		return errors.New("firecracker is not installed on your system")
 	}
 	// Check if bridge device exists
-	bridgeDev, err := tenus.BridgeFromName("vorteil-bridge")
+	_, err := tenus.BridgeFromName("vorteil-bridge")
 	if err != nil {
 		return errors.New("try running 'vorteil firecracker init' before using firecracker")
 	}

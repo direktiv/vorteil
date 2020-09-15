@@ -672,43 +672,8 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 		return
 	}
 	o.folder = filepath.Dir(args.ImagePath)
-
-	// o.updateStatus(fmt.Sprintf("Copying disk to managed location"))
-
-	// err := os.MkdirAll(o.folder, os.ModePerm)
-	// if err != nil {
-	// 	returnErr = err
-	// 	return
-	// }
-
-	// f, err := os.Create(filepath.Join(o.folder, o.name+".raw"))
-	// if err != nil {
-	// 	returnErr = err
-	// 	return
-	// }
-
-	// _, err = io.Copy(f, args.Image)
-	// if err != nil {
-	// 	o.Virtualizer.log("error", "Error copying disk: %v", err)
-	// 	returnErr = err
-	// 	return
-	// }
-
-	// err = f.Sync()
-	// if err != nil {
-	// 	o.Virtualizer.log("error", "Error syncing disk: %v", err)
-	// 	returnErr = err
-	// 	return
-	// }
-
-	// err = f.Close()
-	// if err != nil {
-	// 	o.Virtualizer.log("error", "Error closing disk: %v", err)
-	// 	returnErr = err
-	// 	return
-	// }
-	// o.disk = f
-	fmt.Println("a")
+	o.id = strings.Split(filepath.Base(o.folder), "-")[1]
+	fmt.Printf("ID: %s", o.id)
 	diskpath := filepath.ToSlash(args.ImagePath)
 
 	logger := log.New()
@@ -722,7 +687,6 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	ctx := context.Background()
 	vmmCtx, vmmCancel := context.WithCancel(ctx)
 	devices := []models.Drive{}
-	fmt.Println("v")
 
 	rootDrive := models.Drive{
 		DriveID:      firecracker.String("1"),
@@ -739,8 +703,6 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 		return
 	}
 
-	fmt.Println("z")
-
 	// get bridge device
 	bridgeDev, err := tenus.BridgeFromName("vorteil-bridge")
 	if err != nil {
@@ -748,7 +710,6 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 		return
 	}
 	o.bridgeDevice = bridgeDev
-	fmt.Println("t")
 	var interfaces []firecracker.NetworkInterface
 	// set network adapters
 	if len(o.routes) > 0 {
@@ -818,7 +779,6 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	machineOpts := []firecracker.Opt{
 		firecracker.WithLogger(log.NewEntry(logger)),
 	}
-	fmt.Println("g")
 
 	// append new fields to overarching struct
 	o.gctx = ctx
@@ -828,7 +788,6 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	o.fconfig = fcCfg
 
 	o.state = "ready"
-	fmt.Println("h")
 
 	_, loaded := virtualizers.ActiveVMs.LoadOrStore(o.name, o.Virtualizer)
 	if loaded {
@@ -836,8 +795,6 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	}
 
 	if args.Start {
-		fmt.Println("mn")
-
 		err = o.Start()
 		if err != nil {
 			returnErr = err

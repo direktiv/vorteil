@@ -16,15 +16,17 @@ import (
 	"sync"
 	"time"
 
-	"github.com/vorteil/vorteil/pkg/vcfg"
-	"github.com/vorteil/vorteil/pkg/virtualizers"
-
 	"github.com/firecracker-microvm/firecracker-go-sdk"
 	"github.com/firecracker-microvm/firecracker-go-sdk/client/models"
+	dhcp "github.com/krolaw/dhcp4"
+	conn "github.com/krolaw/dhcp4/conn"
 	"github.com/milosgajdos/tenus"
 	log "github.com/sirupsen/logrus"
 	"github.com/songgao/water"
+	"github.com/vorteil/vorteil/pkg/vcfg"
 	"github.com/vorteil/vorteil/pkg/vio"
+	"github.com/vorteil/vorteil/pkg/virtualizers"
+	dhcpHandler "github.com/vorteil/vorteil/pkg/virtualizers/dhcp"
 	logger "github.com/vorteil/vorteil/pkg/virtualizers/logging"
 )
 

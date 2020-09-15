@@ -13,6 +13,8 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/milosgajdos/tenus"
+
 	isatty "github.com/mattn/go-isatty"
 	"github.com/mitchellh/go-homedir"
 	"github.com/thanhpk/randstr"
@@ -42,7 +44,7 @@ func runFirecracker(pkgReader vpkg.Reader, cfg *vcfg.VCFG) error {
 	parent = filepath.Join(os.TempDir(), parent)
 
 	// Create parent directory as it doesn't exist
-	err := os.MkdirAll(parent, os.ModePerm)
+	err = os.MkdirAll(parent, os.ModePerm)
 	if err != nil {
 		log.Error(err.Error())
 		os.Exit(1)

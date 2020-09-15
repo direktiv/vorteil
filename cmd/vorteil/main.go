@@ -213,7 +213,7 @@ func initKernels() error {
 	if err != nil {
 		kernels = filepath.Join(vorteild, "kernels")
 		watch = filepath.Join(kernels, "watch")
-		sources = []string{"https://downloads.vorteil.io/system", "https://downloads.vorteil.io/kernels"}
+		sources = []string{"https://downloads.vorteil.io/kernels"}
 	} else {
 		vconf := new(vorteildConf)
 		err = toml.Unmarshal(confData, vconf)

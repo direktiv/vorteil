@@ -1807,7 +1807,7 @@ var provisionersNewGoogleCmd = &cobra.Command{
 }
 
 var initFirecrackerCmd = &cobra.Command{
-	Use:    "init firecracker",
+	Use:    "firecracker-setup",
 	Short:  "Initialize firecracker by spawning a Bridge Device and a DHCP server",
 	Long:   `The init firecracker command is a convenience function to quickly setup the bridge device and DHCP server that firecracker will use`,
 	Hidden: true,

@@ -15,8 +15,8 @@ import (
 	"time"
 
 	"github.com/mattn/go-shellwords"
-	"github.com/sisatech/goapi/pkg/file"
 	"github.com/vorteil/vorteil/pkg/vcfg"
+	"github.com/vorteil/vorteil/pkg/vio"
 	"github.com/vorteil/vorteil/pkg/virtualizers"
 	logger "github.com/vorteil/vorteil/pkg/virtualizers/logging"
 )
@@ -59,7 +59,6 @@ type Virtualizer struct {
 	// VCFG Stuff
 	routes []virtualizers.NetworkInterface // api network interface that displays ports and network types
 	config *vcfg.VCFG                      // config for the vm
-	// subServer *graph.Graph                    //
 
 	vmdrive string // store disks in this directory
 
@@ -170,7 +169,6 @@ func (v *Virtualizer) ForceStop() error {
 	v.log("debug", "Stopping VM")
 	if v.state != virtualizers.Ready {
 		v.state = virtualizers.Changing
-		// v.subServer.SubServer.Publish(graph.VMUpdater)
 
 		if v.sock != nil {
 			if runtime.GOOS != "windows" {
@@ -184,8 +182,6 @@ func (v *Virtualizer) ForceStop() error {
 
 			time.Sleep(time.Millisecond * 200)
 			v.state = virtualizers.Ready
-
-			// v.subServer.SubServer.Publish(graph.VMUpdater)
 
 			v.sock.Close()
 
@@ -221,7 +217,6 @@ func (v *Virtualizer) Stop() error {
 			time.Sleep(time.Second * 4)
 
 			v.state = virtualizers.Ready
-			// v.subServer.SubServer.Publish(graph.VMUpdater)
 
 			v.sock.Close()
 
@@ -231,7 +226,7 @@ func (v *Virtualizer) Stop() error {
 			v.disk.Close()
 		}
 	} else {
-		return errors.New("vm is already stopped.")
+		return errors.New("vm is already stopped")
 	}
 
 	return nil
@@ -329,14 +324,14 @@ func (v *Virtualizer) State() string {
 }
 
 // Download returns the disk
-func (v *Virtualizer) Download() (file.File, error) {
+func (v *Virtualizer) Download() (vio.File, error) {
 	v.log("debug", "Downloading Disk")
 
 	if !(v.state == virtualizers.Ready) {
 		return nil, fmt.Errorf("the machine must be in a stopped or ready state")
 	}
 
-	f, err := file.LazyOpen(v.disk.Name())
+	f, err := vio.LazyOpen(v.disk.Name())
 	if err != nil {
 		return nil, err
 	}
@@ -383,7 +378,6 @@ func (v *Virtualizer) Close(force bool) error {
 	}
 
 	v.state = virtualizers.Deleted
-	// v.subServer.SubServer.Publish(graph.VMUpdater)
 
 	// remove virtualizer from active
 	virtualizers.ActiveVMs.Delete(v.name)
@@ -463,8 +457,6 @@ func (v *Virtualizer) Prepare(args *virtualizers.PrepareArgs) *virtualizers.Virt
 	v.serialLogger = logger.NewLogger(2048 * 10)
 	v.log("debug", "Preparing VM")
 	v.routes = v.Routes()
-	// v.subServer = args.Subserver
-	// v.subServer.SubServer.Publish(graph.VMUpdater)
 	op.Logs = make(chan string, 128)
 	op.Error = make(chan error, 1)
 	op.Status = make(chan string, 10)

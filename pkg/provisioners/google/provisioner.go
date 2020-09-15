@@ -54,7 +54,6 @@ func (p *Provisioner) Type() string {
 
 // DiskFormat returns the provisioners required disk format
 func (p *Provisioner) DiskFormat() vdisk.Format {
-	fmt.Printf("FORMAT: %s\n", vdisk.GCPFArchiveFormat)
 	return vdisk.GCPFArchiveFormat
 }
 
@@ -145,16 +144,22 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 		return err
 	}
 
+	fmt.Print("Initializing storage client...")
 	storageClient, err := storage.NewClient(context.Background(), option.WithCredentialsJSON(key))
 	if err != nil {
+		fmt.Printf("\n")
 		return err
 	}
 	defer storageClient.Close()
+	fmt.Printf(" done.\n")
 
+	fmt.Printf("Initializing compute client...")
 	computeClient, err := compute.New(oauthToken.Client(args.Context))
 	if err != nil {
+		fmt.Printf("\n")
 		return err
 	}
+	fmt.Printf(" done.\n")
 
 	_, err = computeClient.Images.Get(projectID, args.Name).Do()
 	if err == nil {
@@ -174,6 +179,7 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 		return err
 	}
 
+	fmt.Printf("Uploading disk image...")
 	w := obj.NewWriter(args.Context)
 	err = func() error {
 		defer func() {
@@ -193,8 +199,10 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 		return nil
 	}()
 	if err != nil {
+		fmt.Printf("\n")
 		return err
 	}
+	fmt.Printf(" done.\n")
 	defer func() {
 		err = obj.Delete(args.Context)
 	}()
@@ -202,9 +210,11 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 	var pollTimeout int
 
 	if args.Force {
+		fmt.Printf("Finding and deleting conflicting image...")
 		imagesForce := computeClient.Images.List(projectID)
 		list, err := imagesForce.Do()
 		if err != nil {
+			fmt.Printf("\n")
 			return err
 		}
 
@@ -212,11 +222,13 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 			if image.Name == args.Name {
 				delOp, err := computeClient.Images.Delete(projectID, image.Name).Do()
 				if err != nil {
+					fmt.Printf("\n")
 					return err
 				}
 				for delOp.Status != "DONE" && pollTimeout <= 120 {
 					delOp, err = computeClient.GlobalOperations.Get(projectID, delOp.Name).Do()
 					if err != nil {
+						fmt.Printf("\n")
 						return err
 					}
 
@@ -228,14 +240,17 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 					pollTimeout++
 				}
 				if pollTimeout >= 120 {
+					fmt.Printf("\n")
 					return fmt.Errorf("timed out waiting for image deletion")
 				}
 				break
 			}
 		}
 
+		fmt.Printf(" done.\n")
 	}
 
+	fmt.Printf("Creating image...")
 	op, err := computeClient.Images.Insert(projectID, &compute.Image{
 		Name: args.Name,
 		RawDisk: &compute.ImageRawDisk{
@@ -244,16 +259,19 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 		Description: args.Description,
 	}).Do()
 	if err != nil {
+		fmt.Printf("\n")
 		return err
 	}
 
 	for op.Status != "DONE" && pollTimeout <= 120 {
 		op, err = computeClient.GlobalOperations.Get(projectID, op.Name).Do()
 		if err != nil {
+			fmt.Printf("\n")
 			return err
 		}
 
 		if op.Status == "DONE" {
+			fmt.Printf(" done.\n")
 			break
 		}
 
@@ -261,6 +279,7 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 		pollTimeout++
 	}
 	if pollTimeout >= 120 {
+		fmt.Printf("\n")
 		return fmt.Errorf("timed out waiting for image creation")
 	}
 

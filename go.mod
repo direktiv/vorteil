@@ -29,13 +29,15 @@ require (
 	github.com/imdario/mergo v0.3.11
 	github.com/inconshreveable/log15 v0.0.0-20200109203555-b30bc20e4fd1
 	github.com/klauspost/compress v1.11.0
+	github.com/krolaw/dhcp4 v0.0.0-20190909130307-a50d88189771
 	github.com/mattn/go-colorable v0.1.7
 	github.com/mattn/go-isatty v0.0.12
 	github.com/mattn/go-runewidth v0.0.9 // indirect
 	github.com/mattn/go-shellwords v1.0.10
 	github.com/mattn/go-sqlite3 v1.9.0
+	github.com/milosgajdos/tenus v0.0.3
 	github.com/mitchellh/go-homedir v1.1.0
-	github.com/natefinch/npipe v0.0.0-20160621034901-c1b8fa8bdcce // indirect
+	github.com/natefinch/npipe v0.0.0-20160621034901-c1b8fa8bdcce
 	github.com/novln/docker-parser v1.0.0
 	github.com/sisatech/goapi v0.0.0-20200218003521-8dcdab8c7a5e
 	github.com/sisatech/tablewriter v0.0.0-20161130023222-815eceb01ee6

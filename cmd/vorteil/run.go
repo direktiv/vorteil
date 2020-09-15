@@ -7,19 +7,117 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"runtime"
 	"time"
 
 	isatty "github.com/mattn/go-isatty"
 	"github.com/vorteil/vorteil/pkg/vcfg"
 	"github.com/vorteil/vorteil/pkg/vio"
 	"github.com/vorteil/vorteil/pkg/virtualizers"
+	"github.com/vorteil/vorteil/pkg/virtualizers/firecracker"
+	"github.com/vorteil/vorteil/pkg/virtualizers/hyperv"
 	"github.com/vorteil/vorteil/pkg/virtualizers/qemu"
+	"github.com/vorteil/vorteil/pkg/virtualizers/virtualbox"
 )
 
-func runQEMU(diskpath string, cfg *vcfg.VCFG) error {
+func runFirecracker(diskpath string, cfg *vcfg.VCFG, gui bool) error {
+	if runtime.GOOS != "linux" {
+		return errors.New("firecracker is only available on linux")
+	}
+
+	if !firecracker.Allocator.IsAvailable() {
+		return errors.New("firecracker is not installed on your system")
+	}
+
+	f, err := vio.Open(diskpath)
+	if err != nil {
+		return err
+	}
+
+	defer f.Close()
+
+	alloc := firecracker.Allocator
+	virt := alloc.Alloc()
+	defer virt.Close(true)
+
+	if gui {
+		log.Warn("firecracker does not support displaying a gui")
+	}
+
+	config := firecracker.Config{}
+
+	err = virt.Initialize(config.Marshal())
+	if err != nil {
+		return err
+	}
+
+	return run(virt, f, cfg)
+}
+
+func runHyperV(diskpath string, cfg *vcfg.VCFG, gui bool) error {
+	if runtime.GOOS != "windows" {
+		return errors.New("hyper-v is only available on windows system")
+	}
+	if !hyperv.Allocator.IsAvailable() {
+		return errors.New("hyper-v is not enabled on your system")
+	}
+
+	f, err := vio.Open(diskpath)
+	if err != nil {
+		return err
+	}
+
+	defer f.Close()
+
+	alloc := hyperv.Allocator
+	virt := alloc.Alloc()
+	defer virt.Close(true)
+
+	config := hyperv.Config{
+		Headless: !gui,
+	}
+
+	err = virt.Initialize(config.Marshal())
+	if err != nil {
+		return err
+	}
+
+	return run(virt, f, cfg)
+}
+
+func runVirtualBox(diskpath string, cfg *vcfg.VCFG, gui bool) error {
+
+	if !virtualbox.Allocator.IsAvailable() {
+		return errors.New("virtualbox not found installed on system")
+	}
+
+	f, err := vio.Open(diskpath)
+	if err != nil {
+		return err
+	}
+
+	defer f.Close()
+
+	alloc := virtualbox.Allocator
+	virt := alloc.Alloc()
+	defer virt.Close(true)
+
+	config := virtualbox.Config{
+		Headless: !gui,
+	}
+
+	err = virt.Initialize(config.Marshal())
+	if err != nil {
+		return err
+	}
+
+	return run(virt, f, cfg)
+}
+
+func runQEMU(diskpath string, cfg *vcfg.VCFG, gui bool) error {
 
 	if !qemu.Allocator.IsAvailable() {
-		return errors.New("qemu not found installed on system")
+		return errors.New("qemu not installed on system")
 	}
 
 	f, err := vio.Open(diskpath)
@@ -33,8 +131,9 @@ func runQEMU(diskpath string, cfg *vcfg.VCFG) error {
 	defer virt.Close(true)
 
 	config := qemu.Config{
-		Headless: true,
+		Headless: !gui,
 	}
+
 	err = virt.Initialize(config.Marshal())
 	if err != nil {
 		return err

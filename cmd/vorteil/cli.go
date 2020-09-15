@@ -36,6 +36,8 @@ var (
 	flagExcludeDefault   bool
 	flagFormat           string
 	flagOutput           string
+	flagPlatform         string
+	flagGUI              bool
 	flagOS               bool
 	flagShell            bool
 	flagTouched          bool
@@ -63,6 +65,7 @@ func commandInit() {
 	rootCmd.AddCommand(projectsCmd)
 	rootCmd.AddCommand(provisionersCmd)
 	rootCmd.AddCommand(runCmd)
+	rootCmd.AddCommand(initFirecrackerCmd)
 
 	imagesCmd.AddCommand(buildCmd)
 	imagesCmd.AddCommand(decompileCmd)
@@ -1552,7 +1555,7 @@ var provisionCmd = &cobra.Command{
 
 		switch ptype {
 		case google.ProvisionerType:
-			fmt.Println("provisioning with google!")
+			fmt.Println("Provisioning to Google Cloud Platform")
 			p := &google.Provisioner{}
 			err = p.Initialize(data)
 			if err != nil {
@@ -1672,7 +1675,7 @@ var provisionCmd = &cobra.Command{
 			os.Exit(19)
 		}
 
-		fmt.Printf("Created '%s' image.\n", provisionName)
+		fmt.Printf("Created image: '%s'.\n", provisionName)
 	},
 }
 
@@ -2053,6 +2056,17 @@ func init() {
 	f.StringVarP(&provisionersNewGoogleKeyFile, "credentials", "f", "", "Path of an existing JSON-formatted Google Cloud Platform service account credentials file.")
 }
 
+var initFirecrackerCmd = &cobra.Command{
+	Use:    "init firecracker",
+	Short:  "Initialize firecracker by spawning a Bridge Device and a DHCP server",
+	Long:   ``,
+	Hidden: true,
+	Args:   cobra.MaximumNArgs(0),
+	Run: func(cmd *cobra.Command, args []string) {
+
+	},
+}
+
 var runCmd = &cobra.Command{
 	Use:   "run [RUNNABLE]",
 	Short: "Quick-launch a virtual machine",
@@ -2140,15 +2154,42 @@ and cleaning up the instance when it's done.`,
 			os.Exit(1)
 		}
 
-		err = runQEMU(f.Name(), cfg)
-		if err != nil {
-			log.Error(err.Error())
+		switch flagPlatform {
+		case "qemu":
+			err = runQEMU(f.Name(), cfg, flagGUI)
+			if err != nil {
+				log.Error(err.Error())
+				os.Exit(1)
+			}
+		case "virtualbox":
+			err = runVirtualBox(f.Name(), cfg, flagGUI)
+			if err != nil {
+				log.Error(err.Error())
+				os.Exit(1)
+			}
+		case "hyper-v":
+			err = runHyperV(f.Name(), cfg, flagGUI)
+			if err != nil {
+				log.Error(err.Error())
+				os.Exit(1)
+			}
+		case "firecracker":
+			err = runFirecracker(f.Name(), cfg, flagGUI)
+			if err != nil {
+				log.Error(err.Error())
+				os.Exit(1)
+			}
+		default:
+			log.Error(fmt.Errorf("platform '%s' not supported").Error())
 			os.Exit(1)
 		}
+
 	},
 }
 
 func init() {
 	f := runCmd.Flags()
+	f.StringVar(&flagPlatform, "platform", "qemu", "run a virtual machine with appropriate hypervisor (QEMU, Firecracker, Virtualbox, Hyper-V)")
+	f.BoolVar(&flagGUI, "gui", false, "when running virtual machine show gui of hypervisor")
 	f.BoolVar(&flagShell, "shell", false, "add a busybox shell environment to the image")
 }

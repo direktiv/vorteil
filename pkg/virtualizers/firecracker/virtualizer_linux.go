@@ -15,15 +15,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/vorteil/vorteil/pkg/vcfg"
 	"github.com/vorteil/vorteil/pkg/virtualizers"
-	"github.com/vorteil/vorteil/pkg/vorteil/vcfg"
 
 	"github.com/firecracker-microvm/firecracker-go-sdk"
 	"github.com/firecracker-microvm/firecracker-go-sdk/client/models"
 	"github.com/milosgajdos/tenus"
 	log "github.com/sirupsen/logrus"
 	"github.com/songgao/water"
-	"github.com/thanhpk/randstr"
 	"github.com/vorteil/vorteil/pkg/vio"
 	logger "github.com/vorteil/vorteil/pkg/virtualizers/logging"
 )
@@ -617,46 +616,51 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 
 	o.state = "initializing"
 	o.name = args.Name
-	o.id = randstr.Hex(5)
-	o.folder = filepath.Join(o.vmdrive, fmt.Sprintf("%s-%s", o.id, o.Type()))
-
-	o.updateStatus(fmt.Sprintf("Copying disk to managed location"))
-
-	err := os.MkdirAll(o.folder, os.ModePerm)
+	// o.id = randstr.Hex(5)
+	err := os.MkdirAll(args.FCPath, os.ModePerm)
 	if err != nil {
 		returnErr = err
 		return
 	}
+	o.folder = filepath.Dir(args.ImagePath)
 
-	f, err := os.Create(filepath.Join(o.folder, o.name+".raw"))
-	if err != nil {
-		returnErr = err
-		return
-	}
+	// o.updateStatus(fmt.Sprintf("Copying disk to managed location"))
 
-	_, err = io.Copy(f, args.Image)
-	if err != nil {
-		o.Virtualizer.log("error", "Error copying disk: %v", err)
-		returnErr = err
-		return
-	}
+	// err := os.MkdirAll(o.folder, os.ModePerm)
+	// if err != nil {
+	// 	returnErr = err
+	// 	return
+	// }
 
-	err = f.Sync()
-	if err != nil {
-		o.Virtualizer.log("error", "Error syncing disk: %v", err)
-		returnErr = err
-		return
-	}
+	// f, err := os.Create(filepath.Join(o.folder, o.name+".raw"))
+	// if err != nil {
+	// 	returnErr = err
+	// 	return
+	// }
 
-	err = f.Close()
-	if err != nil {
-		o.Virtualizer.log("error", "Error closing disk: %v", err)
-		returnErr = err
-		return
-	}
-	o.disk = f
+	// _, err = io.Copy(f, args.Image)
+	// if err != nil {
+	// 	o.Virtualizer.log("error", "Error copying disk: %v", err)
+	// 	returnErr = err
+	// 	return
+	// }
 
-	diskpath := filepath.ToSlash(o.disk.Name())
+	// err = f.Sync()
+	// if err != nil {
+	// 	o.Virtualizer.log("error", "Error syncing disk: %v", err)
+	// 	returnErr = err
+	// 	return
+	// }
+
+	// err = f.Close()
+	// if err != nil {
+	// 	o.Virtualizer.log("error", "Error closing disk: %v", err)
+	// 	returnErr = err
+	// 	return
+	// }
+	// o.disk = f
+	fmt.Println("a")
+	diskpath := filepath.ToSlash(args.ImagePath)
 
 	logger := log.New()
 	logger.SetFormatter(&log.TextFormatter{
@@ -669,6 +673,7 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	ctx := context.Background()
 	vmmCtx, vmmCancel := context.WithCancel(ctx)
 	devices := []models.Drive{}
+	fmt.Println("v")
 
 	rootDrive := models.Drive{
 		DriveID:      firecracker.String("1"),
@@ -679,11 +684,13 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 
 	devices = append(devices, rootDrive)
 
-	o.kip, err = o.fetchVMLinux(o.config.VM.Kernel.String())
+	o.kip, err = o.fetchVMLinux(o.config.VM.Kernel)
 	if err != nil {
 		returnErr = err
 		return
 	}
+
+	fmt.Println("z")
 
 	// get bridge device
 	bridgeDev, err := tenus.BridgeFromName("vorteil-bridge")
@@ -692,7 +699,7 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 		return
 	}
 	o.bridgeDevice = bridgeDev
-
+	fmt.Println("t")
 	var interfaces []firecracker.NetworkInterface
 	// set network adapters
 	if len(o.routes) > 0 {
@@ -762,6 +769,7 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	machineOpts := []firecracker.Opt{
 		firecracker.WithLogger(log.NewEntry(logger)),
 	}
+	fmt.Println("g")
 
 	// append new fields to overarching struct
 	o.gctx = ctx
@@ -771,6 +779,7 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	o.fconfig = fcCfg
 
 	o.state = "ready"
+	fmt.Println("h")
 
 	_, loaded := virtualizers.ActiveVMs.LoadOrStore(o.name, o.Virtualizer)
 	if loaded {
@@ -778,6 +787,8 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	}
 
 	if args.Start {
+		fmt.Println("mn")
+
 		err = o.Start()
 		if err != nil {
 			returnErr = err

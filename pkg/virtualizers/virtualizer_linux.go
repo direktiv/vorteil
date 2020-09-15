@@ -1,3 +1,5 @@
+// +build linux
+
 package virtualizers
 
 import (
@@ -10,7 +12,7 @@ import (
 	dhcpHandler "github.com/vorteil/vorteil/pkg/virtualizers/dhcp"
 )
 
-func setupBridgeAndDHCPServer() error {
+func SetupBridgeAndDHCPServer() error {
 
 	// Create bridge device
 	bridger, err := tenus.NewBridgeWithName("vorteil-bridge")

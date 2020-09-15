@@ -10,51 +10,95 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"time"
 
 	isatty "github.com/mattn/go-isatty"
+	"github.com/mitchellh/go-homedir"
 	"github.com/thanhpk/randstr"
 	"github.com/vorteil/vorteil/pkg/vcfg"
 	"github.com/vorteil/vorteil/pkg/vdisk"
 	"github.com/vorteil/vorteil/pkg/virtualizers"
+	"github.com/vorteil/vorteil/pkg/virtualizers/firecracker"
 	"github.com/vorteil/vorteil/pkg/virtualizers/qemu"
 	"github.com/vorteil/vorteil/pkg/virtualizers/virtualbox"
 	"github.com/vorteil/vorteil/pkg/vpkg"
 )
 
-// func runFirecracker(diskpath string, cfg *vcfg.VCFG, gui bool) error {
-// 	if runtime.GOOS != "linux" {
-// 		return errors.New("firecracker is only available on linux")
-// 	}
+func runFirecracker(pkgReader vpkg.Reader, cfg *vcfg.VCFG) error {
+	if runtime.GOOS != "linux" {
+		return errors.New("firecracker is only available on linux")
+	}
+	if !firecracker.Allocator.IsAvailable() {
+		return errors.New("firecracker is not installed on your system")
+	}
+	// Check if bridge device exists
+	bridgeDev, err := tenus.BridgeFromName("vorteil-bridge")
+	if err != nil {
+		return errors.New("try running 'vorteil firecracker init' before using firecracker")
+	}
+	// Create base folder to store virtualbox vms so the socket can be grouped
+	parent := fmt.Sprintf("%s-%s", firecracker.VirtualizerID, randstr.Hex(5))
+	parent = filepath.Join(os.TempDir(), parent)
 
-// 	if !firecracker.Allocator.IsAvailable() {
-// 		return errors.New("firecracker is not installed on your system")
-// 	}
+	// Create parent directory as it doesn't exist
+	err := os.MkdirAll(parent, os.ModePerm)
+	if err != nil {
+		log.Error(err.Error())
+		os.Exit(1)
+	}
 
-// 	f, err := vio.Open(diskpath)
-// 	if err != nil {
-// 		return err
-// 	}
+	f, err := ioutil.TempFile(parent, "vorteil.disk")
+	if err != nil {
+		log.Error(err.Error())
+		os.Exit(1)
+	}
+	defer os.Remove(f.Name())
+	defer f.Close()
 
-// 	defer f.Close()
+	defer os.Remove(parent)
 
-// 	alloc := firecracker.Allocator
-// 	virt := alloc.Alloc()
-// 	defer virt.Close(true)
+	err = vdisk.Build(context.Background(), f, &vdisk.BuildArgs{
+		PackageReader: pkgReader,
+		Format:        firecracker.Allocator.DiskFormat(),
+		KernelOptions: vdisk.KernelOptions{
+			Shell: flagShell,
+		},
+	})
+	if err != nil {
+		log.Error(err.Error())
+		os.Exit(1)
+	}
 
-// 	if gui {
-// 		log.Warn("firecracker does not support displaying a gui")
-// 	}
+	err = f.Close()
+	if err != nil {
+		log.Error(err.Error())
+		os.Exit(1)
+	}
 
-// 	config := firecracker.Config{}
+	err = pkgReader.Close()
+	if err != nil {
+		log.Error(err.Error())
+		os.Exit(1)
+	}
 
-// 	err = virt.Initialize(config.Marshal())
-// 	if err != nil {
-// 		return err
-// 	}
+	alloc := firecracker.Allocator
+	virt := alloc.Alloc()
+	defer virt.Close(true)
 
-// 	return run(virt, diskpath, cfg)
-// }
+	if flagGUI {
+		log.Warn("firecracker does not support displaying a gui")
+	}
+
+	config := firecracker.Config{}
+
+	err = virt.Initialize(config.Marshal())
+	if err != nil {
+		return err
+	}
+
+	return run(virt, f.Name(), cfg)
+}
 
 // func runHyperV(diskpath string, cfg *vcfg.VCFG, gui bool) error {
 // 	if runtime.GOOS != "windows" {
@@ -212,12 +256,19 @@ func runQEMU(pkgReader vpkg.Reader, cfg *vcfg.VCFG) error {
 }
 
 func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG) error {
+
+	// Gather home directory for firecracker storage path
+	home, err := homedir.Dir()
+	if err != nil {
+		return err
+	}
+
 	_ = virt.Prepare(&virtualizers.PrepareArgs{
-		Name:   "vorteil-vm",
-		PName:  virt.Type(),
-		Start:  true,
-		Config: cfg,
-		// Image:  disk,
+		Name:      "vorteil-vm",
+		PName:     virt.Type(),
+		Start:     true,
+		Config:    cfg,
+		FCPath:    filepath.Join(home, ".vorteild", "firecracker-vm"),
 		ImagePath: diskpath,
 	})
 
@@ -244,7 +295,7 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG) error {
 			}
 		case msg, more := <-v:
 			if !more {
-				virt.Close(true)
+				virt.Close(false)
 				return nil
 			}
 			fmt.Print(string(msg))

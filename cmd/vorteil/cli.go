@@ -1,9 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/md5"
+	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -12,6 +15,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/vorteil/vorteil/pkg/vio"
+
+	"github.com/vorteil/vorteil/pkg/provisioners"
+	"github.com/vorteil/vorteil/pkg/provisioners/google"
 	"github.com/vorteil/vorteil/pkg/vcfg"
 
 	"github.com/spf13/cobra"
@@ -77,12 +85,7 @@ func commandInit() {
 	projectsCmd.AddCommand(convertContainerCmd)
 	projectsCmd.AddCommand(importSharedObjectsCmd)
 
-	provisionersCmd.AddCommand(provisionersDefaultCmd)
-	provisionersCmd.AddCommand(provisionersDeleteCmd)
 	provisionersCmd.AddCommand(provisionersDescribeCmd)
-	provisionersCmd.AddCommand(provisionersExportCmd)
-	provisionersCmd.AddCommand(provisionersImportCmd)
-	provisionersCmd.AddCommand(provisionersListCmd)
 	provisionersCmd.AddCommand(provisionersNewCmd)
 
 	provisionersNewCmd.AddCommand(provisionersNewAmazonEC2Cmd)
@@ -1510,11 +1513,186 @@ func init() {
 }
 
 var provisionCmd = &cobra.Command{
-	Use: "provision",
+	Use:  "provision BUILDABLE",
+	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		// Do Stuff Here
-		fmt.Println("TODO")
+
+		// Load the provided provisioner file
+		if _, err := os.Stat(provisionProvisionerFile); err != nil {
+			log.Error(err.Error())
+			os.Exit(1)
+		}
+
+		b, err := ioutil.ReadFile(provisionProvisionerFile)
+		if err != nil {
+			log.Error(err.Error())
+			os.Exit(2)
+		}
+
+		data, err := provisioners.Decrypt(b, provisionPassPhrase)
+		if err != nil {
+			log.Error(err.Error())
+			os.Exit(3)
+		}
+
+		m := make(map[string]interface{})
+		err = json.Unmarshal(data, &m)
+		if err != nil {
+			log.Error(err.Error())
+			os.Exit(4)
+		}
+
+		ptype, ok := m[provisioners.MapKey]
+		if !ok {
+			log.Error(err.Error())
+			os.Exit(5)
+		}
+
+		var prov provisioners.Provisioner
+
+		switch ptype {
+		case google.ProvisionerType:
+			fmt.Println("provisioning with google!")
+			p := &google.Provisioner{}
+			err = p.Initialize(data)
+			if err != nil {
+				log.Error(err.Error())
+				os.Exit(6)
+			}
+
+			prov = p
+
+			// ctx := context.TODO()
+			// err = p.Provision(&provisioners.ProvisionArgs{
+			// 	Name: provisionName,
+			// 	// Logger // TODO
+			// 	// Description     string
+			// 	// Force           bool // TODO
+			// 	Context: ctx,
+			// 	// Image           file.File
+			// 	// ReadyWhenUsable bool
+			// })
+			// if err != nil {
+			// 	log.Error(err.Error())
+			// 	os.Exit(7)
+			// }
+
+		}
+
+		buildablePath := "."
+		if len(args) >= 1 {
+			buildablePath = args[0]
+		}
+
+		pkgBuilder, err := getPackageBuilder("BUILDABLE", buildablePath)
+		if err != nil {
+			log.Error(err.Error())
+			os.Exit(9)
+		}
+
+		err = modifyPackageBuilder(pkgBuilder)
+		if err != nil {
+			log.Error(err.Error())
+			os.Exit(10)
+		}
+
+		pkgReader, err := vpkg.ReaderFromBuilder(pkgBuilder)
+		if err != nil {
+			log.Error(err.Error())
+			os.Exit(11)
+		}
+		defer pkgReader.Close()
+
+		pkgReader, err = vpkg.PeekVCFG(pkgReader)
+		if err != nil {
+			log.Error(err.Error())
+			os.Exit(12)
+		}
+
+		err = initKernels()
+		if err != nil {
+			log.Error(err.Error())
+			os.Exit(13)
+		}
+
+		f, err := ioutil.TempFile("", "vorteil.disk")
+		if err != nil {
+			log.Error(err.Error())
+			os.Exit(14)
+		}
+		defer os.Remove(f.Name())
+		defer f.Close()
+
+		err = vdisk.Build(context.Background(), f, &vdisk.BuildArgs{
+			PackageReader: pkgReader,
+			Format:        prov.DiskFormat(),
+			KernelOptions: vdisk.KernelOptions{
+				Shell: flagShell,
+			},
+		})
+		if err != nil {
+			log.Error(err.Error())
+			os.Exit(15)
+		}
+
+		err = f.Close()
+		if err != nil {
+			log.Error(err.Error())
+			os.Exit(16)
+		}
+
+		err = pkgReader.Close()
+		if err != nil {
+			log.Error(err.Error())
+			os.Exit(17)
+		}
+
+		image, err := vio.LazyOpen(f.Name())
+		if err != nil {
+			log.Error(err.Error())
+			os.Exit(18)
+		}
+
+		if provisionName == "" {
+			provisionName = strings.ReplaceAll(uuid.New().String(), "-", "")
+		}
+
+		ctx := context.TODO()
+		err = prov.Provision(&provisioners.ProvisionArgs{
+			Context:     ctx,
+			Image:       image,
+			Name:        provisionName,
+			Description: provisionDescription,
+			Force:       provisionForce,
+			// Logger: TODO,
+			ReadyWhenUsable: provisionReadyWhenUsable,
+		})
+		if err != nil {
+			log.Error(err.Error())
+			os.Exit(19)
+		}
+
+		fmt.Printf("Created '%s' image.\n", provisionName)
 	},
+}
+
+var (
+	provisionName            string
+	provisionDescription     string
+	provisionForce           bool
+	provisionReadyWhenUsable bool
+	provisionProvisionerFile string
+	provisionPassPhrase      string
+)
+
+func init() {
+	f := provisionCmd.Flags()
+	f.StringVarP(&provisionName, "name", "n", "", "Name of the resulting image on the remote platform.")
+	f.StringVarP(&provisionDescription, "description", "d", "", "Description for the resulting image, if supported by the platform.")
+	f.BoolVarP(&provisionForce, "force", "f", false, "Force an overwrite if an existing image conflicts with the new.")
+	f.BoolVarP(&provisionReadyWhenUsable, "ready-when-usable", "r", false, "Return successfully as soon as the operation is complete, regardless of whether or not the platform is still processing the image.")
+	f.StringVarP(&provisionProvisionerFile, "provisioner", "p", "", "Path to file containing provisioner data.")
+	f.StringVarP(&provisionPassPhrase, "passphrase", "s", "", "Passphrase used to decrypt encrypted provisioner data.")
 }
 
 var packagesCmd = &cobra.Command{
@@ -1769,48 +1947,8 @@ var provisionersCmd = &cobra.Command{
 	Use: "provisioners",
 }
 
-var provisionersDefaultCmd = &cobra.Command{
-	Use: "default",
-	Run: func(cmd *cobra.Command, args []string) {
-		// Do Stuff Here
-		fmt.Println("TODO")
-	},
-}
-
-var provisionersDeleteCmd = &cobra.Command{
-	Use: "delete",
-	Run: func(cmd *cobra.Command, args []string) {
-		// Do Stuff Here
-		fmt.Println("TODO")
-	},
-}
-
 var provisionersDescribeCmd = &cobra.Command{
 	Use: "describe",
-	Run: func(cmd *cobra.Command, args []string) {
-		// Do Stuff Here
-		fmt.Println("TODO")
-	},
-}
-
-var provisionersExportCmd = &cobra.Command{
-	Use: "export",
-	Run: func(cmd *cobra.Command, args []string) {
-		// Do Stuff Here
-		fmt.Println("TODO")
-	},
-}
-
-var provisionersImportCmd = &cobra.Command{
-	Use: "import",
-	Run: func(cmd *cobra.Command, args []string) {
-		// Do Stuff Here
-		fmt.Println("TODO")
-	},
-}
-
-var provisionersListCmd = &cobra.Command{
-	Use: "list",
 	Run: func(cmd *cobra.Command, args []string) {
 		// Do Stuff Here
 		fmt.Println("TODO")
@@ -1837,12 +1975,82 @@ var provisionersNewAzureCmd = &cobra.Command{
 	},
 }
 
+var (
+	provisionersNewPassphrase string
+
+	// Google Cloud Platform
+	provisionersNewGoogleBucket  string
+	provisionersNewGoogleKeyFile string
+
+	// Amazon Web Services
+	provisionersNewAmazonKey    string
+	provisionersNewAmazonRegion string
+	provisionersNewAmazonSecret string
+
+	// Azure
+	provisionersNewAzureContainer          string
+	provisionersNewAzureKeyFile            string
+	provisionersNewAzureLocation           string
+	provisionersNewAzureResourceGroup      string
+	provisionersNewAzureStorageAccountKey  string
+	provisionersNewAzureStorageAccountName string
+)
+
 var provisionersNewGoogleCmd = &cobra.Command{
-	Use: "google",
+	Use:   "google <OUTPUT_FILE>",
+	Short: "Add a new Google Cloud (Compute Engine) Provisioner.",
+	Args:  cobra.ExactArgs(1), // Single arg, points to output file
 	Run: func(cmd *cobra.Command, args []string) {
-		// Do Stuff Here
-		fmt.Println("TODO")
+
+		f, err := os.OpenFile(args[0], os.O_RDWR|os.O_CREATE, 0644)
+		if err != nil {
+			log.Error(err.Error())
+			os.Exit(5)
+		}
+		defer f.Close()
+
+		path := provisionersNewGoogleKeyFile
+		_, err = os.Stat(path)
+		if err != nil {
+			log.Error(err.Error())
+			os.Exit(1)
+		}
+
+		b, err := ioutil.ReadFile(path)
+		if err != nil {
+			log.Error(err.Error())
+			os.Exit(2)
+		}
+
+		p, err := google.Create(&google.Config{
+			Bucket: provisionersNewGoogleBucket,
+			Key:    base64.StdEncoding.EncodeToString(b),
+		})
+		if err != nil {
+			log.Error(err.Error())
+			os.Exit(3)
+		}
+
+		data, err := p.Marshal()
+		if err != nil {
+			log.Error(err.Error())
+			os.Exit(4)
+		}
+
+		out := provisioners.Encrypt(data, provisionersNewPassphrase)
+		_, err = io.Copy(f, bytes.NewReader(out))
+		if err != nil {
+			log.Error(err.Error())
+			os.Exit(6)
+		}
 	},
+}
+
+func init() {
+	f := provisionersNewGoogleCmd.Flags()
+	f.StringVarP(&provisionersNewPassphrase, "passphrase", "p", "", "Passphrase for encrypting exported provisioner data.")
+	f.StringVarP(&provisionersNewGoogleBucket, "bucket", "b", "", "Name of an existing Google Cloud Storage bucket, for which the provided service account credentials have adequate permissions for object creation/deletion.")
+	f.StringVarP(&provisionersNewGoogleKeyFile, "credentials", "f", "", "Path of an existing JSON-formatted Google Cloud Platform service account credentials file.")
 }
 
 var runCmd = &cobra.Command{

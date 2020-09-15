@@ -3,8 +3,14 @@ module github.com/vorteil/vorteil
 go 1.14
 
 require (
+	cloud.google.com/go/storage v1.8.0
+	github.com/Azure/azure-sdk-for-go v42.3.0+incompatible
+	github.com/Azure/azure-storage-blob-go v0.8.0
+	github.com/Azure/go-autorest/autorest v0.10.2
+	github.com/Azure/go-autorest/autorest/azure/auth v0.4.2
 	github.com/alessio/shellescape v1.2.2
 	github.com/armon/circbuf v0.0.0-20190214190532-5111143e8da2
+	github.com/aws/aws-sdk-go v1.31.6
 	github.com/cavaliercoder/grab v2.0.0+incompatible
 	github.com/cirruslabs/echelon v1.2.2
 	github.com/containers/image v3.0.2+incompatible
@@ -16,6 +22,7 @@ require (
 	github.com/fatih/color v1.9.0
 	github.com/gobwas/glob v0.2.3
 	github.com/google/go-containerregistry v0.1.2
+	github.com/google/uuid v1.1.1
 	github.com/gosuri/uilive v0.0.4 // indirect
 	github.com/gosuri/uiprogress v0.0.1
 	github.com/heroku/docker-registry-client v0.0.0-20190909225348-afc9e1acc3d5
@@ -26,6 +33,7 @@ require (
 	github.com/mattn/go-isatty v0.0.12
 	github.com/mattn/go-runewidth v0.0.9 // indirect
 	github.com/mattn/go-shellwords v1.0.10
+	github.com/mattn/go-sqlite3 v1.9.0
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/natefinch/npipe v0.0.0-20160621034901-c1b8fa8bdcce // indirect
 	github.com/novln/docker-parser v1.0.0
@@ -38,6 +46,8 @@ require (
 	github.com/spf13/viper v1.7.0
 	github.com/thanhpk/randstr v1.0.4
 	golang.org/x/crypto v0.0.0-20200820211705-5c72a883971a
+	golang.org/x/oauth2 v0.0.0-20200107190931-bf48bf16ab8d
 	golang.org/x/sync v0.0.0-20200625203802-6e8e738ad208
+	google.golang.org/api v0.25.0
 	gopkg.in/yaml.v2 v2.3.0
 )

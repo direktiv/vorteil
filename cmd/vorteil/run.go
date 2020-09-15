@@ -2,101 +2,127 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"os/exec"
 	"os/signal"
-	"runtime"
 	"time"
 
 	isatty "github.com/mattn/go-isatty"
 	"github.com/vorteil/vorteil/pkg/vcfg"
-	"github.com/vorteil/vorteil/pkg/vio"
+	"github.com/vorteil/vorteil/pkg/vdisk"
 	"github.com/vorteil/vorteil/pkg/virtualizers"
-	"github.com/vorteil/vorteil/pkg/virtualizers/firecracker"
-	"github.com/vorteil/vorteil/pkg/virtualizers/hyperv"
 	"github.com/vorteil/vorteil/pkg/virtualizers/qemu"
 	"github.com/vorteil/vorteil/pkg/virtualizers/virtualbox"
+	"github.com/vorteil/vorteil/pkg/vpkg"
 )
 
-func runFirecracker(diskpath string, cfg *vcfg.VCFG, gui bool) error {
-	if runtime.GOOS != "linux" {
-		return errors.New("firecracker is only available on linux")
-	}
+// func runFirecracker(diskpath string, cfg *vcfg.VCFG, gui bool) error {
+// 	if runtime.GOOS != "linux" {
+// 		return errors.New("firecracker is only available on linux")
+// 	}
 
-	if !firecracker.Allocator.IsAvailable() {
-		return errors.New("firecracker is not installed on your system")
-	}
+// 	if !firecracker.Allocator.IsAvailable() {
+// 		return errors.New("firecracker is not installed on your system")
+// 	}
 
-	f, err := vio.Open(diskpath)
-	if err != nil {
-		return err
-	}
+// 	f, err := vio.Open(diskpath)
+// 	if err != nil {
+// 		return err
+// 	}
 
-	defer f.Close()
+// 	defer f.Close()
 
-	alloc := firecracker.Allocator
-	virt := alloc.Alloc()
-	defer virt.Close(true)
+// 	alloc := firecracker.Allocator
+// 	virt := alloc.Alloc()
+// 	defer virt.Close(true)
 
-	if gui {
-		log.Warn("firecracker does not support displaying a gui")
-	}
+// 	if gui {
+// 		log.Warn("firecracker does not support displaying a gui")
+// 	}
 
-	config := firecracker.Config{}
+// 	config := firecracker.Config{}
 
-	err = virt.Initialize(config.Marshal())
-	if err != nil {
-		return err
-	}
+// 	err = virt.Initialize(config.Marshal())
+// 	if err != nil {
+// 		return err
+// 	}
 
-	return run(virt, f, cfg)
-}
+// 	return run(virt, diskpath, cfg)
+// }
 
-func runHyperV(diskpath string, cfg *vcfg.VCFG, gui bool) error {
-	if runtime.GOOS != "windows" {
-		return errors.New("hyper-v is only available on windows system")
-	}
-	if !hyperv.Allocator.IsAvailable() {
-		return errors.New("hyper-v is not enabled on your system")
-	}
+// func runHyperV(diskpath string, cfg *vcfg.VCFG, gui bool) error {
+// 	if runtime.GOOS != "windows" {
+// 		return errors.New("hyper-v is only available on windows system")
+// 	}
+// 	if !hyperv.Allocator.IsAvailable() {
+// 		return errors.New("hyper-v is not enabled on your system")
+// 	}
 
-	f, err := vio.Open(diskpath)
-	if err != nil {
-		return err
-	}
+// 	// f, err := vio.Open(diskpath)
+// 	// if err != nil {
+// 	// 	return err
+// 	// }
 
-	defer f.Close()
+// 	// defer f.Close()
 
-	alloc := hyperv.Allocator
-	virt := alloc.Alloc()
-	defer virt.Close(true)
+// 	alloc := hyperv.Allocator
+// 	virt := alloc.Alloc()
+// 	defer virt.Close(true)
 
-	config := hyperv.Config{
-		Headless: !gui,
-	}
+// 	config := hyperv.Config{
+// 		Headless:   !gui,
+// 		SwitchName: "Default Switch",
+// 	}
 
-	err = virt.Initialize(config.Marshal())
-	if err != nil {
-		return err
-	}
+// 	err = virt.Initialize(config.Marshal())
+// 	if err != nil {
+// 		return err
+// 	}
 
-	return run(virt, f, cfg)
-}
+// 	return run(virt, diskpath, cfg)
+// }
 
-func runVirtualBox(diskpath string, cfg *vcfg.VCFG, gui bool) error {
+func runVirtualBox(pkgReader vpkg.Reader, cfg *vcfg.VCFG, shell, gui bool) error {
 
 	if !virtualbox.Allocator.IsAvailable() {
 		return errors.New("virtualbox not found installed on system")
 	}
 
-	f, err := vio.Open(diskpath)
+	f, err := ioutil.TempFile("", "vorteil.disk")
 	if err != nil {
-		return err
+		log.Error(err.Error())
+		os.Exit(1)
+	}
+	defer os.Remove(f.Name())
+	defer f.Close()
+
+	err = vdisk.Build(context.Background(), f, &vdisk.BuildArgs{
+		PackageReader: pkgReader,
+		Format:        virtualbox.Allocator.DiskFormat(),
+		KernelOptions: vdisk.KernelOptions{
+			Shell: flagShell,
+		},
+	})
+	if err != nil {
+		log.Error(err.Error())
+		os.Exit(1)
 	}
 
-	defer f.Close()
+	err = f.Close()
+	if err != nil {
+		log.Error(err.Error())
+		os.Exit(1)
+	}
+
+	err = pkgReader.Close()
+	if err != nil {
+		log.Error(err.Error())
+		os.Exit(1)
+	}
 
 	alloc := virtualbox.Allocator
 	virt := alloc.Alloc()
@@ -112,20 +138,46 @@ func runVirtualBox(diskpath string, cfg *vcfg.VCFG, gui bool) error {
 		return err
 	}
 
-	return run(virt, f, cfg)
+	return run(virt, f.Name(), cfg)
 }
 
-func runQEMU(diskpath string, cfg *vcfg.VCFG, gui bool) error {
+func runQEMU(pkgReader vpkg.Reader, cfg *vcfg.VCFG, shell, gui bool) error {
 
 	if !qemu.Allocator.IsAvailable() {
 		return errors.New("qemu not installed on system")
 	}
 
-	f, err := vio.Open(diskpath)
+	f, err := ioutil.TempFile("", "vorteil.disk")
 	if err != nil {
-		return err
+		log.Error(err.Error())
+		os.Exit(1)
 	}
+	defer os.Remove(f.Name())
 	defer f.Close()
+
+	err = vdisk.Build(context.Background(), f, &vdisk.BuildArgs{
+		PackageReader: pkgReader,
+		Format:        qemu.Allocator.DiskFormat(),
+		KernelOptions: vdisk.KernelOptions{
+			Shell: flagShell,
+		},
+	})
+	if err != nil {
+		log.Error(err.Error())
+		os.Exit(1)
+	}
+
+	err = f.Close()
+	if err != nil {
+		log.Error(err.Error())
+		os.Exit(1)
+	}
+
+	err = pkgReader.Close()
+	if err != nil {
+		log.Error(err.Error())
+		os.Exit(1)
+	}
 
 	alloc := qemu.Allocator
 	virt := alloc.Alloc()
@@ -140,18 +192,18 @@ func runQEMU(diskpath string, cfg *vcfg.VCFG, gui bool) error {
 		return err
 	}
 
-	return run(virt, f, cfg)
+	return run(virt, f.Name(), cfg)
 
 }
 
-func run(virt virtualizers.Virtualizer, disk vio.File, cfg *vcfg.VCFG) error {
-
+func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG) error {
 	_ = virt.Prepare(&virtualizers.PrepareArgs{
 		Name:   "vorteil-vm",
-		PName:  "qemu",
+		PName:  virt.Type(),
 		Start:  true,
 		Config: cfg,
-		Image:  disk,
+		// Image:  disk,
+		ImagePath: diskpath,
 	})
 
 	serial := virt.Serial()

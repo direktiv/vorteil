@@ -63,12 +63,13 @@ type PrepareArgs struct {
 	PName  string // name of virtualizer spawned from
 	FCPath string // used for firecracker to find vmlinux binaries
 	// Subserver *graph.Graph
-	Context context.Context
-	Start   bool       // to control whether its to start automatically
-	Config  *vcfg.VCFG // the vcfg attached to the VM
-	Source  interface{}
-	Image   vio.File // TODO: Change to GERM BUILD
-	VMDrive string   // path to store disks for vms
+	Context   context.Context
+	Start     bool       // to control whether its to start automatically
+	Config    *vcfg.VCFG // the vcfg attached to the VM
+	Source    interface{}
+	Image     vio.File // TODO: Change to GERM BUILD
+	ImagePath string
+	VMDrive   string // path to store disks for vms
 }
 
 // VirtualizeOperation is a struct that contains ways to log for the operation

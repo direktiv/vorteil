@@ -188,7 +188,7 @@ func (v *Virtualizer) ForceStop() error {
 			// vm should be stopped by now so close the pipes
 			v.errPipe.Close()
 			v.outPipe.Close()
-			v.disk.Close()
+			// v.disk.Close()
 		}
 	} else {
 		return errors.New("vm is already stopped.")

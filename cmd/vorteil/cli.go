@@ -1872,63 +1872,31 @@ and cleaning up the instance when it's done.`,
 			os.Exit(1)
 		}
 
-		f, err := ioutil.TempFile("", "vorteil.disk")
-		if err != nil {
-			log.Error(err.Error())
-			os.Exit(1)
-		}
-		defer os.Remove(f.Name())
-		defer f.Close()
-
-		err = vdisk.Build(context.Background(), f, &vdisk.BuildArgs{
-			PackageReader: pkgReader,
-			Format:        vdisk.RAWFormat,
-			KernelOptions: vdisk.KernelOptions{
-				Shell: flagShell,
-			},
-		})
-		if err != nil {
-			log.Error(err.Error())
-			os.Exit(1)
-		}
-
-		err = f.Close()
-		if err != nil {
-			log.Error(err.Error())
-			os.Exit(1)
-		}
-
-		err = pkgReader.Close()
-		if err != nil {
-			log.Error(err.Error())
-			os.Exit(1)
-		}
-
 		switch flagPlatform {
 		case platformQEMU:
-			err = runQEMU(f.Name(), cfg, flagGUI)
+			err = runQEMU(pkgReader, cfg, flagGUI, flagShell)
 			if err != nil {
 				log.Error(err.Error())
 				os.Exit(1)
 			}
 		case platformVirtualBox:
-			err = runVirtualBox(f.Name(), cfg, flagGUI)
+			err = runVirtualBox(pkgReader, cfg, flagGUI, flagShell)
 			if err != nil {
 				log.Error(err.Error())
 				os.Exit(1)
 			}
-		case platformHyperV:
-			err = runHyperV(f.Name(), cfg, flagGUI)
-			if err != nil {
-				log.Error(err.Error())
-				os.Exit(1)
-			}
-		case platformFirecracker:
-			err = runFirecracker(f.Name(), cfg, flagGUI)
-			if err != nil {
-				log.Error(err.Error())
-				os.Exit(1)
-			}
+		// case platformHyperV:
+		// 	err = runHyperV(f.Name(), cfg, flagGUI)
+		// 	if err != nil {
+		// 		log.Error(err.Error())
+		// 		os.Exit(1)
+		// 	}
+		// case platformFirecracker:
+		// 	err = runFirecracker(f.Name(), cfg, flagGUI)
+		// 	if err != nil {
+		// 		log.Error(err.Error())
+		// 		os.Exit(1)
+		// 	}
 		default:
 			log.Error(fmt.Errorf("platform '%s' not supported", flagPlatform).Error())
 			os.Exit(1)

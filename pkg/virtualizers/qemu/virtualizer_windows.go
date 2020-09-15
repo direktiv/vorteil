@@ -95,34 +95,7 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 		return
 	}
 
-	f, err := os.Create(filepath.Join(o.folder, o.name+".raw"))
-	if err != nil {
-		returnErr = err
-		return
-	}
-
-	_, err = io.Copy(f, args.Image)
-	if err != nil {
-		returnErr = err
-		return
-	}
-
-	err = f.Sync()
-	if err != nil {
-		o.Virtualizer.log("error", "Error syncing disk: %v", err)
-		returnErr = err
-		return
-	}
-
-	err = f.Close()
-	if err != nil {
-		o.Virtualizer.log("error", "Error closing disk: %v", err)
-		returnErr = err
-		return
-	}
-	o.disk = f
-
-	diskpath := filepath.ToSlash(o.disk.Name())
+	diskpath := filepath.ToSlash(args.ImagePath)
 	diskformat := "raw"
 
 	argsCommand := createArgs(o.config.VM.CPUs, o.config.VM.RAM.Units(vcfg.MiB), o.headless, diskpath, diskformat)

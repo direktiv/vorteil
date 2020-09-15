@@ -5,7 +5,6 @@ package qemu
 import (
 	"errors"
 	"fmt"
-	"io"
 	"net"
 	"os"
 	"os/exec"
@@ -117,20 +116,7 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 		return
 	}
 
-	f, err := os.Create(filepath.Join(o.folder, o.name+".raw"))
-	if err != nil {
-		returnErr = err
-		return
-	}
-	_, err = io.Copy(f, args.Image)
-	if err != nil {
-		returnErr = err
-		return
-	}
-	defer f.Close()
-	o.disk = f
-
-	diskpath := filepath.ToSlash(o.disk.Name())
+	diskpath := filepath.ToSlash(args.ImagePath)
 	diskformat := "raw"
 
 	argsCommand := createArgs(o.config.VM.CPUs, o.config.VM.RAM.Units(vcfg.MiB), o.headless, diskpath, diskformat)

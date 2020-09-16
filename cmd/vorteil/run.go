@@ -57,10 +57,12 @@ func runFirecracker(pkgReader vpkg.Reader, cfg *vcfg.VCFG) error {
 		log.Error(err.Error())
 		os.Exit(1)
 	}
-	defer os.Remove(f.Name())
-	defer f.Close()
-
-	defer os.Remove(parent)
+	defer func() {
+		fmt.Printf("REMOVING FOLDER")
+		os.Remove(f.Name())
+		f.Close()
+		os.Remove(parent)
+	}()
 
 	err = vdisk.Build(context.Background(), f, &vdisk.BuildArgs{
 		PackageReader: pkgReader,
@@ -362,7 +364,7 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG) error {
 				return nil
 			}
 			finished = true
-			virt.Stop()
+			go virt.Stop()
 		case <-chBool:
 			return nil
 		}

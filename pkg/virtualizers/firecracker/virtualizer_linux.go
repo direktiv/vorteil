@@ -30,6 +30,14 @@ import (
 	logger "github.com/vorteil/vorteil/pkg/virtualizers/logging"
 )
 
+func fetchBridgeDev() error {
+	// Check if bridge device exists
+	_, err := tenus.BridgeFromName("vorteil-bridge")
+	if err != nil {
+		return errors.New("try running 'vorteil firecracker-setup' before using firecracker")
+	}
+	return err
+}
 func SetupBridgeAndDHCPServer() error {
 
 	// Create bridge device
@@ -696,12 +704,13 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 
 	devices = append(devices, rootDrive)
 
+	v.log("debug", "Fetching VMLinux from cache or online")
 	o.kip, err = o.fetchVMLinux(o.config.VM.Kernel)
 	if err != nil {
 		returnErr = err
 		return
 	}
-
+	v.log("debug", "Finished getting VMLinux")
 	// get bridge device
 	bridgeDev, err := tenus.BridgeFromName("vorteil-bridge")
 	if err != nil {
@@ -765,7 +774,7 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	fcCfg := firecracker.Config{
 		SocketPath:      filepath.Join(o.folder, fmt.Sprintf("%s.%s", o.name, "socket")),
 		KernelImagePath: o.kip,
-		KernelArgs:      "init=/vorteil/vinitd pci=off i8042.noaux i8042.nomux i8042.nopnp i8042.dumbkbd  vt.color=0x00",
+		KernelArgs:      "init=/vorteil/vinitd reboot=k panic=1 pci=off i8042.noaux i8042.nomux i8042.nopnp i8042.dumbkbd  vt.color=0x00",
 		Drives:          devices,
 		MachineCfg: models.MachineConfiguration{
 			VcpuCount:  firecracker.Int64(int64(o.config.VM.CPUs)),
@@ -773,7 +782,6 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 			MemSizeMib: firecracker.Int64(int64(o.config.VM.RAM.Units(vcfg.MiB))),
 		},
 		NetworkInterfaces: interfaces,
-		Debug:             true,
 	}
 
 	machineOpts := []firecracker.Opt{

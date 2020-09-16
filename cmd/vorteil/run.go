@@ -13,8 +13,6 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/milosgajdos/tenus"
-
 	isatty "github.com/mattn/go-isatty"
 	"github.com/mitchellh/go-homedir"
 	"github.com/thanhpk/randstr"
@@ -35,10 +33,11 @@ func runFirecracker(pkgReader vpkg.Reader, cfg *vcfg.VCFG) error {
 		return errors.New("firecracker is not installed on your system")
 	}
 	// Check if bridge device exists
-	_, err := tenus.BridgeFromName("vorteil-bridge")
+	err := firecracker.FetchBridgeDev()
 	if err != nil {
 		return errors.New("try running 'vorteil firecracker-setup' before using firecracker")
 	}
+
 	// Create base folder to store virtualbox vms so the socket can be grouped
 	parent := fmt.Sprintf("%s-%s", firecracker.VirtualizerID, randstr.Hex(5))
 	parent = filepath.Join(os.TempDir(), parent)

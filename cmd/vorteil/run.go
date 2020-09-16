@@ -362,7 +362,7 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG) error {
 				return nil
 			}
 			finished = true
-			go virt.Stop()
+			virt.Stop()
 		case <-chBool:
 			return nil
 		}

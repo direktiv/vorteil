@@ -506,7 +506,7 @@ func (v *Virtualizer) Close(force bool) error {
 	}
 
 	// sleep for shutdown signal
-	time.Sleep(time.Second * 4)
+	// time.Sleep(time.Second * 4)
 	// delete tap device as vmm has been stopped don't worry about catching error as its not found
 	for _, device := range v.tapDevice {
 		device.DeleteLink()

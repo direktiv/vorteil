@@ -122,11 +122,12 @@ func runHyperV(pkgReader vpkg.Reader, cfg *vcfg.VCFG) error {
 		os.Exit(1)
 	}
 
-	f, err := ioutil.TempFile(parent, "vorteil.disk")
+	f, err := os.Create(filepath.Join(parent, "disk.vhd"))
 	if err != nil {
 		log.Error(err.Error())
 		os.Exit(1)
 	}
+
 	defer os.Remove(f.Name())
 	defer f.Close()
 

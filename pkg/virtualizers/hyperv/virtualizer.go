@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"net"
 	"os"
 	"os/exec"
@@ -14,7 +13,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/thanhpk/randstr"
 	"github.com/vorteil/vorteil/pkg/vcfg"
 	"github.com/vorteil/vorteil/pkg/vio"
 	"github.com/vorteil/vorteil/pkg/virtualizers"
@@ -567,45 +565,20 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 		o.finished(returnErr)
 	}()
 	o.name = args.Name
-	o.id = randstr.Hex(5)
-	o.folder = filepath.Join(o.vmdrive, fmt.Sprintf("%s-%s", o.id, o.Type()))
-	err := os.MkdirAll(o.folder, os.ModePerm)
-	if err != nil {
-		returnErr = err
-	}
+	o.folder = filepath.Dir(args.ImagePath)
+	o.id = strings.Split(filepath.Base(o.folder), "-")[1]
 
 	_, loaded := virtualizers.ActiveVMs.LoadOrStore(o.name, o.Virtualizer)
 	if loaded {
 		returnErr = errors.New("virtual machine already exists")
 	}
-	diskPath := filepath.Join(o.folder, fmt.Sprintf("disk%s", ".vhd"))
 
-	tempDisk, err := os.Create(diskPath)
-	if err != nil {
-		o.Virtualizer.log("error", "Error Creating Disk: %v", err)
-	}
-	_, err = io.Copy(tempDisk, args.Image)
-	if err != nil {
-		o.Virtualizer.log("error", "Error Copying Disk: %v", err)
-	}
-
-	err = tempDisk.Sync()
-	if err != nil {
-		o.Virtualizer.log("error", "Error Syncing Disk: %v", err)
-	}
-
-	err = tempDisk.Close()
-	if err != nil {
-		o.Virtualizer.log("error", "Error Closing Disk: %v", err)
-	}
-
-	o.disk = tempDisk
 	o.config.VM.RAM.Align(vcfg.MiB * 2)
 
 	size := fmt.Sprintf("%v%s", o.config.VM.RAM.Units(vcfg.MiB), "MB")
 
 	cmd := exec.Command(virtualizers.Powershell, "New-VM", "-Name", o.name,
-		"-BootDevice", "VHD", "-VHDPath", o.disk.Name(), "-Path", o.folder, "-Generation", "1", "-SwitchName", fmt.Sprintf("\"%s\"", o.switchName))
+		"-BootDevice", "VHD", "-VHDPath", filepath.ToSlash(args.ImagePath), "-Path", o.folder, "-Generation", "1", "-SwitchName", fmt.Sprintf("\"%s\"", o.switchName))
 	output, err := o.execute(cmd)
 	if err != nil {
 		o.Virtualizer.log("error", "Error New-VM: %v", err)

@@ -222,7 +222,6 @@ func (v *Virtualizer) Detach(source string) error {
 		PathOnHost:   filepath.Join(source, name, fmt.Sprintf("%s.raw", v.name)),
 		IsRootDevice: true,
 		IsReadOnly:   false,
-		Partuuid:     vimg.Part2UUIDString,
 	}
 	var drives []Drive
 	drives = append(drives, drive)
@@ -702,6 +701,7 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 		PathOnHost:   &diskpath,
 		IsRootDevice: firecracker.Bool(true),
 		IsReadOnly:   firecracker.Bool(false),
+		Partuuid:     vimg.Part2UUIDString,
 	}
 
 	devices = append(devices, rootDrive)

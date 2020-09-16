@@ -33,7 +33,9 @@ func Build(ctx context.Context, w io.WriteSeeker, args *BuildArgs) error {
 	case VMDKFormat:
 	case VMDKSparseFormat:
 	case VMDKStreamOptimizedFormat:
-	// case VHDFormat:
+	case VHDFormat:
+	case VHDDynamicFormat:
+	case VHDFixedFormat:
 	// case VHDFormat2:
 	// case XVAFormat
 	case GCPFArchiveFormat:

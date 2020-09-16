@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/cloudfoundry/bytefmt"
 	"github.com/docker/distribution"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/heroku/docker-registry-client/registry"
@@ -89,22 +88,6 @@ func writeFile(name string, r io.Reader) error {
 	}
 
 	return nil
-}
-
-// if bars are used, this generates the name of the bar displayed
-func barName(layer interface{}, nr int) string {
-	digest := ""
-	switch layer.(type) {
-	case v1.Layer:
-		d, err := layer.(v1.Layer).Digest()
-		if err == nil {
-			digest = d.Hex[7:15]
-		}
-		return fmt.Sprintf("layer %d (%s): ", nr, digest)
-	default:
-		digest = fmt.Sprintf("%s", layer.(distribution.Descriptor).Digest[7:15])
-	}
-	return fmt.Sprintf("layer %d (%s): ", nr, digest)
 }
 
 func fetchRepoConfig(repo string) (map[string]interface{}, error) {
@@ -196,7 +179,7 @@ func prepDirectories(targetDir string) (string, error) {
 
 }
 
-func distributor(layers []interface{}, p *mpb.Progress) {
+func distributor(layers []*layer, p *mpb.Progress) {
 
 	log.Infof("downloading %d layers", len(layers))
 	for i, layer := range layers {
@@ -207,9 +190,9 @@ func distributor(layers []interface{}, p *mpb.Progress) {
 		}
 
 		if !elog.IsJSON {
-			job.bar = p.AddBar(int64(layer.(distribution.Descriptor).Size),
+			job.bar = p.AddBar(int64(layer.size),
 				mpb.PrependDecorators(
-					decor.Name(barName(layer, i)),
+					decor.Name(fmt.Sprintf("layer %d (%s): ", i, layer.hash)),
 				),
 				mpb.AppendDecorators(
 					decor.OnComplete(
@@ -224,33 +207,20 @@ func distributor(layers []interface{}, p *mpb.Progress) {
 	close(jobs)
 }
 
-func worker(dir, image string, registry *registry.Registry) {
-
-	for {
-		job, opened := <-jobs
-		if !opened {
-			break
-		}
-
-		layer := job.layer.(distribution.Descriptor)
-		reader, err := registry.DownloadBlob(image, layer.Digest)
-		if err != nil {
-			log.Fatalf("can not download layer %s: %s", layer.Digest, err.Error())
-			os.Exit(1)
-		}
-
-		// if we use json we don't show bars
-		var proxyReader io.ReadCloser
-		if !elog.IsJSON {
-			proxyReader = job.bar.ProxyReader(reader)
-		} else {
-			log.Infof("downloading layer %s (%s)", image, bytefmt.ByteSize((uint64)(job.layer.(distribution.Descriptor).Size)))
-			proxyReader = reader
-		}
-		defer proxyReader.Close()
-
-		writeFile(fmt.Sprintf(tarExpression, dir, layer.Digest[7:15]), proxyReader)
-		wg.Done()
+func dockerGetReader(image string, layer *layer, registry *registry.Registry) (io.ReadCloser, error) {
+	l := layer.layer.(v1.Layer)
+	reader, err := l.Compressed()
+	if err != nil {
+		return nil, err
 	}
+	return reader, nil
+}
 
+func remoteGetReader(image string, layer *layer, registry *registry.Registry) (io.ReadCloser, error) {
+	olayer := layer.layer.(distribution.Descriptor)
+	reader, err := registry.DownloadBlob(image, olayer.Digest)
+	if err != nil {
+		return nil, err
+	}
+	return reader, nil
 }

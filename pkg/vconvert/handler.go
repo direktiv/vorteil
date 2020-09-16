@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -16,10 +17,10 @@ import (
 	"github.com/vorteil/vorteil/pkg/elog"
 	"github.com/vorteil/vorteil/pkg/vcfg"
 
+	"github.com/cloudfoundry/bytefmt"
 	"github.com/containerd/containerd/archive"
 	"github.com/containerd/containerd/archive/compression"
 	cmanifest "github.com/containers/image/manifest"
-	"github.com/docker/distribution"
 	"github.com/docker/distribution/manifest/schema2"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/heroku/docker-registry-client/registry"
@@ -40,22 +41,34 @@ const (
 
 var (
 	jobs = make(chan job)
-	wg   sync.WaitGroup
 )
 
 type job struct {
-	layer  interface{}
+	layer  *layer
 	bar    *mpb.Bar
 	number int
 }
 
+// compat struct for layers from local runtimes and remote image repos
+type layer struct {
+	layer interface{}
+	size  int64
+	hash  string
+}
+
 type imageHandler struct {
 	imageRef    *parser.Reference
-	tmpDir      string
-	layers      []interface{}
-	imageConfig v1.Config
-	user, pwd   string
 	registry    *registry.Registry
+	imageConfig v1.Config
+
+	tmpDir    string
+	layers    []*layer
+	user, pwd string
+
+	// different readers for remote and e.g. local docker
+	fetchReader func(string, *layer, *registry.Registry) (io.ReadCloser, error)
+
+	wg sync.WaitGroup
 }
 
 func newHandler(app, user, pwd, dest string) (*imageHandler, error) {
@@ -136,7 +149,17 @@ func (ih *imageHandler) createVMFromRemote() error {
 		return err
 	}
 
-	ih.downloadBlobs(manifest.Manifest)
+	var ifs = make([]*layer, len(manifest.Layers))
+	for i, d := range manifest.Layers {
+		ifs[i] = &layer{
+			layer: d,
+			hash:  string(d.Digest[7:15]),
+			size:  d.Size,
+		}
+	}
+	ih.layers = ifs
+
+	ih.downloadBlobs()
 
 	return nil
 
@@ -179,24 +202,18 @@ func (ih *imageHandler) downloadManifest(manifest schema2.Manifest) error {
 	return nil
 }
 
-func (ih *imageHandler) downloadBlobs(manifest schema2.Manifest) {
+func (ih *imageHandler) downloadBlobs() {
 
 	if !elog.IsJSON {
 		log.SetOutput(ioutil.Discard)
 	}
 
-	var ifs = make([]interface{}, len(manifest.Layers))
-	for i, d := range manifest.Layers {
-		ifs[i] = d
-	}
-	ih.layers = ifs
+	p := mpb.New(mpb.WithWaitGroup(&ih.wg))
+	ih.wg.Add(len(ih.layers))
 
-	p := mpb.New(mpb.WithWaitGroup(&wg))
-	wg.Add(len(ih.layers))
-
-	go distributor(ifs, p)
+	go distributor(ih.layers, p)
 	for i := 0; i < workers; i++ {
-		go worker(ih.tmpDir, ih.imageRef.ShortName(), ih.registry)
+		go ih.worker()
 	}
 
 	p.Wait()
@@ -210,7 +227,7 @@ func (ih *imageHandler) untarLayers(targetDir string) error {
 
 	for _, layer := range ih.layers {
 
-		filename := fmt.Sprintf(tarExpression, ih.tmpDir, layer.(distribution.Descriptor).Digest[7:15])
+		filename := fmt.Sprintf(tarExpression, ih.tmpDir, layer.hash)
 
 		log.Infof("untar layer %s into %s", filename, targetDir)
 
@@ -343,5 +360,38 @@ func (ih *imageHandler) createVCFG(targetDir string) error {
 	log.Debugf("vcfg file:\n%v\n", string(b))
 
 	return nil
+
+}
+
+func (ih *imageHandler) worker() {
+
+	for {
+		job, opened := <-jobs
+		if !opened {
+			break
+		}
+
+		reader, err := ih.fetchReader(ih.imageRef.ShortName(), job.layer, ih.registry)
+		if err != nil {
+			if !elog.IsJSON {
+				log.SetOutput(os.Stdout)
+			}
+			log.Fatalf("can not download layer %s: %s", job.layer.hash, err.Error())
+			os.Exit(1)
+		}
+
+		// if we use json we don't show bars
+		var proxyReader io.ReadCloser
+		if !elog.IsJSON {
+			proxyReader = job.bar.ProxyReader(reader)
+		} else {
+			log.Infof("downloading layer %s (%s)", ih.imageRef.ShortName(), bytefmt.ByteSize((uint64)(job.layer.size)))
+			proxyReader = reader
+		}
+		defer proxyReader.Close()
+
+		writeFile(fmt.Sprintf(tarExpression, ih.tmpDir, job.layer.hash), proxyReader)
+		ih.wg.Done()
+	}
 
 }

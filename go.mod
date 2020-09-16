@@ -17,6 +17,7 @@ require (
 	github.com/djherbis/buffer v1.1.0
 	github.com/djherbis/nio v2.0.3+incompatible
 	github.com/docker/distribution v2.7.1+incompatible
+	github.com/docker/docker v1.4.2-0.20190924003213-a8608b5b67c7
 	github.com/fatih/color v1.9.0
 	github.com/gobwas/glob v0.2.3
 	github.com/google/go-containerregistry v0.1.2

@@ -22,10 +22,34 @@ func ConvertContainer(app, dest, user, pwd, config string) error {
 	}
 	defer os.RemoveAll(handler.tmpDir)
 
+	log.Infof("HERE %s %s", handler.imageRef.Registry(), localIdentifier)
+
 	if strings.HasPrefix(handler.imageRef.Registry(), localIdentifier) {
-		fmt.Printf("LOCAL >> %v\n", handler.imageRef.Registry())
+		// we only support docker and containerd
+		// we can assume %s.%s here
+		s := strings.SplitN(handler.imageRef.Registry(), ".", 2)
+		switch s[1] {
+		case "docker":
+			{
+				handler.fetchReader = dockerGetReader
+				err := handler.downloadDockerTar(handler.imageRef.ShortName(), handler.imageRef.Tag())
+				if err != nil {
+					return err
+				}
+			}
+		case "containerd":
+			{
+				log.Infof("CONTAINER!!!")
+			}
+		default:
+			{
+				return fmt.Errorf("unknown local container runtime")
+			}
+		}
+
 	} else {
 		initConfig(config)
+		handler.fetchReader = remoteGetReader
 		err = handler.createVMFromRemote()
 		if err != nil {
 			return err

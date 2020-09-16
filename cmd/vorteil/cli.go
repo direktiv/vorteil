@@ -1889,12 +1889,12 @@ and cleaning up the instance when it's done.`,
 				log.Error(err.Error())
 				os.Exit(1)
 			}
-		// case platformHyperV:
-		// 	err = runHyperV(f.Name(), cfg, flagGUI)
-		// 	if err != nil {
-		// 		log.Error(err.Error())
-		// 		os.Exit(1)
-		// 	}
+		case platformHyperV:
+			err = runHyperV(pkgReader, cfg)
+			if err != nil {
+				log.Error(err.Error())
+				os.Exit(1)
+			}
 		case platformFirecracker:
 			err = runFirecracker(pkgReader, cfg)
 			if err != nil {

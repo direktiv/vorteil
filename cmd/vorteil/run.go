@@ -20,6 +20,7 @@ import (
 	"github.com/vorteil/vorteil/pkg/vdisk"
 	"github.com/vorteil/vorteil/pkg/virtualizers"
 	"github.com/vorteil/vorteil/pkg/virtualizers/firecracker"
+	"github.com/vorteil/vorteil/pkg/virtualizers/hyperv"
 	"github.com/vorteil/vorteil/pkg/virtualizers/qemu"
 	"github.com/vorteil/vorteil/pkg/virtualizers/virtualbox"
 	"github.com/vorteil/vorteil/pkg/vpkg"
@@ -101,37 +102,74 @@ func runFirecracker(pkgReader vpkg.Reader, cfg *vcfg.VCFG) error {
 	return run(virt, f.Name(), cfg)
 }
 
-// func runHyperV(diskpath string, cfg *vcfg.VCFG, gui bool) error {
-// 	if runtime.GOOS != "windows" {
-// 		return errors.New("hyper-v is only available on windows system")
-// 	}
-// 	if !hyperv.Allocator.IsAvailable() {
-// 		return errors.New("hyper-v is not enabled on your system")
-// 	}
+func runHyperV(pkgReader vpkg.Reader, cfg *vcfg.VCFG) error {
+	if runtime.GOOS != "windows" {
+		return errors.New("hyper-v is only available on windows system")
+	}
+	if !hyperv.Allocator.IsAvailable() {
+		return errors.New("hyper-v is not enabled on your system")
+	}
+	// Create base folder to store virtualbox vms so the socket can be grouped
+	parent := fmt.Sprintf("%s-%s", hyperv.VirtualizerID, randstr.Hex(5))
+	parent = filepath.Join(os.TempDir(), parent)
 
-// 	// f, err := vio.Open(diskpath)
-// 	// if err != nil {
-// 	// 	return err
-// 	// }
+	// Create parent directory as it doesn't exist
+	err := os.MkdirAll(parent, os.ModePerm)
+	if err != nil {
+		log.Error(err.Error())
+		os.Exit(1)
+	}
 
-// 	// defer f.Close()
+	f, err := ioutil.TempFile(parent, "vorteil.disk")
+	if err != nil {
+		log.Error(err.Error())
+		os.Exit(1)
+	}
+	defer os.Remove(f.Name())
+	defer f.Close()
 
-// 	alloc := hyperv.Allocator
-// 	virt := alloc.Alloc()
-// 	defer virt.Close(true)
+	defer os.Remove(parent)
 
-// 	config := hyperv.Config{
-// 		Headless:   !gui,
-// 		SwitchName: "Default Switch",
-// 	}
+	err = vdisk.Build(context.Background(), f, &vdisk.BuildArgs{
+		PackageReader: pkgReader,
+		Format:        hyperv.Allocator.DiskFormat(),
+		KernelOptions: vdisk.KernelOptions{
+			Shell: flagShell,
+		},
+	})
+	if err != nil {
+		log.Error(err.Error())
+		os.Exit(1)
+	}
 
-// 	err = virt.Initialize(config.Marshal())
-// 	if err != nil {
-// 		return err
-// 	}
+	err = f.Close()
+	if err != nil {
+		log.Error(err.Error())
+		os.Exit(1)
+	}
 
-// 	return run(virt, diskpath, cfg)
-// }
+	err = pkgReader.Close()
+	if err != nil {
+		log.Error(err.Error())
+		os.Exit(1)
+	}
+
+	alloc := hyperv.Allocator
+	virt := alloc.Alloc()
+	defer virt.Close(true)
+
+	config := hyperv.Config{
+		Headless:   !flagGUI,
+		SwitchName: "Default Switch",
+	}
+
+	err = virt.Initialize(config.Marshal())
+	if err != nil {
+		return err
+	}
+
+	return run(virt, f.Name(), cfg)
+}
 
 func runVirtualBox(pkgReader vpkg.Reader, cfg *vcfg.VCFG) error {
 

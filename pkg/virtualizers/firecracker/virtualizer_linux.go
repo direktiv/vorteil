@@ -704,13 +704,13 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 
 	devices = append(devices, rootDrive)
 
-	v.log("debug", "Fetching VMLinux from cache or online")
+	o.log("debug", "Fetching VMLinux from cache or online")
 	o.kip, err = o.fetchVMLinux(o.config.VM.Kernel)
 	if err != nil {
 		returnErr = err
 		return
 	}
-	v.log("debug", "Finished getting VMLinux")
+	o.log("debug", "Finished getting VMLinux")
 	// get bridge device
 	bridgeDev, err := tenus.BridgeFromName("vorteil-bridge")
 	if err != nil {

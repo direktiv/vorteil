@@ -15,15 +15,11 @@ import (
 	"sync"
 )
 
-type ImportSharedObjectsOptions struct {
-	ExcludeDefaultLibs bool
-}
-
-func NewImportSharedObject(projectPath string, options ImportSharedObjectsOptions) (*importSharedObjectsOperation, error) {
+func NewImportSharedObject(projectPath string, excludeDefaultLibs bool) (*importSharedObjectsOperation, error) {
 	var isoOperation importSharedObjectsOperation
 
 	isoOperation.projectDir = projectPath
-	isoOperation.excludeDefaultLibs = options.ExcludeDefaultLibs
+	isoOperation.excludeDefaultLibs = excludeDefaultLibs
 
 	if err := isoOperation.initialize(); err != nil {
 		return nil, err
@@ -41,8 +37,6 @@ type importSharedObjectsOperation struct {
 	excludeDefaultLibs bool
 	imported32bit      bool
 	imported64bit      bool
-
-	logger *log.Logger
 }
 
 func (isoOp *importSharedObjectsOperation) initialize() error {

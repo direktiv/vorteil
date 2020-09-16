@@ -1753,9 +1753,7 @@ var importSharedObjectsCmd = &cobra.Command{
 		}
 
 		// Create Import Operation
-		importOperation, err := vproj.NewImportSharedObject(projectPath, vproj.ImportSharedObjectsOptions{
-			ExcludeDefaultLibs: flagExcludeDefault,
-		})
+		importOperation, err := vproj.NewImportSharedObject(projectPath, flagExcludeDefault)
 
 		if err != nil {
 			log.Error(err.Error())

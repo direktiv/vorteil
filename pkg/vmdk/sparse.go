@@ -122,12 +122,12 @@ func (w *SparseWriter) writeGrainData() error {
 	}
 
 	for i := int64(0); i < w.totalDataGrains; i++ {
-		grainSector := int64(0)
-		if i < w.totalDataGrains {
-			if !w.h.RegionIsHole(i*GrainSize, GrainSize) {
-				grainSector = firstDataSector + i*SectorsPerGrain
-			}
+
+		grainSector := int64(w.grainOffsets[i])
+		if i+1 < int64(len(w.grainOffsets)) && grainSector == int64(w.grainOffsets[i+1]) {
+			grainSector = 0
 		}
+		grainSector /= SectorSize
 
 		if i%TableMaxRows == 0 {
 			table := i / TableMaxRows
@@ -168,12 +168,12 @@ func (w *SparseWriter) writeGrainData() error {
 	}
 
 	for i := int64(0); i < w.totalDataGrains; i++ {
-		grainSector := int64(0)
-		if i < w.totalDataGrains {
-			if !w.h.RegionIsHole(i*GrainSize, GrainSize) {
-				grainSector = firstDataSector + i*SectorsPerGrain
-			}
+
+		grainSector := int64(w.grainOffsets[i])
+		if i+1 < int64(len(w.grainOffsets)) && grainSector == int64(w.grainOffsets[i+1]) {
+			grainSector = 0
 		}
+		grainSector /= SectorSize
 
 		if i%TableMaxRows == 0 {
 			table := i / TableMaxRows
@@ -214,12 +214,6 @@ func (w *SparseWriter) init() error {
 		return err
 	}
 
-	// grain directories & tables
-	err = w.writeGrainData()
-	if err != nil {
-		return err
-	}
-
 	firstDataSector := int64(w.hdr.OverHead) * SectorsPerGrain
 	w.grainOffsets = make([]int64, w.totalDataGrains, w.totalDataGrains)
 	offset := firstDataSector * SectorSize
@@ -229,6 +223,12 @@ func (w *SparseWriter) init() error {
 			continue
 		}
 		offset += GrainSize
+	}
+
+	// grain directories & tables
+	err = w.writeGrainData()
+	if err != nil {
+		return err
 	}
 
 	return nil

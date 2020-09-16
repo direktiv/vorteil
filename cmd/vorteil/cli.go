@@ -19,6 +19,7 @@ import (
 	"github.com/vorteil/vorteil/pkg/vio"
 
 	"github.com/vorteil/vorteil/pkg/provisioners"
+	"github.com/vorteil/vorteil/pkg/provisioners/amazon"
 	"github.com/vorteil/vorteil/pkg/provisioners/google"
 	"github.com/vorteil/vorteil/pkg/vcfg"
 
@@ -1564,6 +1565,17 @@ var provisionCmd = &cobra.Command{
 			}
 
 			prov = p
+
+		case amazon.ProvisionerType:
+			fmt.Println("Provisioning to Amazon Web Services")
+			p := &amazon.Provisioner{}
+			err = p.Initialize(data)
+			if err != nil {
+				log.Error(err.Error())
+				os.Exit(6)
+			}
+
+			prov = p
 		}
 
 		buildablePath := "."
@@ -1602,7 +1614,7 @@ var provisionCmd = &cobra.Command{
 			os.Exit(13)
 		}
 
-		f, err := ioutil.TempFile("", "vorteil.disk")
+		f, err := ioutil.TempFile(os.TempDir(), "vorteil.disk")
 		if err != nil {
 			log.Error(err.Error())
 			os.Exit(14)
@@ -1613,6 +1625,7 @@ var provisionCmd = &cobra.Command{
 		err = vdisk.Build(context.Background(), f, &vdisk.BuildArgs{
 			PackageReader: pkgReader,
 			Format:        prov.DiskFormat(),
+			SizeAlign:     int64(prov.SizeAlign()),
 			KernelOptions: vdisk.KernelOptions{
 				Shell: flagShell,
 			},
@@ -1946,22 +1959,6 @@ var provisionersNewCmd = &cobra.Command{
 	Use: "new",
 }
 
-var provisionersNewAmazonEC2Cmd = &cobra.Command{
-	Use: "amazon-ec2",
-	Run: func(cmd *cobra.Command, args []string) {
-		// Do Stuff Here
-		fmt.Println("TODO")
-	},
-}
-
-var provisionersNewAzureCmd = &cobra.Command{
-	Use: "azure",
-	Run: func(cmd *cobra.Command, args []string) {
-		// Do Stuff Here
-		fmt.Println("TODO")
-	},
-}
-
 var (
 	provisionersNewPassphrase string
 
@@ -1983,6 +1980,60 @@ var (
 	provisionersNewAzureStorageAccountName string
 )
 
+var provisionersNewAmazonEC2Cmd = &cobra.Command{
+	Use:  "amazon-ec2",
+	Args: cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+
+		f, err := os.OpenFile(args[0], os.O_RDWR|os.O_CREATE, 0644)
+		if err != nil {
+			log.Error(err.Error())
+			os.Exit(1)
+		}
+		defer f.Close()
+
+		p, err := amazon.Create(&amazon.Config{
+			Key:    provisionersNewAmazonKey,
+			Secret: provisionersNewAmazonSecret,
+			Region: provisionersNewAmazonRegion,
+		})
+		if err != nil {
+			log.Error(err.Error())
+			os.Exit(2)
+		}
+
+		data, err := p.Marshal()
+		if err != nil {
+			log.Error(err.Error())
+			os.Exit(3)
+		}
+
+		out := provisioners.Encrypt(data, provisionersNewPassphrase)
+		_, err = io.Copy(f, bytes.NewReader(out))
+		if err != nil {
+			log.Error(err.Error())
+			os.Exit(4)
+		}
+
+	},
+}
+
+func init() {
+	f := provisionersNewAmazonEC2Cmd.Flags()
+	f.StringVarP(&provisionersNewAmazonKey, "key", "k", "", "Access key ID")
+	f.StringVarP(&provisionersNewAmazonSecret, "secret", "s", "", "Secret access key")
+	f.StringVarP(&provisionersNewAmazonRegion, "region", "r", "ap-southeast-2", "AWS region")
+	f.StringVarP(&provisionersNewPassphrase, "passphrase", "p", "", "Passphrase for encrypting exported provisioner data.")
+}
+
+var provisionersNewAzureCmd = &cobra.Command{
+	Use: "azure",
+	Run: func(cmd *cobra.Command, args []string) {
+		// Do Stuff Here
+		fmt.Println("TODO")
+	},
+}
+
 var provisionersNewGoogleCmd = &cobra.Command{
 	Use:   "google <OUTPUT_FILE>",
 	Short: "Add a new Google Cloud (Compute Engine) Provisioner.",
@@ -1992,7 +2043,7 @@ var provisionersNewGoogleCmd = &cobra.Command{
 		f, err := os.OpenFile(args[0], os.O_RDWR|os.O_CREATE, 0644)
 		if err != nil {
 			log.Error(err.Error())
-			os.Exit(5)
+			os.Exit(1)
 		}
 		defer f.Close()
 
@@ -2000,13 +2051,13 @@ var provisionersNewGoogleCmd = &cobra.Command{
 		_, err = os.Stat(path)
 		if err != nil {
 			log.Error(err.Error())
-			os.Exit(1)
+			os.Exit(2)
 		}
 
 		b, err := ioutil.ReadFile(path)
 		if err != nil {
 			log.Error(err.Error())
-			os.Exit(2)
+			os.Exit(3)
 		}
 
 		p, err := google.Create(&google.Config{
@@ -2015,13 +2066,13 @@ var provisionersNewGoogleCmd = &cobra.Command{
 		})
 		if err != nil {
 			log.Error(err.Error())
-			os.Exit(3)
+			os.Exit(4)
 		}
 
 		data, err := p.Marshal()
 		if err != nil {
 			log.Error(err.Error())
-			os.Exit(4)
+			os.Exit(5)
 		}
 
 		out := provisioners.Encrypt(data, provisionersNewPassphrase)

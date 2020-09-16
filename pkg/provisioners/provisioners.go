@@ -9,6 +9,8 @@ import (
 	"encoding/hex"
 	"io"
 
+	"github.com/vorteil/vorteil/pkg/vcfg"
+
 	"github.com/sisatech/goapi/pkg/file"
 	"github.com/vorteil/vorteil/pkg/vdisk"
 )
@@ -20,6 +22,7 @@ const (
 type Provisioner interface {
 	Type() string
 	DiskFormat() vdisk.Format
+	SizeAlign() vcfg.Bytes
 	Initialize(data []byte) error
 	Provision(args *ProvisionArgs) error
 	ProvisionVolume(args *ProvisionVolumeArgs) error

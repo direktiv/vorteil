@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/vorteil/vorteil/pkg/vcfg"
 	"github.com/vorteil/vorteil/pkg/vdisk"
 
 	"cloud.google.com/go/storage"
@@ -55,6 +56,10 @@ func (p *Provisioner) Type() string {
 // DiskFormat returns the provisioners required disk format
 func (p *Provisioner) DiskFormat() vdisk.Format {
 	return vdisk.GCPFArchiveFormat
+}
+
+func (p *Provisioner) SizeAlign() vcfg.Bytes {
+	return vcfg.GiB
 }
 
 func (p *Provisioner) Initialize(data []byte) error {

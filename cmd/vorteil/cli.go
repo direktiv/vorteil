@@ -1752,25 +1752,9 @@ var importSharedObjectsCmd = &cobra.Command{
 			}
 		}
 
-		// Set up logging functions
-		logWarn := func(format string, a ...interface{}) {
-			log.Warn(fmt.Sprintf(format, a...))
-		}
-
-		logInfo := func(format string, a ...interface{}) {
-			log.Info(fmt.Sprintf(format, a...))
-		}
-
-		logDebug := func(format string, a ...interface{}) {
-			log.Info(fmt.Sprintf(format, a...))
-		}
-
 		// Create Import Operation
 		importOperation, err := vproj.NewImportSharedObject(projectPath, vproj.ImportSharedObjectsOptions{
 			ExcludeDefaultLibs: flagExcludeDefault,
-			LoggerWarn:         logWarn,
-			LoggerInfo:         logInfo,
-			LoggerDebug:        logDebug,
 		})
 
 		if err != nil {

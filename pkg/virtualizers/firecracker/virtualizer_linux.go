@@ -838,6 +838,7 @@ func (v *Virtualizer) Start() error {
 			v.state = virtualizers.Alive
 
 			go v.lookForIP()
+
 			if err := v.machine.Wait(v.vmmCtx); err != nil {
 				v.log("error", "Wait returned an error %s", err)
 			}

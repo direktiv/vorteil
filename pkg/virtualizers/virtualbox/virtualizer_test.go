@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	logger "github.com/vorteil/vorteil/pkg/virtualizers/logging"
 	"github.com/vorteil/vorteil/pkg/vcfg"
+	logger "github.com/vorteil/vorteil/pkg/virtualizers/logging"
 )
 
 var codeBlockToLookIP = `
@@ -136,7 +136,6 @@ func TestModifyVM(t *testing.T) {
 
 	argTest := modifyVM("helloworld", "1024", "1", "/tmp/test/socket")
 	if strings.Join(exactArgs, " ") != strings.Join(argTest, " ") {
-		fmt.Printf("\nARGS: %v\nARGS: %v\n", argTest, exactArgs)
 		t.Errorf("args do not match, expected %v but got %v", exactArgs, argTest)
 	}
 }

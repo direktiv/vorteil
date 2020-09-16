@@ -57,12 +57,10 @@ func runFirecracker(pkgReader vpkg.Reader, cfg *vcfg.VCFG) error {
 		log.Error(err.Error())
 		os.Exit(1)
 	}
-	defer func() {
-		fmt.Printf("REMOVING FOLDER")
-		os.Remove(f.Name())
-		f.Close()
-		os.Remove(parent)
-	}()
+	defer os.Remove(f.Name())
+	defer f.Close()
+
+	defer os.Remove(parent)
 
 	err = vdisk.Build(context.Background(), f, &vdisk.BuildArgs{
 		PackageReader: pkgReader,

@@ -24,6 +24,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/songgao/water"
 	"github.com/vorteil/vorteil/pkg/vcfg"
+	"github.com/vorteil/vorteil/pkg/vimg"
 	"github.com/vorteil/vorteil/pkg/vio"
 	"github.com/vorteil/vorteil/pkg/virtualizers"
 	dhcpHandler "github.com/vorteil/vorteil/pkg/virtualizers/dhcp"
@@ -229,7 +230,7 @@ func (v *Virtualizer) Detach(source string) error {
 	config.Drives = drives
 	config.BootSource = BootSource{
 		KernelImagePath: v.kip,
-		BootArgs:        "init=/vorteil/vinitd reboot=k panic=1 pci=off i8042.noaux i8042.nomux i8042.nopnp i8042.dumbkbd  vt.color=0x00",
+		BootArgs:        fmt.Sprintf("init=/vorteil/vinitd root=PARTUUID=%s reboot=k panic=1 pci=off i8042.noaux i8042.nomux i8042.nopnp i8042.dumbkbd  vt.color=0x00", vimg.Part2UUIDString),
 	}
 	config.MachineConfig = MachineConfig{
 		VcpuCount:  int(v.config.VM.CPUs),

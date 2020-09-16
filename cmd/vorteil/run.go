@@ -122,6 +122,7 @@ func runHyperV(pkgReader vpkg.Reader, cfg *vcfg.VCFG) error {
 		os.Exit(1)
 	}
 
+	// need to create a tempfile rather than use the function to as hyper-v complains if the extension doesn't exist
 	f, err := os.Create(filepath.Join(parent, "disk.vhd"))
 	if err != nil {
 		log.Error(err.Error())
@@ -175,11 +176,9 @@ func runHyperV(pkgReader vpkg.Reader, cfg *vcfg.VCFG) error {
 }
 
 func runVirtualBox(pkgReader vpkg.Reader, cfg *vcfg.VCFG) error {
-
 	if !virtualbox.Allocator.IsAvailable() {
 		return errors.New("virtualbox not found installed on system")
 	}
-
 	// Create base folder to store virtualbox vms so the socket can be grouped
 	parent := fmt.Sprintf("%s-%s", virtualbox.VirtualizerID, randstr.Hex(5))
 	parent = filepath.Join(os.TempDir(), parent)

@@ -24,6 +24,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/songgao/water"
 	"github.com/vorteil/vorteil/pkg/vcfg"
+	"github.com/vorteil/vorteil/pkg/vimg"
 	"github.com/vorteil/vorteil/pkg/vio"
 	"github.com/vorteil/vorteil/pkg/virtualizers"
 	dhcpHandler "github.com/vorteil/vorteil/pkg/virtualizers/dhcp"
@@ -77,9 +78,7 @@ func SetupBridgeAndDHCPServer() error {
 	}
 
 	// Start dhcp server to listen
-	go func() {
-		dhcp.Serve(pc, server)
-	}()
+	dhcp.Serve(pc, server)
 
 	return nil
 }
@@ -455,7 +454,7 @@ func (v *Virtualizer) Stop() error {
 			return err
 		}
 		// wait for shutdown don't think theres a better way other than a sleep
-		time.Sleep(time.Second * 4)
+		// time.Sleep(time.Second * 4)
 
 		v.state = virtualizers.Ready
 
@@ -507,7 +506,7 @@ func (v *Virtualizer) Close(force bool) error {
 	}
 
 	// sleep for shutdown signal
-	time.Sleep(time.Second * 4)
+	// time.Sleep(time.Second * 4)
 	// delete tap device as vmm has been stopped don't worry about catching error as its not found
 	for _, device := range v.tapDevice {
 		device.DeleteLink()
@@ -700,6 +699,7 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 		PathOnHost:   &diskpath,
 		IsRootDevice: firecracker.Bool(true),
 		IsReadOnly:   firecracker.Bool(false),
+		Partuuid:     vimg.Part2UUIDString,
 	}
 
 	devices = append(devices, rootDrive)
@@ -774,7 +774,7 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	fcCfg := firecracker.Config{
 		SocketPath:      filepath.Join(o.folder, fmt.Sprintf("%s.%s", o.name, "socket")),
 		KernelImagePath: o.kip,
-		KernelArgs:      "init=/vorteil/vinitd reboot=k panic=1 pci=off i8042.noaux i8042.nomux i8042.nopnp i8042.dumbkbd  vt.color=0x00",
+		KernelArgs:      fmt.Sprintf("init=/vorteil/vinitd root=PARTUUID=%s loglevel=9 reboot=k panic=1 pci=off i8042.noaux i8042.nomux i8042.nopnp i8042.dumbkbd  vt.color=0x00", vimg.Part2UUIDString),
 		Drives:          devices,
 		MachineCfg: models.MachineConfiguration{
 			VcpuCount:  firecracker.Int64(int64(o.config.VM.CPUs)),
@@ -838,6 +838,7 @@ func (v *Virtualizer) Start() error {
 			v.state = virtualizers.Alive
 
 			go v.lookForIP()
+
 			if err := v.machine.Wait(v.vmmCtx); err != nil {
 				v.log("error", "Wait returned an error %s", err)
 			}

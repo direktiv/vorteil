@@ -14,7 +14,6 @@ import (
 
 	"github.com/mattn/go-shellwords"
 	"github.com/natefinch/npipe"
-	"github.com/thanhpk/randstr"
 	"github.com/vorteil/vorteil/pkg/vcfg"
 	"github.com/vorteil/vorteil/pkg/virtualizers"
 )
@@ -84,45 +83,16 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	o.networkType = "nat"
 	o.state = "initializing"
 	o.name = args.Name
-	o.id = randstr.Hex(5)
-	o.folder = filepath.Join(o.vmdrive, fmt.Sprintf("%s-%s", o.id, o.Type()))
+	o.folder = filepath.Dir(args.ImagePath)
+	o.id = strings.Split(filepath.Base(o.folder), "-")[1]
 
-	o.updateStatus(fmt.Sprintf("Copying disk to managed location"))
+	// err = os.MkdirAll(o.folder, os.ModePerm)
+	// if err != nil {
+	// 	returnErr = err
+	// 	return
+	// }
 
-	err = os.MkdirAll(o.folder, os.ModePerm)
-	if err != nil {
-		returnErr = err
-		return
-	}
-
-	f, err := os.Create(filepath.Join(o.folder, o.name+".raw"))
-	if err != nil {
-		returnErr = err
-		return
-	}
-
-	_, err = io.Copy(f, args.Image)
-	if err != nil {
-		returnErr = err
-		return
-	}
-
-	err = f.Sync()
-	if err != nil {
-		o.Virtualizer.log("error", "Error syncing disk: %v", err)
-		returnErr = err
-		return
-	}
-
-	err = f.Close()
-	if err != nil {
-		o.Virtualizer.log("error", "Error closing disk: %v", err)
-		returnErr = err
-		return
-	}
-	o.disk = f
-
-	diskpath := filepath.ToSlash(o.disk.Name())
+	diskpath := filepath.ToSlash(args.ImagePath)
 	diskformat := "raw"
 
 	argsCommand := createArgs(o.config.VM.CPUs, o.config.VM.RAM.Units(vcfg.MiB), o.headless, diskpath, diskformat)

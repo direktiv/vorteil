@@ -73,6 +73,7 @@ func (w *SparseWriter) writeSparseHeader() error {
 
 	// Overhead is measured in grains, not sectors.
 	// Includes everything before the start of the disk contents.
+	// TODO: this seems like a bug...
 	hdr.OverHead = (((uint64(2*(w.totalGDSectors+w.totalGTSectors)) + hdr.RGDOffset) + SectorsPerGrain - 1) / SectorsPerGrain) * SectorsPerGrain
 
 	hdr.Capacity = uint64(w.totalDataSectors)
@@ -114,18 +115,19 @@ func (w *SparseWriter) writeGrainData() error {
 	}
 
 	// rgt
-	_, err = w.w.Seek(firstTableSector*SectorSize, io.SeekStart)
+	offset = firstTableSector * SectorSize
+	_, err = w.w.Seek(offset, io.SeekStart)
 	if err != nil {
 		return err
 	}
 
 	for i := int64(0); i < w.totalDataGrains; i++ {
-		grainSector := int64(0)
-		if i < w.totalDataGrains {
-			if !w.h.RegionIsHole(i*GrainSize, GrainSize) {
-				grainSector = firstDataSector + i*SectorsPerGrain
-			}
+
+		grainSector := int64(w.grainOffsets[i])
+		if i+1 < int64(len(w.grainOffsets)) && grainSector == int64(w.grainOffsets[i+1]) {
+			grainSector = 0
 		}
+		grainSector /= SectorSize
 
 		if i%TableMaxRows == 0 {
 			table := i / TableMaxRows
@@ -159,18 +161,19 @@ func (w *SparseWriter) writeGrainData() error {
 	}
 
 	// gt
-	_, err = w.w.Seek(firstTableSector*SectorSize, io.SeekStart)
+	offset = firstTableSector * SectorSize
+	_, err = w.w.Seek(offset, io.SeekStart)
 	if err != nil {
 		return err
 	}
 
 	for i := int64(0); i < w.totalDataGrains; i++ {
-		grainSector := int64(0)
-		if i < w.totalDataGrains {
-			if !w.h.RegionIsHole(i*GrainSize, GrainSize) {
-				grainSector = firstDataSector + i*SectorsPerGrain
-			}
+
+		grainSector := int64(w.grainOffsets[i])
+		if i+1 < int64(len(w.grainOffsets)) && grainSector == int64(w.grainOffsets[i+1]) {
+			grainSector = 0
 		}
+		grainSector /= SectorSize
 
 		if i%TableMaxRows == 0 {
 			table := i / TableMaxRows
@@ -184,6 +187,7 @@ func (w *SparseWriter) writeGrainData() error {
 	}
 
 	// pad
+	offset = firstDataSector * SectorSize
 	_, err = w.w.Seek(firstDataSector*SectorSize, io.SeekStart)
 	if err != nil {
 		return err
@@ -210,12 +214,6 @@ func (w *SparseWriter) init() error {
 		return err
 	}
 
-	// grain directories & tables
-	err = w.writeGrainData()
-	if err != nil {
-		return err
-	}
-
 	firstDataSector := int64(w.hdr.OverHead) * SectorsPerGrain
 	w.grainOffsets = make([]int64, w.totalDataGrains, w.totalDataGrains)
 	offset := firstDataSector * SectorSize
@@ -225,6 +223,12 @@ func (w *SparseWriter) init() error {
 			continue
 		}
 		offset += GrainSize
+	}
+
+	// grain directories & tables
+	err = w.writeGrainData()
+	if err != nil {
+		return err
 	}
 
 	return nil
@@ -256,6 +260,7 @@ func (w *SparseWriter) Seek(offset int64, whence int) (int64, error) {
 	delta := abs % GrainSize
 	x := w.grainOffsets[grain] + delta
 	_, err := w.w.Seek(x, io.SeekStart)
+	w.cursor = abs
 	if err != nil {
 		return 0, err
 	}

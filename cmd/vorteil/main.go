@@ -9,11 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/fatih/color"
-	"github.com/inconshreveable/log15"
-	"github.com/mattn/go-colorable"
-	isatty "github.com/mattn/go-isatty"
 	"github.com/mitchellh/go-homedir"
+	log "github.com/sirupsen/logrus"
 	"github.com/sisatech/tablewriter"
 	"github.com/sisatech/toml"
 	"github.com/spf13/pflag"
@@ -26,97 +23,15 @@ import (
 	"github.com/vorteil/vorteil/pkg/vproj"
 )
 
-var log = log15.Root()
-
 func main() {
 
 	commandInit()
-
-	log = log15.New()
-	log.SetHandler(stderrHandler)
 
 	err := rootCmd.Execute()
 	if err != nil {
 		log.Error(err.Error())
 		os.Exit(1)
 	}
-}
-
-// log15 custom formatting
-var (
-	stdoutHandler log15.Handler
-	stderrHandler log15.Handler
-)
-
-func init() {
-	fd := os.Stdout.Fd()
-	if isatty.IsTerminal(fd) || isatty.IsCygwinTerminal(fd) {
-		stdoutHandler = log15.StreamHandler(colorable.NewColorableStdout(), log15ColouredCLIFormat())
-	} else {
-		stdoutHandler = log15.StreamHandler(os.Stdout, log15CLIFormat())
-	}
-
-	fd = os.Stderr.Fd()
-	if isatty.IsTerminal(fd) || isatty.IsCygwinTerminal(fd) {
-		stderrHandler = log15.StreamHandler(colorable.NewColorableStderr(), log15ColouredCLIFormat())
-	} else {
-		stderrHandler = log15.StreamHandler(os.Stderr, log15CLIFormat())
-	}
-}
-
-func log15ContextFormatter(r *log15.Record) string {
-	ctx := ""
-	l := len(r.Ctx)
-	ctxParts := make([]string, l/2, l/2+1)
-	for i := 0; i < l; i += 2 {
-		ctxParts[i/2] = fmt.Sprintf("%v=%v", r.Ctx[i], r.Ctx[i+1])
-	}
-
-	if l%2 != 0 {
-		ctxParts = append(ctxParts, fmt.Sprintf("%v=", r.Ctx[l-1]))
-	}
-
-	if l > 0 {
-		ctx = " (" + strings.Join(ctxParts, ", ") + ")"
-	}
-	return ctx
-}
-
-func log15ColouredCLIFormat() log15.Format {
-
-	faint := color.New(color.Faint).SprintFunc()
-	yellow := color.New(color.FgYellow).SprintFunc()
-	red := color.New(color.FgRed).SprintFunc()
-	magenta := color.New(color.FgMagenta).SprintFunc()
-
-	colours := []func(...interface{}) string{
-		magenta,
-		red,
-		yellow,
-		func(a ...interface{}) string {
-			var format string
-			if len(a) > 0 {
-				format = a[0].(string)
-				a = a[1:]
-			}
-			return fmt.Sprintf(format, a...)
-		},
-		faint,
-	}
-
-	return log15.FormatFunc(func(r *log15.Record) []byte {
-		ctx := log15ContextFormatter(r)
-		x := fmt.Sprintf("%s%s\n", colours[r.Lvl](r.Msg), faint(ctx))
-		return []byte(x)
-	})
-}
-
-func log15CLIFormat() log15.Format {
-	return log15.FormatFunc(func(r *log15.Record) []byte {
-		ctx := log15ContextFormatter(r)
-		x := fmt.Sprintf("%s%s\n", r.Msg, ctx)
-		return []byte(x)
-	})
 }
 
 func isEmptyDir(path string) bool {
@@ -204,7 +119,6 @@ func initKernels() error {
 	if err != nil {
 		return err
 	}
-
 	vorteild := filepath.Join(home, ".vorteild")
 	conf := filepath.Join(vorteild, "conf.toml")
 	var kernels, watch string
@@ -214,7 +128,7 @@ func initKernels() error {
 	if err != nil {
 		kernels = filepath.Join(vorteild, "kernels")
 		watch = filepath.Join(kernels, "watch")
-		sources = []string{"https://downloads.vorteil.io/system"}
+		sources = []string{"https://downloads.vorteil.io/kernels"}
 	} else {
 		vconf := new(vorteildConf)
 		err = toml.Unmarshal(confData, vconf)

@@ -24,10 +24,14 @@ import (
 	"github.com/vorteil/vorteil/pkg/provisioners/google"
 	"github.com/vorteil/vorteil/pkg/vcfg"
 
+	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+
+	"github.com/vorteil/vorteil/pkg/elog"
 	"github.com/vorteil/vorteil/pkg/vconvert"
 	"github.com/vorteil/vorteil/pkg/vdecompiler"
 	"github.com/vorteil/vorteil/pkg/vdisk"
+	"github.com/vorteil/vorteil/pkg/virtualizers/firecracker"
 	"github.com/vorteil/vorteil/pkg/vpkg"
 	"github.com/vorteil/vorteil/pkg/vproj"
 )
@@ -45,12 +49,43 @@ var (
 	flagTouched          bool
 )
 
+const (
+	platformQEMU        = "qemu"
+	platformVirtualBox  = "virtualbox"
+	platformHyperV      = "hyper-v"
+	platformFirecracker = "firecracker"
+)
+
 func commandInit() {
 
 	// Here we attack VCFG modification flags to relevant commands. Because of
 	// the order Go runs init functions this is the safest place to do this.
 	addModifyFlags(buildCmd.Flags())
 	addModifyFlags(runCmd.Flags())
+
+	// setup logging across all commands
+	rootCmd.PersistentFlags().BoolVar(&elog.IsJSON, "json", false, "log output in JSON")
+	rootCmd.PersistentFlags().BoolVarP(&elog.IsDebug, "debug", "d", false, "enable debug output")
+
+	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+
+		log.SetFormatter(&log.TextFormatter{
+			DisableColors:    false,
+			DisableTimestamp: true,
+		})
+
+		log.SetLevel(log.InfoLevel)
+
+		if elog.IsJSON {
+			log.SetFormatter(&log.JSONFormatter{})
+		}
+
+		if elog.IsDebug {
+			log.SetLevel(log.DebugLevel)
+		}
+
+		return nil
+	}
 
 	// Here we define some hidden top-level shortcuts.
 	rootCmd.AddCommand(commandShortcut(buildCmd))
@@ -2160,13 +2195,17 @@ func init() {
 }
 
 var initFirecrackerCmd = &cobra.Command{
-	Use:    "init firecracker",
+	Use:    "firecracker-setup",
 	Short:  "Initialize firecracker by spawning a Bridge Device and a DHCP server",
-	Long:   ``,
+	Long:   `The init firecracker command is a convenience function to quickly setup the bridge device and DHCP server that firecracker will use`,
 	Hidden: true,
 	Args:   cobra.MaximumNArgs(0),
 	Run: func(cmd *cobra.Command, args []string) {
-
+		err := firecracker.SetupBridgeAndDHCPServer()
+		if err != nil {
+			log.Error(err.Error())
+			os.Exit(1)
+		}
 	},
 }
 
@@ -2225,65 +2264,33 @@ and cleaning up the instance when it's done.`,
 			os.Exit(1)
 		}
 
-		f, err := ioutil.TempFile("", "vorteil.disk")
-		if err != nil {
-			log.Error(err.Error())
-			os.Exit(1)
-		}
-		defer os.Remove(f.Name())
-		defer f.Close()
-
-		err = vdisk.Build(context.Background(), f, &vdisk.BuildArgs{
-			PackageReader: pkgReader,
-			Format:        vdisk.RAWFormat,
-			KernelOptions: vdisk.KernelOptions{
-				Shell: flagShell,
-			},
-		})
-		if err != nil {
-			log.Error(err.Error())
-			os.Exit(1)
-		}
-
-		err = f.Close()
-		if err != nil {
-			log.Error(err.Error())
-			os.Exit(1)
-		}
-
-		err = pkgReader.Close()
-		if err != nil {
-			log.Error(err.Error())
-			os.Exit(1)
-		}
-
 		switch flagPlatform {
-		case "qemu":
-			err = runQEMU(f.Name(), cfg, flagGUI)
+		case platformQEMU:
+			err = runQEMU(pkgReader, cfg)
 			if err != nil {
 				log.Error(err.Error())
 				os.Exit(1)
 			}
-		case "virtualbox":
-			err = runVirtualBox(f.Name(), cfg, flagGUI)
+		case platformVirtualBox:
+			err = runVirtualBox(pkgReader, cfg)
 			if err != nil {
 				log.Error(err.Error())
 				os.Exit(1)
 			}
-		case "hyper-v":
-			err = runHyperV(f.Name(), cfg, flagGUI)
+		case platformHyperV:
+			err = runHyperV(pkgReader, cfg)
 			if err != nil {
 				log.Error(err.Error())
 				os.Exit(1)
 			}
-		case "firecracker":
-			err = runFirecracker(f.Name(), cfg, flagGUI)
+		case platformFirecracker:
+			err = runFirecracker(pkgReader, cfg)
 			if err != nil {
 				log.Error(err.Error())
 				os.Exit(1)
 			}
 		default:
-			log.Error(fmt.Errorf("platform '%s' not supported").Error())
+			log.Error(fmt.Errorf("platform '%s' not supported", flagPlatform).Error())
 			os.Exit(1)
 		}
 

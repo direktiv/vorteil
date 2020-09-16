@@ -13,6 +13,10 @@ require (
 	github.com/aws/aws-sdk-go v1.31.6
 	github.com/cavaliercoder/grab v2.0.0+incompatible
 	github.com/cirruslabs/echelon v1.2.2
+	github.com/cloudfoundry/bytefmt v0.0.0-20200131002437-cf55d5288a48
+	github.com/containerd/console v1.0.0 // indirect
+	github.com/containerd/containerd v1.3.0
+	github.com/containerd/continuity v0.0.0-20200710164510-efbc4488d8fe // indirect
 	github.com/containers/image v3.0.2+incompatible
 	github.com/coreos/go-semver v0.3.0
 	github.com/davecgh/go-spew v1.1.1
@@ -20,6 +24,7 @@ require (
 	github.com/djherbis/nio v2.0.3+incompatible
 	github.com/docker/distribution v2.7.1+incompatible
 	github.com/fatih/color v1.9.0
+	github.com/firecracker-microvm/firecracker-go-sdk v0.21.0
 	github.com/gobwas/glob v0.2.3
 	github.com/google/go-containerregistry v0.1.2
 	github.com/google/uuid v1.1.1
@@ -39,14 +44,20 @@ require (
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/natefinch/npipe v0.0.0-20160621034901-c1b8fa8bdcce
 	github.com/novln/docker-parser v1.0.0
+	github.com/opencontainers/runc v0.1.1 // indirect
+	github.com/pkg/errors v0.9.1
+	github.com/sirupsen/logrus v1.6.0
 	github.com/sisatech/goapi v0.0.0-20200218003521-8dcdab8c7a5e
 	github.com/sisatech/tablewriter v0.0.0-20161130023222-815eceb01ee6
 	github.com/sisatech/toml v0.0.0-20181010232116-ca247dd35773
 	github.com/sndnvaps/md5sum-go v0.0.0-20170102022112-af4a8cab5126 // indirect
+	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 	github.com/spf13/cobra v1.0.0
 	github.com/spf13/pflag v1.0.5
 	github.com/spf13/viper v1.7.0
 	github.com/thanhpk/randstr v1.0.4
+	github.com/vbauerster/mpb v3.4.0+incompatible
+	github.com/vbauerster/mpb/v5 v5.3.0
 	golang.org/x/crypto v0.0.0-20200820211705-5c72a883971a
 	golang.org/x/oauth2 v0.0.0-20200107190931-bf48bf16ab8d
 	golang.org/x/sync v0.0.0-20200625203802-6e8e738ad208

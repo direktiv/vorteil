@@ -2,45 +2,95 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"runtime"
 	"time"
 
+	log "github.com/sirupsen/logrus"
+
 	isatty "github.com/mattn/go-isatty"
+	"github.com/mitchellh/go-homedir"
+	"github.com/thanhpk/randstr"
 	"github.com/vorteil/vorteil/pkg/vcfg"
-	"github.com/vorteil/vorteil/pkg/vio"
+	"github.com/vorteil/vorteil/pkg/vdisk"
 	"github.com/vorteil/vorteil/pkg/virtualizers"
 	"github.com/vorteil/vorteil/pkg/virtualizers/firecracker"
 	"github.com/vorteil/vorteil/pkg/virtualizers/hyperv"
 	"github.com/vorteil/vorteil/pkg/virtualizers/qemu"
 	"github.com/vorteil/vorteil/pkg/virtualizers/virtualbox"
+	"github.com/vorteil/vorteil/pkg/vpkg"
 )
 
-func runFirecracker(diskpath string, cfg *vcfg.VCFG, gui bool) error {
+func runFirecracker(pkgReader vpkg.Reader, cfg *vcfg.VCFG) error {
 	if runtime.GOOS != "linux" {
 		return errors.New("firecracker is only available on linux")
 	}
-
 	if !firecracker.Allocator.IsAvailable() {
 		return errors.New("firecracker is not installed on your system")
 	}
-
-	f, err := vio.Open(diskpath)
+	// Check if bridge device exists
+	err := firecracker.FetchBridgeDev()
 	if err != nil {
-		return err
+		return errors.New("try running 'vorteil firecracker-setup' before using firecracker")
 	}
 
+	// Create base folder to store virtualbox vms so the socket can be grouped
+	parent := fmt.Sprintf("%s-%s", firecracker.VirtualizerID, randstr.Hex(5))
+	parent = filepath.Join(os.TempDir(), parent)
+
+	// Create parent directory as it doesn't exist
+	err = os.MkdirAll(parent, os.ModePerm)
+	if err != nil {
+		log.Error(err.Error())
+		os.Exit(1)
+	}
+
+	f, err := ioutil.TempFile(parent, "vorteil.disk")
+	if err != nil {
+		log.Error(err.Error())
+		os.Exit(1)
+	}
+	defer os.Remove(f.Name())
 	defer f.Close()
+
+	defer os.Remove(parent)
+
+	err = vdisk.Build(context.Background(), f, &vdisk.BuildArgs{
+		PackageReader: pkgReader,
+		Format:        firecracker.Allocator.DiskFormat(),
+		KernelOptions: vdisk.KernelOptions{
+			Shell: flagShell,
+		},
+	})
+	if err != nil {
+		log.Error(err.Error())
+		os.Exit(1)
+	}
+
+	err = f.Close()
+	if err != nil {
+		log.Error(err.Error())
+		os.Exit(1)
+	}
+
+	err = pkgReader.Close()
+	if err != nil {
+		log.Error(err.Error())
+		os.Exit(1)
+	}
 
 	alloc := firecracker.Allocator
 	virt := alloc.Alloc()
 	defer virt.Close(true)
 
-	if gui {
+	if flagGUI {
 		log.Warn("firecracker does not support displaying a gui")
 	}
 
@@ -51,30 +101,69 @@ func runFirecracker(diskpath string, cfg *vcfg.VCFG, gui bool) error {
 		return err
 	}
 
-	return run(virt, f, cfg)
+	return run(virt, f.Name(), cfg)
 }
 
-func runHyperV(diskpath string, cfg *vcfg.VCFG, gui bool) error {
+func runHyperV(pkgReader vpkg.Reader, cfg *vcfg.VCFG) error {
 	if runtime.GOOS != "windows" {
 		return errors.New("hyper-v is only available on windows system")
 	}
 	if !hyperv.Allocator.IsAvailable() {
 		return errors.New("hyper-v is not enabled on your system")
 	}
+	// Create base folder to store virtualbox vms so the socket can be grouped
+	parent := fmt.Sprintf("%s-%s", hyperv.VirtualizerID, randstr.Hex(5))
+	parent = filepath.Join(os.TempDir(), parent)
 
-	f, err := vio.Open(diskpath)
+	// Create parent directory as it doesn't exist
+	err := os.MkdirAll(parent, os.ModePerm)
 	if err != nil {
-		return err
+		log.Error(err.Error())
+		os.Exit(1)
 	}
 
+	f, err := os.Create(filepath.Join(parent, "disk.vhd"))
+	if err != nil {
+		log.Error(err.Error())
+		os.Exit(1)
+	}
+
+	defer os.Remove(f.Name())
 	defer f.Close()
+
+	defer os.Remove(parent)
+
+	err = vdisk.Build(context.Background(), f, &vdisk.BuildArgs{
+		PackageReader: pkgReader,
+		Format:        hyperv.Allocator.DiskFormat(),
+		KernelOptions: vdisk.KernelOptions{
+			Shell: flagShell,
+		},
+	})
+	if err != nil {
+		log.Error(err.Error())
+		os.Exit(1)
+	}
+
+	err = f.Close()
+	if err != nil {
+		log.Error(err.Error())
+		os.Exit(1)
+	}
+
+	err = pkgReader.Close()
+	if err != nil {
+		log.Error(err.Error())
+		os.Exit(1)
+	}
 
 	alloc := hyperv.Allocator
 	virt := alloc.Alloc()
 	defer virt.Close(true)
 
 	config := hyperv.Config{
-		Headless: !gui,
+		Headless:   !flagGUI,
+		SwitchName: "Default Switch",
 	}
 
 	err = virt.Initialize(config.Marshal())
@@ -82,28 +171,67 @@ func runHyperV(diskpath string, cfg *vcfg.VCFG, gui bool) error {
 		return err
 	}
 
-	return run(virt, f, cfg)
+	return run(virt, f.Name(), cfg)
 }
 
-func runVirtualBox(diskpath string, cfg *vcfg.VCFG, gui bool) error {
+func runVirtualBox(pkgReader vpkg.Reader, cfg *vcfg.VCFG) error {
 
 	if !virtualbox.Allocator.IsAvailable() {
 		return errors.New("virtualbox not found installed on system")
 	}
 
-	f, err := vio.Open(diskpath)
+	// Create base folder to store virtualbox vms so the socket can be grouped
+	parent := fmt.Sprintf("%s-%s", virtualbox.VirtualizerID, randstr.Hex(5))
+	parent = filepath.Join(os.TempDir(), parent)
+
+	// Create parent directory as it doesn't exist
+	err := os.MkdirAll(parent, os.ModePerm)
 	if err != nil {
-		return err
+		log.Error(err.Error())
+		os.Exit(1)
 	}
 
+	f, err := ioutil.TempFile(parent, "vorteil.disk")
+	if err != nil {
+		log.Error(err.Error())
+		os.Exit(1)
+	}
+	defer os.Remove(f.Name())
 	defer f.Close()
+
+	defer os.Remove(parent)
+
+	err = vdisk.Build(context.Background(), f, &vdisk.BuildArgs{
+		PackageReader: pkgReader,
+		Format:        virtualbox.Allocator.DiskFormat(),
+		KernelOptions: vdisk.KernelOptions{
+			Shell: flagShell,
+		},
+	})
+	if err != nil {
+		log.Error(err.Error())
+		os.Exit(1)
+	}
+
+	err = f.Close()
+	if err != nil {
+		log.Error(err.Error())
+		os.Exit(1)
+	}
+
+	err = pkgReader.Close()
+	if err != nil {
+		log.Error(err.Error())
+		os.Exit(1)
+	}
 
 	alloc := virtualbox.Allocator
 	virt := alloc.Alloc()
 	defer virt.Close(true)
 
 	config := virtualbox.Config{
-		Headless: !gui,
+		Headless:    !flagGUI,
+		NetworkType: "nat",
 	}
 
 	err = virt.Initialize(config.Marshal())
@@ -111,27 +239,64 @@ func runVirtualBox(diskpath string, cfg *vcfg.VCFG, gui bool) error {
 		return err
 	}
 
-	return run(virt, f, cfg)
+	return run(virt, f.Name(), cfg)
 }
 
-func runQEMU(diskpath string, cfg *vcfg.VCFG, gui bool) error {
+func runQEMU(pkgReader vpkg.Reader, cfg *vcfg.VCFG) error {
 
 	if !qemu.Allocator.IsAvailable() {
 		return errors.New("qemu not installed on system")
 	}
+	// Create base folder to store virtualbox vms so the socket can be grouped
+	parent := fmt.Sprintf("%s-%s", qemu.VirtualizerID, randstr.Hex(5))
+	parent = filepath.Join(os.TempDir(), parent)
 
-	f, err := vio.Open(diskpath)
+	// Create parent directory as it doesn't exist
+	err := os.MkdirAll(parent, os.ModePerm)
 	if err != nil {
-		return err
+		log.Error(err.Error())
+		os.Exit(1)
 	}
+
+	f, err := ioutil.TempFile(parent, "vorteil.disk")
+	if err != nil {
+		log.Error(err.Error())
+		os.Exit(1)
+	}
+	defer os.Remove(f.Name())
 	defer f.Close()
+	defer os.Remove(parent)
+
+	err = vdisk.Build(context.Background(), f, &vdisk.BuildArgs{
+		PackageReader: pkgReader,
+		Format:        qemu.Allocator.DiskFormat(),
+		KernelOptions: vdisk.KernelOptions{
+			Shell: flagShell,
+		},
+	})
+	if err != nil {
+		log.Error(err.Error())
+		os.Exit(1)
+	}
+
+	err = f.Close()
+	if err != nil {
+		log.Error(err.Error())
+		os.Exit(1)
+	}
+
+	err = pkgReader.Close()
+	if err != nil {
+		log.Error(err.Error())
+		os.Exit(1)
+	}
 
 	alloc := qemu.Allocator
 	virt := alloc.Alloc()
 	defer virt.Close(true)
 
 	config := qemu.Config{
-		Headless: !gui,
+		Headless: !flagGUI,
 	}
 
 	err = virt.Initialize(config.Marshal())
@@ -139,25 +304,37 @@ func runQEMU(diskpath string, cfg *vcfg.VCFG, gui bool) error {
 		return err
 	}
 
-	return run(virt, f, cfg)
+	return run(virt, f.Name(), cfg)
 
 }
 
-func run(virt virtualizers.Virtualizer, disk vio.File, cfg *vcfg.VCFG) error {
+func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG) error {
+
+	// Gather home directory for firecracker storage path
+	home, err := homedir.Dir()
+	if err != nil {
+		return err
+	}
 
 	_ = virt.Prepare(&virtualizers.PrepareArgs{
-		Name:   "vorteil-vm",
-		PName:  "qemu",
-		Start:  true,
-		Config: cfg,
-		Image:  disk,
+		Name:      "vorteil-vm",
+		PName:     virt.Type(),
+		Start:     true,
+		Config:    cfg,
+		FCPath:    filepath.Join(home, ".vorteild", "firecracker-vm"),
+		ImagePath: diskpath,
 	})
 
 	serial := virt.Serial()
+	virtualizerLogs := virt.Logs()
+	defer virtualizerLogs.Close()
 	defer serial.Close()
+	virtSubscription := virtualizerLogs.Subscribe()
 	serialSubscription := serial.Subscribe()
+	defer virtSubscription.Close()
 	defer serialSubscription.Close()
 	s := serialSubscription.Inbox()
+	v := virtSubscription.Inbox()
 
 	signalChannel, chBool := listenForInterupt()
 
@@ -169,6 +346,12 @@ func run(virt virtualizers.Virtualizer, disk vio.File, cfg *vcfg.VCFG) error {
 				virt.Close(false)
 				return nil
 			}
+		case msg, more := <-v:
+			if !more {
+				virt.Close(false)
+				return nil
+			}
+			fmt.Print(string(msg))
 		case msg, more := <-s:
 			if !more {
 				virt.Close(false)

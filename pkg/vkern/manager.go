@@ -127,6 +127,7 @@ func (l List) BestMatch(v CalVer) (*Tuple, error) {
 			}
 		}
 	}
+
 	return nil, fmt.Errorf("no match for kernel %s", v.String())
 
 }
@@ -136,6 +137,7 @@ type Manager interface {
 	Get(ctx context.Context, version CalVer) (*ManagedBundle, error)
 	List(ctx context.Context) (List, error)
 	Latest() (string, error)
+	Sync(ctx context.Context) error
 }
 
 //
@@ -225,7 +227,6 @@ func (mgr *RemoteManager) Latest() (string, error) {
 func (mgr *LocalManager) List(ctx context.Context) (List, error) {
 	fis, err := ioutil.ReadDir(mgr.dir)
 	if err != nil {
-		fmt.Println(err)
 		return nil, err
 	}
 
@@ -245,6 +246,10 @@ func (mgr *LocalManager) List(ctx context.Context) (List, error) {
 
 	sort.Sort(list)
 	return list, nil
+}
+
+func (mgr *LocalManager) Sync(ctx context.Context) error {
+	return nil
 }
 
 // Close ..
@@ -299,51 +304,64 @@ func NewRemoteManager(url, dir string) (*RemoteManager, error) {
 	return mgr, nil
 }
 
+func (mgr *RemoteManager) Sync(ctx context.Context) error {
+	return mgr.pollOnce(ctx)
+}
+
+func (mgr *RemoteManager) pollOnce(ctx context.Context) error {
+	list, err := mgr.remoteList(ctx)
+	if err != nil {
+		Logger("Remote kernels manager for '%s' failed to get remote list: %v", mgr.url, err)
+		return err
+	}
+
+	mgr.lock.Lock()
+	for i, tuple := range list {
+		fi, err := os.Stat(filepath.Join(mgr.dir, filenameFromVersion(tuple.Version)))
+		if err == nil {
+			if tuple.ModTime.Before(fi.ModTime()) {
+				list[i].Location += " (cached)"
+			} else {
+				Logger("Remote kernels manager '%s' detected an unusual remote kernel file update '%s'", mgr.url, tuple.Version)
+				go func() {
+					err = os.Remove(filepath.Join(mgr.dir, filenameFromVersion(tuple.Version)))
+					if err != nil {
+						Logger("Issue in '%s' remote kernels manager's cache directory '%s': %v", mgr.url, mgr.dir, err)
+					}
+				}()
+			}
+		} else if os.IsNotExist(err) {
+			continue
+		} else {
+			Logger("Issue in '%s' remote kernels manager's cache directory '%s': %v", mgr.url, mgr.dir, err)
+		}
+	}
+	mgr.cache = list
+
+	f, err := os.Create(filepath.Join(mgr.dir, "cached-kernel-manifest"))
+	if err != nil {
+		Logger("Issue in '%s' creating the kernel cache manifest '%s':'%v'", mgr.url, mgr.dir, err)
+	}
+	b, err := json.Marshal(list)
+	if err != nil {
+		Logger("Issue in '%s' manifesting list from kernel cache manifest '%s':'%v'", mgr.url, mgr.dir, err)
+	}
+	io.Copy(f, bytes.NewReader(b))
+	defer f.Close()
+
+	mgr.lock.Unlock()
+
+	return nil
+}
+
 func (mgr *RemoteManager) poll() {
 
 	for {
-		list, err := mgr.remoteList()
+		err := mgr.pollOnce(context.Background())
 		if err != nil {
-			Logger("Remote kernels manager for '%s' failed to get remote list: %v", mgr.url, err)
-			<-time.After(time.Minute)
+			time.Sleep(time.Minute)
 			continue
 		}
-
-		mgr.lock.Lock()
-		for i, tuple := range list {
-			fi, err := os.Stat(filepath.Join(mgr.dir, filenameFromVersion(tuple.Version)))
-			if err == nil {
-				if tuple.ModTime.Before(fi.ModTime()) {
-					list[i].Location += " (cached)"
-				} else {
-					Logger("Remote kernels manager '%s' detected an unusual remote kernel file update '%s'", mgr.url, tuple.Version)
-					go func() {
-						err = os.Remove(filepath.Join(mgr.dir, filenameFromVersion(tuple.Version)))
-						if err != nil {
-							Logger("Issue in '%s' remote kernels manager's cache directory '%s': %v", mgr.url, mgr.dir, err)
-						}
-					}()
-				}
-			} else if os.IsNotExist(err) {
-				continue
-			} else {
-				Logger("Issue in '%s' remote kernels manager's cache directory '%s': %v", mgr.url, mgr.dir, err)
-			}
-		}
-		mgr.cache = list
-
-		f, err := os.Create(filepath.Join(mgr.dir, "cached-kernel-manifest"))
-		if err != nil {
-			Logger("Issue in '%s' creating the kernel cache manifest '%s':'%v'", mgr.url, mgr.dir, err)
-		}
-		b, err := json.Marshal(list)
-		if err != nil {
-			Logger("Issue in '%s' manifesting list from kernel cache manifest '%s':'%v'", mgr.url, mgr.dir, err)
-		}
-		io.Copy(f, bytes.NewReader(b))
-		defer f.Close()
-
-		mgr.lock.Unlock()
 
 		select {
 		case <-time.After(time.Hour):
@@ -363,13 +381,23 @@ type remoteVersionsManifest struct {
 	Kernels []remoteVersionTimestamp `yaml:"kernels"`
 }
 
-func (mgr *RemoteManager) remoteList() (List, error) {
+func (mgr *RemoteManager) remoteList(ctx context.Context) (List, error) {
 
 	var list List
 
 	// request remote manifest
-	resp, err := http.Get(fmt.Sprintf("%s/manifest.txt", mgr.url))
+
+	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/manifest.txt", mgr.url), nil)
 	if err != nil {
+		return nil, err
+	}
+
+	req = req.WithContext(ctx)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		if err == context.DeadlineExceeded {
+			return nil, err
+		}
 
 		getKernels := func() error {
 			resp, err = http.Get(fmt.Sprintf("%s/manifest.txt", mgr.url))
@@ -609,6 +637,13 @@ func (mgr *RemoteManager) Get(ctx context.Context, version CalVer) (*ManagedBund
 // List ..
 func (mgr *RemoteManager) List(ctx context.Context) (List, error) {
 
+	if len(mgr.cache) == 0 {
+		err := mgr.Sync(ctx)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	mgr.lock.RLock()
 	defer mgr.lock.RUnlock()
 
@@ -665,6 +700,26 @@ func (mgr *CompoundManager) Get(ctx context.Context, version CalVer) (*ManagedBu
 	}
 
 	return b, nil
+}
+
+func (mgr *CompoundManager) Sync(ctx context.Context) error {
+	var wg sync.WaitGroup
+	var e error
+	wg.Add(len(mgr.mgrs))
+	for _, m := range mgr.mgrs {
+		go func(m Manager) {
+			err := m.Sync(ctx)
+			if e != nil {
+				e = err
+			}
+			wg.Done()
+		}(m)
+	}
+	wg.Wait()
+	if e != nil {
+		return e
+	}
+	return nil
 }
 
 // List ..

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -15,18 +16,73 @@ import (
 	"sync"
 	"time"
 
-	"github.com/vorteil/vorteil/pkg/virtualizers"
-	"github.com/vorteil/vorteil/pkg/vorteil/vcfg"
-
 	"github.com/firecracker-microvm/firecracker-go-sdk"
 	"github.com/firecracker-microvm/firecracker-go-sdk/client/models"
+	dhcp "github.com/krolaw/dhcp4"
+	conn "github.com/krolaw/dhcp4/conn"
 	"github.com/milosgajdos/tenus"
 	log "github.com/sirupsen/logrus"
 	"github.com/songgao/water"
-	"github.com/thanhpk/randstr"
+	"github.com/vorteil/vorteil/pkg/vcfg"
 	"github.com/vorteil/vorteil/pkg/vio"
+	"github.com/vorteil/vorteil/pkg/virtualizers"
+	dhcpHandler "github.com/vorteil/vorteil/pkg/virtualizers/dhcp"
 	logger "github.com/vorteil/vorteil/pkg/virtualizers/logging"
 )
+
+func FetchBridgeDev() error {
+	// Check if bridge device exists
+	_, err := tenus.BridgeFromName("vorteil-bridge")
+	if err != nil {
+		return errors.New("try running 'vorteil firecracker-setup' before using firecracker")
+	}
+	return err
+}
+func SetupBridgeAndDHCPServer() error {
+
+	// Create bridge device
+	bridger, err := tenus.NewBridgeWithName("vorteil-bridge")
+	if err != nil {
+		if !strings.Contains(err.Error(), "Interface name vorteil-bridge already assigned on the host") {
+			return err
+		}
+		// get bridge device
+		bridger, err = tenus.BridgeFromName("vorteil-bridge")
+		if err != nil {
+			return err
+		}
+	}
+	// Switch bridge up
+	if err = bridger.SetLinkUp(); err != nil {
+		return err
+	}
+	// Fetch address
+	ipv4Addr, ipv4Net, err := net.ParseCIDR("174.72.0.1/24")
+	if err != nil {
+		if !strings.Contains(err.Error(), "file exists") {
+			return err
+		}
+	}
+	// Assign bridge to device so host knows where to send requests.
+	if err = bridger.SetLinkIp(ipv4Addr, ipv4Net); err != nil {
+		if !strings.Contains(err.Error(), "file exists") {
+			return err
+		}
+	}
+	// create dhcp server on an interface
+	server := dhcpHandler.NewHandler()
+	pc, err := conn.NewUDP4BoundListener("vorteil-bridge", ":67")
+	if err != nil {
+		return err
+	}
+
+	// Start dhcp server to listen
+	go func() {
+		dhcp.Serve(pc, server)
+	}()
+
+	return nil
+}
 
 // DownloadPath is the path where we pull firecracker-vmlinux's from
 const DownloadPath = "https://storage.googleapis.com/vorteil-dl/firecracker-vmlinux/"
@@ -617,46 +673,15 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 
 	o.state = "initializing"
 	o.name = args.Name
-	o.id = randstr.Hex(5)
-	o.folder = filepath.Join(o.vmdrive, fmt.Sprintf("%s-%s", o.id, o.Type()))
-
-	o.updateStatus(fmt.Sprintf("Copying disk to managed location"))
-
-	err := os.MkdirAll(o.folder, os.ModePerm)
+	// o.id = randstr.Hex(5)
+	err := os.MkdirAll(args.FCPath, os.ModePerm)
 	if err != nil {
 		returnErr = err
 		return
 	}
-
-	f, err := os.Create(filepath.Join(o.folder, o.name+".raw"))
-	if err != nil {
-		returnErr = err
-		return
-	}
-
-	_, err = io.Copy(f, args.Image)
-	if err != nil {
-		o.Virtualizer.log("error", "Error copying disk: %v", err)
-		returnErr = err
-		return
-	}
-
-	err = f.Sync()
-	if err != nil {
-		o.Virtualizer.log("error", "Error syncing disk: %v", err)
-		returnErr = err
-		return
-	}
-
-	err = f.Close()
-	if err != nil {
-		o.Virtualizer.log("error", "Error closing disk: %v", err)
-		returnErr = err
-		return
-	}
-	o.disk = f
-
-	diskpath := filepath.ToSlash(o.disk.Name())
+	o.folder = filepath.Dir(args.ImagePath)
+	o.id = strings.Split(filepath.Base(o.folder), "-")[1]
+	diskpath := filepath.ToSlash(args.ImagePath)
 
 	logger := log.New()
 	logger.SetFormatter(&log.TextFormatter{
@@ -679,12 +704,13 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 
 	devices = append(devices, rootDrive)
 
-	o.kip, err = o.fetchVMLinux(o.config.VM.Kernel.String())
+	o.log("debug", "Fetching VMLinux from cache or online")
+	o.kip, err = o.fetchVMLinux(o.config.VM.Kernel)
 	if err != nil {
 		returnErr = err
 		return
 	}
-
+	o.log("debug", "Finished getting VMLinux")
 	// get bridge device
 	bridgeDev, err := tenus.BridgeFromName("vorteil-bridge")
 	if err != nil {
@@ -692,7 +718,6 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 		return
 	}
 	o.bridgeDevice = bridgeDev
-
 	var interfaces []firecracker.NetworkInterface
 	// set network adapters
 	if len(o.routes) > 0 {

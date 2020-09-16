@@ -188,7 +188,7 @@ func (v *Virtualizer) ForceStop() error {
 			// vm should be stopped by now so close the pipes
 			v.errPipe.Close()
 			v.outPipe.Close()
-			v.disk.Close()
+			// v.disk.Close()
 		}
 	} else {
 		return errors.New("vm is already stopped.")
@@ -389,16 +389,13 @@ func (v *Virtualizer) Close(force bool) error {
 				return err
 			}
 		}
-	} else {
-		// windows sleep to allow me to clean up the files
-		time.Sleep(time.Second * 4)
 	}
 
 	// remove contents when closing
-	err := os.RemoveAll(v.folder)
-	if err != nil {
-		return err
-	}
+	// err := os.RemoveAll(v.folder)
+	// if err != nil {
+	// 	return err
+	// }
 	return nil
 }
 

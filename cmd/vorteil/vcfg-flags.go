@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/mattn/go-shellwords"
+	log "github.com/sirupsen/logrus"
 	"github.com/spf13/pflag"
 	"github.com/vorteil/vorteil/pkg/vcfg"
 )

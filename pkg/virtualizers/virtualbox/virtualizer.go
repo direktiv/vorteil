@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"net"
 	"os"
 	"os/exec"
@@ -582,7 +581,7 @@ func modifyVM(name string, ram, cpus, sock string) []string {
 	return vboxArgs
 }
 
-func (v *Virtualizer) createAndConfigure() error {
+func (v *Virtualizer) createAndConfigure(diskpath string) error {
 	cVMArgs := createVM(v.folder, v.name)
 	cmd := exec.Command("VBoxManage", cVMArgs...)
 	err := v.execute(cmd)
@@ -601,7 +600,7 @@ func (v *Virtualizer) createAndConfigure() error {
 	}
 
 	cmd = exec.Command("VBoxManage", "storagectl", v.name,
-		"--name", "SCSI", "--add", "virtio-scsi", "--portcount", "16",
+		"--name", fmt.Sprintf("SCSI-%s", filepath.Base(diskpath)), "--add", "virtio-scsi", "--portcount", "16",
 		"--bootable", "on")
 	err = v.execute(cmd)
 	if err != nil {
@@ -609,8 +608,8 @@ func (v *Virtualizer) createAndConfigure() error {
 	}
 
 	cmd = exec.Command("VBoxManage", "storageattach", v.name,
-		"--storagectl", "SCSI", "--port", "0", "--device", "0",
-		"--type", "hdd", "--medium", v.disk.Name())
+		"--storagectl", fmt.Sprintf("SCSI-%s", filepath.Base(diskpath)), "--port", "0", "--device", "0",
+		"--type", "hdd", "--medium", diskpath)
 	err = v.execute(cmd)
 	if err != nil {
 		return err
@@ -715,18 +714,19 @@ func (v *Virtualizer) createAndConfigure() error {
 // prepare sets the fields and arguments to spawn the virtual machine
 func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	var returnErr error
-
+	var err error
 	o.updateStatus(fmt.Sprintf("Preparing virtualbox files..."))
 	defer func() {
 		o.finished(returnErr)
 	}()
 	o.name = args.Name
 	o.id = randstr.Hex(5)
-	o.folder = filepath.Join(o.vmdrive, fmt.Sprintf("%s-%s", o.id, o.Type()))
-	err := os.MkdirAll(o.folder, os.ModePerm)
-	if err != nil {
-		returnErr = err
-	}
+	o.folder = filepath.Dir(args.ImagePath)
+	// o.folder = filepath.Join(o.vmdrive, fmt.Sprintf("%s-%s", o.id, o.Type()))
+	// err := os.MkdirAll(o.folder, os.ModePerm)
+	// if err != nil {
+	// 	returnErr = err
+	// }
 	if o.networkType == "bridged" {
 		devices, err := virtualizers.BridgedDevices()
 		if err != nil {
@@ -767,31 +767,31 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	if loaded {
 		returnErr = errors.New("virtual machine already exists")
 	}
-	diskPath := filepath.Join(o.folder, fmt.Sprintf("disk%s", ".vmdk"))
+	// diskPath := filepath.Join(o.folder, fmt.Sprintf("disk%s", ".vmdk"))
 
-	tempDisk, err := os.Create(diskPath)
-	if err != nil {
-		o.Virtualizer.log("error", "Error creating temp disk: %v", err)
-	}
+	// tempDisk, err := os.Create(diskPath)
+	// if err != nil {
+	// 	o.Virtualizer.log("error", "Error creating temp disk: %v", err)
+	// }
 
-	_, err = io.Copy(tempDisk, args.Image)
-	if err != nil {
-		o.Virtualizer.log("error", "Error copying temp disk: %v", err)
-	}
+	// _, err = io.Copy(tempDisk, args.Image)
+	// if err != nil {
+	// 	o.Virtualizer.log("error", "Error copying temp disk: %v", err)
+	// }
 
-	err = tempDisk.Sync()
-	if err != nil {
-		o.Virtualizer.log("error", "Error syncing disk: %v", err)
-	}
+	// err = tempDisk.Sync()
+	// if err != nil {
+	// 	o.Virtualizer.log("error", "Error syncing disk: %v", err)
+	// }
 
-	err = tempDisk.Close()
-	if err != nil {
-		o.Virtualizer.log("error", "Error closing disk: %v", err)
-	}
+	// err = tempDisk.Close()
+	// if err != nil {
+	// 	o.Virtualizer.log("error", "Error closing disk: %v", err)
+	// }
 
-	o.disk = tempDisk
+	// o.disk = tempDisk
 
-	err = o.createAndConfigure()
+	err = o.createAndConfigure(args.ImagePath)
 	if err != nil {
 		o.Virtualizer.log("error", "Error configuring vm: %v", err)
 	}

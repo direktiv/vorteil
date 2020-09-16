@@ -4,6 +4,7 @@ package firecracker
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 
@@ -14,6 +15,13 @@ import (
 
 // DownloadPath is the path where we pull firecracker-vmlinux's from
 const DownloadPath = "https://storage.googleapis.com/vorteil-dl/firecracker-vmlinux/"
+
+func FetchBridgeDev() error {
+	return errors.New("bridge devices for firecracker only supported on linux")
+}
+func SetupBridgeAndDHCPServer() error {
+	return errors.New("firecracker init not supported on this operating system")
+}
 
 // Virtualizer is a struct which will implement the interface so the manager can control it
 type Virtualizer struct {

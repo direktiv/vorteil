@@ -454,7 +454,7 @@ func (v *Virtualizer) Stop() error {
 			return err
 		}
 		// wait for shutdown don't think theres a better way other than a sleep
-		time.Sleep(time.Second * 4)
+		// time.Sleep(time.Second * 4)
 
 		v.state = virtualizers.Ready
 

@@ -4,6 +4,7 @@ import (
 	"debug/elf"
 	"errors"
 	"fmt"
+	"github.com/davecgh/go-spew/spew"
 	log "github.com/sirupsen/logrus"
 	"io"
 	"io/ioutil"
@@ -15,6 +16,17 @@ import (
 	"sync"
 )
 
+const (
+	DynamicLinkerConfig = "/etc/ld.so.conf"
+	WindowsWSLPrefix = "\\\\wsl$\\Ubuntu-18.04"
+)
+
+// NewImportSharedObject: This function is used to create and initialize a importSharedObjectsOperation.
+// 	This function requires two args:
+//			projectPath: The target project you wish to scan, and import shared objects to.
+//			excludeDefaultLibs: Whether or not to exclude default libraries.
+// 	Once initialized a importSharedObjectsOperation object will be returned.
+// 	Running importSharedObjectsOperation.Start() will then begin the operation.
 func NewImportSharedObject(projectPath string, excludeDefaultLibs bool) (*importSharedObjectsOperation, error) {
 	var isoOperation importSharedObjectsOperation
 
@@ -39,6 +51,7 @@ type importSharedObjectsOperation struct {
 	imported64bit      bool
 }
 
+// initialize: Locate shared objects and save them to a map in the importSharedObjectsOperation object
 func (isoOp *importSharedObjectsOperation) initialize() error {
 
 	isoOp.progressPaths = make(map[string]bool)
@@ -76,6 +89,8 @@ func ReadLink(path string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
+//listDependencies: Given a file path 'fpath' locate the files dependencies.
+//	Return a list of paths to dependencies found on system, and a list names of dependencies who are missing from system.
 func (isoOp *importSharedObjectsOperation) listDependencies(fpath string) ([]string, []string, error) {
 	prefix := ""
 	e, err := elf.Open(fpath)
@@ -107,6 +122,7 @@ func (isoOp *importSharedObjectsOperation) listDependencies(fpath string) ([]str
 			return nil, nil, fmt.Errorf("unable to scan file : %w", err)
 		}
 	}
+
 	defer e.Close()
 
 	if e.FileHeader.Class == elf.ELFCLASS32 {
@@ -167,7 +183,7 @@ func (isoOp *importSharedObjectsOperation) listDependencies(fpath string) ([]str
 			}
 			if strings.TrimSpace(line) != "" {
 				if !strings.HasPrefix(line, "#") {
-					return fmt.Errorf("unexpected line in '/etc/ld.so.conf' file: %s", line)
+					return fmt.Errorf("unexpected line in '%s' file: %s", DynamicLinkerConfig, line)
 				}
 			}
 		}
@@ -175,7 +191,7 @@ func (isoOp *importSharedObjectsOperation) listDependencies(fpath string) ([]str
 		return nil
 	}
 
-	err = loadPathsFromFile(filepath.Join(prefix, "/etc/ld.so.conf"))
+	err = loadPathsFromFile(filepath.Join(prefix, DynamicLinkerConfig))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -285,9 +301,11 @@ func (isoOp *importSharedObjectsOperation) listDependencies(fpath string) ([]str
 		return deps, noLocates, fmt.Errorf("errors locating libs: %s", strings.Join(msgs, "; "))
 	}
 
+	spew.Dump(deps)
 	return deps, noLocates, nil
 }
 
+//findLib: Given a library name and class, locate that libraries path on the system and return the path.
 func findLib(name string, class elf.Class) (string, error) {
 	prefix := ""
 	var paths []string
@@ -337,14 +355,14 @@ func findLib(name string, class elf.Class) (string, error) {
 				if strings.HasPrefix(line, "#") || strings.Contains(line, "*") {
 					continue
 				}
-				return fmt.Errorf("unexpected line in '/etc/ld.so.conf' file: %s", line)
+				return fmt.Errorf("unexpected line in '%s' file: %s", DynamicLinkerConfig, line)
 			}
 		}
 
 		return nil
 	}
 
-	err := loadPathsFromFile(filepath.Join(prefix, "/etc/ld.so.conf"))
+	err := loadPathsFromFile(filepath.Join(prefix, DynamicLinkerConfig))
 	if err != nil {
 		return "", err
 	}
@@ -401,10 +419,11 @@ func findLib(name string, class elf.Class) (string, error) {
 	return fn(name)
 }
 
+//
 func (isoOp *importSharedObjectsOperation) Start() error {
-	prefix := ""
+	var prefix string
 	if runtime.GOOS == "windows" {
-		prefix = "\\\\wsl$\\Ubuntu-18.04"
+		prefix = WindowsWSLPrefix
 	}
 	mapLock := sync.Mutex{}
 	filesDone := make(map[string]interface{})
@@ -427,7 +446,6 @@ func (isoOp *importSharedObjectsOperation) Start() error {
 			return nil
 		}
 
-		// } else {
 		if !strings.HasPrefix(path, isoOp.projectDir) {
 			// file is outside of project projectDir -- copy it in and then check for lib dependencies
 			log.Infof("copying '%s'", path)
@@ -603,10 +621,12 @@ func (isoOp *importSharedObjectsOperation) Start() error {
 		case p := <-paths:
 			if p == endPathScan {
 				if !isoOp.excludeDefaultLibs && !foundAtLeast1File {
-					log.Warnf("Omitting default libs --- no libs were required by the project.")
+					log.Warnf("omitting default libs --- no libs were required by the project.")
 				}
 
 				if !isoOp.excludeDefaultLibs && foundAtLeast1File {
+					log.Infof("copying default libs")
+
 					defaultLibs := []string{"libnss_dns.so.2", "libnss_files.so.2", "libresolv.so.2"}
 					defaultLibPaths := make([]string, 0)
 					classes := []elf.Class{}
@@ -614,13 +634,13 @@ func (isoOp *importSharedObjectsOperation) Start() error {
 					if isoOp.imported32bit {
 						classes = append(classes, elf.ELFCLASS32)
 					} else {
-						log.Infof("Omitting 32-bit default libs --- no 32-bit binaries detected.")
+						log.Infof("omitting 32-bit default libs --- no 32-bit binaries detected.")
 					}
 
 					if isoOp.imported64bit {
 						classes = append(classes, elf.ELFCLASS64)
 					} else {
-						log.Infof("Omitting 64-bit default libs --- no 64-bit binaries detected.")
+						log.Infof("omitting 64-bit default libs --- no 64-bit binaries detected.")
 					}
 
 					for _, l := range defaultLibs {
@@ -642,7 +662,7 @@ func (isoOp *importSharedObjectsOperation) Start() error {
 					}
 				}
 
-				for l, _ := range unfoundDependencies {
+				for l := range unfoundDependencies {
 					log.Warnf(fmt.Sprintf("unable to locate dependency: %s", l))
 				}
 
@@ -657,9 +677,9 @@ func (isoOp *importSharedObjectsOperation) Start() error {
 
 END:
 	if len(unfoundDependencies) != 0 {
-		log.Info("Completed with warnings.")
+		log.Info("completed with warnings.")
 	} else {
-		log.Info("Completed.")
+		log.Info("completed.")
 	}
 
 	return nil

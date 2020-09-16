@@ -30,7 +30,7 @@ import (
 	logger "github.com/vorteil/vorteil/pkg/virtualizers/logging"
 )
 
-func fetchBridgeDev() error {
+func FetchBridgeDev() error {
 	// Check if bridge device exists
 	_, err := tenus.BridgeFromName("vorteil-bridge")
 	if err != nil {

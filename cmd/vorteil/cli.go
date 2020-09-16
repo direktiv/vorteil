@@ -1719,7 +1719,7 @@ var provisionCmd = &cobra.Command{
 			os.Exit(19)
 		}
 
-		fmt.Printf("Created image: '%s'.\n", provisionName)
+		fmt.Printf("Finished creating image.\n")
 	},
 }
 

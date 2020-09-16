@@ -235,7 +235,7 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 
 	defer func() {
 		if successful {
-			fmt.Printf("Provisioned AMI: %s", amiID)
+			fmt.Printf("Provisioned AMI: %s\n", amiID)
 		}
 	}()
 

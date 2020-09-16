@@ -127,9 +127,8 @@ func ParseFormat(s string) (Format, error) {
 	if _, ok := formats[f]; !ok {
 		return RAWFormat, fmt.Errorf("unrecognized virtual disk format '%s'", original)
 	}
-	fmt.Printf("FORMAT: %s\n", f)
-	return f, nil
 
+	return f, nil
 }
 
 func (x *Format) Suffix() string {

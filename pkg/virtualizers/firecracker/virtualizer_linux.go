@@ -78,9 +78,7 @@ func SetupBridgeAndDHCPServer() error {
 	}
 
 	// Start dhcp server to listen
-	go func() {
-		dhcp.Serve(pc, server)
-	}()
+	dhcp.Serve(pc, server)
 
 	return nil
 }

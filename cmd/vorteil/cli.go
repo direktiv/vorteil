@@ -12,7 +12,10 @@ import (
 	"strings"
 	"time"
 
+	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+
+	"github.com/vorteil/vorteil/pkg/elog"
 	"github.com/vorteil/vorteil/pkg/vcfg"
 	"github.com/vorteil/vorteil/pkg/vconvert"
 	"github.com/vorteil/vorteil/pkg/vdecompiler"
@@ -25,6 +28,7 @@ import (
 var (
 	flagCompressionLevel uint
 	flagForce            bool
+	flagExcludeDefault   bool
 	flagFormat           string
 	flagOutput           string
 	flagPlatform         string
@@ -47,6 +51,30 @@ func commandInit() {
 	// the order Go runs init functions this is the safest place to do this.
 	addModifyFlags(buildCmd.Flags())
 	addModifyFlags(runCmd.Flags())
+
+	// setup logging across all commands
+	rootCmd.PersistentFlags().BoolVar(&elog.IsJSON, "json", false, "log output in JSON")
+	rootCmd.PersistentFlags().BoolVarP(&elog.IsDebug, "debug", "d", false, "enable debug output")
+
+	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+
+		log.SetFormatter(&log.TextFormatter{
+			DisableColors:    false,
+			DisableTimestamp: true,
+		})
+
+		log.SetLevel(log.InfoLevel)
+
+		if elog.IsJSON {
+			log.SetFormatter(&log.JSONFormatter{})
+		}
+
+		if elog.IsDebug {
+			log.SetLevel(log.DebugLevel)
+		}
+
+		return nil
+	}
 
 	// Here we define some hidden top-level shortcuts.
 	rootCmd.AddCommand(commandShortcut(buildCmd))
@@ -1719,11 +1747,59 @@ var convertContainerCmd = &cobra.Command{
 }
 
 var importSharedObjectsCmd = &cobra.Command{
-	Use: "import-shared-objects",
+	Use:   "import-shared-objects [PROJECT]",
+	Short: "Import shared objects required by the binary targeted within the project.",
+	Args:  cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		// Do Stuff Here
-		fmt.Println("TODO")
+		var projectPath string = "."
+		var err error
+
+		// Get Project Path
+		if len(args) != 0 {
+			projectPath, err = filepath.Abs(args[0])
+			if err != nil {
+				log.Error(err.Error())
+				os.Exit(1)
+			}
+		}
+
+		// Set up logging functions
+		logWarn := func(format string, a ...interface{}) {
+			log.Warn(fmt.Sprintf(format, a...))
+		}
+
+		logInfo := func(format string, a ...interface{}) {
+			log.Info(fmt.Sprintf(format, a...))
+		}
+
+		logDebug := func(format string, a ...interface{}) {
+			log.Info(fmt.Sprintf(format, a...))
+		}
+
+		// Create Import Operation
+		importOperation, err := vproj.NewImportSharedObject(projectPath, vproj.ImportSharedObjectsOptions{
+			ExcludeDefaultLibs: flagExcludeDefault,
+			LoggerWarn:         logWarn,
+			LoggerInfo:         logInfo,
+			LoggerDebug:        logDebug,
+		})
+
+		if err != nil {
+			log.Error(err.Error())
+			os.Exit(2)
+		}
+
+		// Start Import Operation
+		if err = importOperation.Start(); err != nil {
+			log.Error(err.Error())
+			os.Exit(3)
+		}
 	},
+}
+
+func init() {
+	f := importSharedObjectsCmd.Flags()
+	f.BoolVarP(&flagExcludeDefault, "no-defaults", "e", false, "exclude default shared objects")
 }
 
 var provisionersCmd = &cobra.Command{

@@ -13,6 +13,8 @@ import (
 	"runtime"
 	"time"
 
+	log "github.com/sirupsen/logrus"
+
 	isatty "github.com/mattn/go-isatty"
 	"github.com/mitchellh/go-homedir"
 	"github.com/thanhpk/randstr"

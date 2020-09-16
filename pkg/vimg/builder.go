@@ -45,6 +45,7 @@ type Builder struct {
 	kernel        vkern.CalVer
 	kernelTags    []string
 	linuxArgs     string
+	defaultMTU    uint
 
 	// The following variables need to be calculated in the prebuild step.
 	size                      int64
@@ -80,6 +81,7 @@ func NewBuilder(ctx context.Context, args *BuilderArgs) (*Builder, error) {
 	b.fs = args.FSCompiler
 	b.vcfg = args.VCFG
 	b.kernelOptions = args.Kernel
+	b.defaultMTU = 1500
 
 	err = b.validateArgs(ctx)
 	if err != nil {
@@ -92,6 +94,10 @@ func NewBuilder(ctx context.Context, args *BuilderArgs) (*Builder, error) {
 	}
 
 	return b, nil
+}
+
+func (b *Builder) SetDefaultMTU(mtu uint) {
+	b.defaultMTU = mtu
 }
 
 func (b *Builder) validateArgs(ctx context.Context) error {

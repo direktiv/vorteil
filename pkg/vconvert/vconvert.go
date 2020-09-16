@@ -1,9 +1,11 @@
+/**
+ * SPDX-License-Identifier: Apache-2.0
+ * Copyright 2020 vorteil.io Pty Ltd
+ */
 package vconvert
 
 import (
-	"fmt"
 	"os"
-	"strings"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -22,38 +24,11 @@ func ConvertContainer(app, dest, user, pwd, config string) error {
 	}
 	defer os.RemoveAll(handler.tmpDir)
 
-	log.Infof("HERE %s %s", handler.imageRef.Registry(), localIdentifier)
+	initConfig(config)
 
-	if strings.HasPrefix(handler.imageRef.Registry(), localIdentifier) {
-		// we only support docker and containerd
-		// we can assume %s.%s here
-		s := strings.SplitN(handler.imageRef.Registry(), ".", 2)
-		switch s[1] {
-		case "docker":
-			{
-				handler.fetchReader = dockerGetReader
-				err := handler.downloadDockerTar(handler.imageRef.ShortName(), handler.imageRef.Tag())
-				if err != nil {
-					return err
-				}
-			}
-		case "containerd":
-			{
-				log.Infof("CONTAINER!!!")
-			}
-		default:
-			{
-				return fmt.Errorf("unknown local container runtime")
-			}
-		}
-
-	} else {
-		initConfig(config)
-		handler.fetchReader = remoteGetReader
-		err = handler.createVMFromRemote()
-		if err != nil {
-			return err
-		}
+	err = handler.createTar()
+	if err != nil {
+		return err
 	}
 
 	err = handler.untarLayers(dest)

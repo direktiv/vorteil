@@ -1,6 +1,9 @@
+/**
+ * SPDX-License-Identifier: Apache-2.0
+ * Copyright 2020 vorteil.io Pty Ltd
+ */
 package vconvert
 
-// v1 "github.com/google/go-containerregistry/pkg/v1"
 import (
 	"archive/tar"
 	"bytes"
@@ -114,6 +117,48 @@ func newRegistry(registryURL, user, pwd string) (*registry.Registry, error) {
 	}
 
 	return registry, nil
+}
+
+func (ih *imageHandler) createTar() error {
+
+	if strings.HasPrefix(ih.imageRef.Registry(), localIdentifier) {
+		// we only support docker and containerd
+		// we can assume %s.%s here
+		s := strings.SplitN(ih.imageRef.Registry(), ".", 2)
+
+		// docker is basically containerd
+		ih.fetchReader = localGetReader
+
+		switch s[1] {
+		case "docker":
+			{
+				err := ih.downloadDockerTar(ih.imageRef.ShortName(), ih.imageRef.Tag())
+				if err != nil {
+					return err
+				}
+			}
+		case "containerd":
+			{
+				err := ih.downloadContainerdTar(ih.imageRef.ShortName(), ih.imageRef.Tag())
+				if err != nil {
+					return err
+				}
+			}
+		default:
+			{
+				return fmt.Errorf("unknown local container runtime")
+			}
+		}
+
+	} else {
+		ih.fetchReader = remoteGetReader
+		err := ih.createVMFromRemote()
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (ih *imageHandler) createVMFromRemote() error {
@@ -248,20 +293,20 @@ func (ih *imageHandler) untarLayers(targetDir string) error {
 			hdr.Gid = 1000
 
 			// check if Directory
-			if hdr.Mode&040000 != 0 {
-				// check if in our skip list
-				for _, f := range folders {
-					// check 3 different variations of the folder
-					// /folder folder /folder/
-					fmts := []string{"/%s", "/%s/", "%s"}
-					for _, f1 := range fmts {
-						if hdr.Name == fmt.Sprintf(f1, f) {
-							log.Debugf("skipping directory %s", f)
-							return false, nil
-						}
+			// if hdr.Mode&040000 != 0 {
+			// check if in our skip list
+			for _, f := range folders {
+				// check 3 different variations of the folder
+				// /folder folder /folder/
+				fmts := []string{"/%s", "/%s/", "%s"}
+				for _, f1 := range fmts {
+					if strings.HasPrefix(hdr.Name, fmt.Sprintf(f1, f)) {
+						log.Debugf("skipping file/dir %s", hdr.Name)
+						return false, nil
 					}
 				}
 			}
+			// }
 			return true, nil
 
 		})); err != nil {

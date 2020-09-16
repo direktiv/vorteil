@@ -1,3 +1,7 @@
+/**
+ * SPDX-License-Identifier: Apache-2.0
+ * Copyright 2020 vorteil.io Pty Ltd
+ */
 package vconvert
 
 import (
@@ -207,7 +211,7 @@ func distributor(layers []*layer, p *mpb.Progress) {
 	close(jobs)
 }
 
-func dockerGetReader(image string, layer *layer, registry *registry.Registry) (io.ReadCloser, error) {
+func localGetReader(image string, layer *layer, registry *registry.Registry) (io.ReadCloser, error) {
 	l := layer.layer.(v1.Layer)
 	reader, err := l.Compressed()
 	if err != nil {

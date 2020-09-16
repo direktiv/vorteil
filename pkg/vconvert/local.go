@@ -1,42 +1,93 @@
+/**
+ * SPDX-License-Identifier: Apache-2.0
+ * Copyright 2020 vorteil.io Pty Ltd
+ */
 package vconvert
 
 import (
 	"context"
+	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
 
+	"github.com/containerd/containerd"
+	"github.com/containerd/containerd/images/archive"
+	"github.com/containerd/containerd/namespaces"
+	"github.com/containerd/containerd/platforms"
 	"github.com/docker/docker/client"
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
 	log "github.com/sirupsen/logrus"
 )
 
+const (
+	containerdSock = "/run/containerd/containerd.sock"
+)
+
+func (ih *imageHandler) downloadContainerdTar(image, tag string) error {
+
+	log.Infof("getting local containerd image %s (%s)", image, tag)
+
+	ctx := namespaces.WithNamespace(context.Background(), "default")
+
+	client, err := containerd.New(containerdSock)
+	if err != nil {
+		return err
+	}
+	defer client.Close()
+
+	o, err := ioutil.TempFile("", "cimg")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(o.Name())
+
+	img := fmt.Sprintf("%s:%s", image, tag)
+
+	err = client.Export(ctx, o, archive.WithPlatform(platforms.Default()), archive.WithImage(client.ImageService(), img))
+	if err != nil {
+		return err
+	}
+
+	return ih.localHandler(o.Name())
+
+}
+
 func (ih *imageHandler) downloadDockerTar(image, tag string) error {
+
 	log.Infof("getting local docker image %s (%s)", image, tag)
 
 	ctx := context.Background()
-
 	cli, err := client.NewClientWithOpts(client.FromEnv)
 	if err != nil {
 		return err
 	}
 	cli.NegotiateAPIVersion(ctx)
+
 	r, err := cli.ImageSave(ctx, []string{image})
 	if err != nil {
 		return err
 	}
 	defer r.Close()
 
-	outFile, err := os.Create("/tmp/kkk")
+	o, err := ioutil.TempFile("", "cimg")
 	if err != nil {
 		return err
 	}
-	defer outFile.Close()
-	_, err = io.Copy(outFile, r)
+	defer os.Remove(o.Name())
+
+	_, err = io.Copy(o, r)
 	if err != nil {
 		return err
 	}
 
-	img, err := tarball.ImageFromPath("/tmp/kkk", nil)
+	return ih.localHandler(o.Name())
+
+}
+
+func (ih *imageHandler) localHandler(path string) error {
+
+	img, err := tarball.ImageFromPath(path, nil)
 	if err != nil {
 		return err
 	}
@@ -74,5 +125,4 @@ func (ih *imageHandler) downloadDockerTar(image, tag string) error {
 	ih.downloadBlobs()
 
 	return nil
-
 }

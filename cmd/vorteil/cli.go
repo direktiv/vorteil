@@ -1735,7 +1735,7 @@ var (
 func init() {
 	f := provisionCmd.Flags()
 	f.StringVarP(&provisionName, "name", "n", "", "Name of the resulting image on the remote platform.")
-	f.StringVarP(&provisionDescription, "description", "d", "", "Description for the resulting image, if supported by the platform.")
+	f.StringVarP(&provisionDescription, "description", "D", "", "Description for the resulting image, if supported by the platform.")
 	f.BoolVarP(&provisionForce, "force", "f", false, "Force an overwrite if an existing image conflicts with the new.")
 	f.BoolVarP(&provisionReadyWhenUsable, "ready-when-usable", "r", false, "Return successfully as soon as the operation is complete, regardless of whether or not the platform is still processing the image.")
 	f.StringVarP(&provisionProvisionerFile, "provisioner", "p", "", "Path to file containing provisioner data.")

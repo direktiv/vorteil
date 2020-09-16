@@ -213,11 +213,10 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 	if err == nil || result.ID != nil {
 		// image already exists
 		if !forced {
-			// o.updateStatus("Image already exists; aborting. To replace conflicting image, include the 'force' directive.")
 			return fmt.Errorf("Image already exists; aborting. To replace conflicting image, include the 'force' directive.")
 		}
 
-		// o.updateStatus("Deleting existing image.")
+		fmt.Println("Deleting existing image.")
 		delFuture, err := imagesClient.Delete(args.Context, p.cfg.ResourceGroup, args.Name)
 		if err != nil {
 			return err
@@ -289,7 +288,7 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 				return err
 			}
 		}
-		// o.updateStatus(fmt.Sprintf("Uploading: %.1f%s", (float64(i)+float64(len(data)))/float64(length)*100, "%"))
+		fmt.Printf("Uploading: %.1f%s\n", (float64(i)+float64(len(data)))/float64(length)*100, "%")
 	}
 
 	rem := length - int64(i)
@@ -305,7 +304,7 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 		return err
 	}
 
-	// o.updateStatus(fmt.Sprint("Uploading: 100%"))
+	fmt.Println("Uploading: 100%")
 
 	g := int32(1024 * 1024 * 1024)
 	gigs := int32(length) / g
@@ -328,20 +327,21 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 	img.Tags = tags
 	u := blob.GetURL()
 	img.StorageProfile.OsDisk.BlobURI = &u
+	img.HyperVGeneration = compute.HyperVGenerationTypesV1
 
-	// o.updateStatus("Sent request to create image from storage object.")
+	fmt.Println("Sent request to create image from storage object.")
 	future, err := imagesClient.CreateOrUpdate(args.Context, p.cfg.ResourceGroup, args.Name, *img)
 	if err != nil {
 		return err
 	}
 
-	// o.updateStatus("Waiting for completion.")
+	fmt.Println("Waiting for completion.")
 	err = future.WaitForCompletionRef(args.Context, imagesClient.Client)
 	if err != nil {
 		return err
 	}
 
-	// o.updateStatus("Done!")
+	fmt.Println("Done!")
 
 	return nil
 }

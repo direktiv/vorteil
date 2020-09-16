@@ -40,10 +40,9 @@ const (
 
 	defaultDiskSize = "+256 MB"
 	defaultRAMSize  = "256 MB"
-)
 
-var (
-	jobs = make(chan job)
+	dockerRuntime     = "docker"
+	containerdRuntime = "containerd"
 )
 
 type job struct {
@@ -71,7 +70,8 @@ type imageHandler struct {
 	// different readers for remote and e.g. local docker
 	fetchReader func(string, *layer, *registry.Registry) (io.ReadCloser, error)
 
-	wg sync.WaitGroup
+	wg   sync.WaitGroup
+	jobs chan job
 }
 
 func newHandler(app, user, pwd, dest string) (*imageHandler, error) {
@@ -92,6 +92,7 @@ func newHandler(app, user, pwd, dest string) (*imageHandler, error) {
 		tmpDir:   tmp,
 		user:     user,
 		pwd:      pwd,
+		jobs:     make(chan job),
 	}, nil
 
 }
@@ -130,14 +131,14 @@ func (ih *imageHandler) createTar() error {
 		ih.fetchReader = localGetReader
 
 		switch s[1] {
-		case "docker":
+		case dockerRuntime:
 			{
 				err := ih.downloadDockerTar(ih.imageRef.ShortName(), ih.imageRef.Tag())
 				if err != nil {
 					return err
 				}
 			}
-		case "containerd":
+		case containerdRuntime:
 			{
 				err := ih.downloadContainerdTar(ih.imageRef.ShortName(), ih.imageRef.Tag())
 				if err != nil {
@@ -152,7 +153,7 @@ func (ih *imageHandler) createTar() error {
 
 	} else {
 		ih.fetchReader = remoteGetReader
-		err := ih.createVMFromRemote()
+		err := ih.downloadRemoteTar()
 		if err != nil {
 			return err
 		}
@@ -161,7 +162,7 @@ func (ih *imageHandler) createTar() error {
 	return nil
 }
 
-func (ih *imageHandler) createVMFromRemote() error {
+func (ih *imageHandler) downloadRemoteTar() error {
 
 	var url string
 
@@ -256,7 +257,7 @@ func (ih *imageHandler) downloadBlobs() {
 	p := mpb.New(mpb.WithWaitGroup(&ih.wg))
 	ih.wg.Add(len(ih.layers))
 
-	go distributor(ih.layers, p)
+	go distributor(ih.layers, p, ih.jobs)
 	for i := 0; i < workers; i++ {
 		go ih.worker()
 	}
@@ -292,8 +293,6 @@ func (ih *imageHandler) untarLayers(targetDir string) error {
 			hdr.Uid = 1000
 			hdr.Gid = 1000
 
-			// check if Directory
-			// if hdr.Mode&040000 != 0 {
 			// check if in our skip list
 			for _, f := range folders {
 				// check 3 different variations of the folder
@@ -306,7 +305,6 @@ func (ih *imageHandler) untarLayers(targetDir string) error {
 					}
 				}
 			}
-			// }
 			return true, nil
 
 		})); err != nil {
@@ -411,7 +409,7 @@ func (ih *imageHandler) createVCFG(targetDir string) error {
 func (ih *imageHandler) worker() {
 
 	for {
-		job, opened := <-jobs
+		job, opened := <-ih.jobs
 		if !opened {
 			break
 		}

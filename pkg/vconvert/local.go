@@ -28,6 +28,10 @@ func (ih *imageHandler) downloadContainerdTar(image, tag string) error {
 
 	log.Infof("getting local containerd image %s (%s)", image, tag)
 
+	if len(image) == 0 || len(tag) == 0 {
+		return fmt.Errorf("image and tag value required")
+	}
+
 	ctx := namespaces.WithNamespace(context.Background(), "default")
 
 	client, err := containerd.New(containerdSock)
@@ -56,6 +60,10 @@ func (ih *imageHandler) downloadContainerdTar(image, tag string) error {
 func (ih *imageHandler) downloadDockerTar(image, tag string) error {
 
 	log.Infof("getting local docker image %s (%s)", image, tag)
+
+	if len(image) == 0 || len(tag) == 0 {
+		return fmt.Errorf("image and tag value required")
+	}
 
 	ctx := context.Background()
 	cli, err := client.NewClientWithOpts(client.FromEnv)

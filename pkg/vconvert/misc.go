@@ -12,6 +12,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/vorteil/vorteil/pkg/elog"
+
 	"github.com/docker/distribution"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/heroku/docker-registry-client/registry"
@@ -20,7 +22,6 @@ import (
 	"github.com/spf13/viper"
 	"github.com/vbauerster/mpb"
 	"github.com/vbauerster/mpb/decor"
-	"github.com/vorteil/vorteil/pkg/elog"
 )
 
 const (
@@ -134,7 +135,11 @@ func findBinary(name string, env []string, cwd string, targetDir string) (string
 
 	// absolute
 	if strings.HasPrefix(name, "/") {
-		return name, nil
+		fp := filepath.Join(targetDir, name)
+		if _, err := os.Stat(fp); err == nil {
+			return name, nil
+		}
+		return "", fmt.Errorf("can not find binary %s", name)
 	}
 
 	for _, e := range env {
@@ -183,7 +188,7 @@ func prepDirectories(targetDir string) (string, error) {
 
 }
 
-func distributor(layers []*layer, p *mpb.Progress) {
+func distributor(layers []*layer, p *mpb.Progress, jobs chan job) {
 
 	log.Infof("downloading %d layers", len(layers))
 	for i, layer := range layers {

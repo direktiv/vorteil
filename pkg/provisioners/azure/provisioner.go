@@ -65,7 +65,7 @@ func Create(cfg *Config) (provisioners.Provisioner, error) {
 	return p, nil
 }
 
-// Type returns 'google-compute'
+// Type returns 'microsoft-azure'
 func (p *Provisioner) Type() string {
 	return ProvisionerType
 }

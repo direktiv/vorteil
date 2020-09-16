@@ -49,9 +49,9 @@ type Provisioner struct {
 
 // Config contains configuration fields required by the Provisioner
 type Config struct {
-	Key    string // AWS Access Key
-	Secret string // AWS Access Key Secret
-	Region string // AWS Region
+	Key    string `json:"key"`    // AWS Access Key
+	Secret string `json:"secret"` // AWS Access Key Secret
+	Region string `json:"region"` // AWS Region
 }
 
 type userData struct {
@@ -519,10 +519,6 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 
 	err = nil
 	return err
-}
-
-func (p *Provisioner) ProvisionVolume(args *provisioners.ProvisionVolumeArgs) error {
-	return nil
 }
 
 func (p *Provisioner) Marshal() ([]byte, error) {

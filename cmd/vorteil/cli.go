@@ -20,6 +20,7 @@ import (
 
 	"github.com/vorteil/vorteil/pkg/provisioners"
 	"github.com/vorteil/vorteil/pkg/provisioners/amazon"
+	"github.com/vorteil/vorteil/pkg/provisioners/azure"
 	"github.com/vorteil/vorteil/pkg/provisioners/google"
 	"github.com/vorteil/vorteil/pkg/vcfg"
 
@@ -1576,6 +1577,17 @@ var provisionCmd = &cobra.Command{
 			}
 
 			prov = p
+
+		case azure.ProvisionerType:
+			fmt.Println("Provisioning to Azure")
+			p := &azure.Provisioner{}
+			err = p.Initialize(data)
+			if err != nil {
+				log.Error(err.Error())
+				os.Exit(6)
+			}
+
+			prov = p
 		}
 
 		buildablePath := "."
@@ -2027,11 +2039,67 @@ func init() {
 }
 
 var provisionersNewAzureCmd = &cobra.Command{
-	Use: "azure",
+	Use:  "azure",
+	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		// Do Stuff Here
-		fmt.Println("TODO")
+
+		f, err := os.OpenFile(args[0], os.O_RDWR|os.O_CREATE, 0644)
+		if err != nil {
+			log.Error(err.Error())
+			os.Exit(1)
+		}
+		defer f.Close()
+
+		path := provisionersNewAzureKeyFile
+		_, err = os.Stat(path)
+		if err != nil {
+			log.Error(err.Error())
+			os.Exit(2)
+		}
+
+		b, err := ioutil.ReadFile(path)
+		if err != nil {
+			log.Error(err.Error())
+			os.Exit(3)
+		}
+
+		p, err := azure.Create(&azure.Config{
+			Key:                base64.StdEncoding.EncodeToString(b),
+			Container:          provisionersNewAzureContainer,
+			Location:           provisionersNewAzureLocation,
+			ResourceGroup:      provisionersNewAzureResourceGroup,
+			StorageAccountKey:  provisionersNewAzureStorageAccountKey,
+			StorageAccountName: provisionersNewAzureStorageAccountName,
+		})
+		if err != nil {
+			log.Error(err.Error())
+			os.Exit(4)
+		}
+
+		data, err := p.Marshal()
+		if err != nil {
+			log.Error(err.Error())
+			os.Exit(5)
+		}
+
+		out := provisioners.Encrypt(data, provisionersNewPassphrase)
+		_, err = io.Copy(f, bytes.NewReader(out))
+		if err != nil {
+			log.Error(err.Error())
+			os.Exit(6)
+		}
+
 	},
+}
+
+func init() {
+	f := provisionersNewAzureCmd.Flags()
+	f.StringVarP(&provisionersNewAzureKeyFile, "key-file", "k", "", "Azure 'Service Principal' credentials file")
+	f.StringVarP(&provisionersNewAzureContainer, "container", "c", "", "Azure container name")
+	f.StringVarP(&provisionersNewAzureResourceGroup, "resource-group", "r", "", "Azure resource group name")
+	f.StringVarP(&provisionersNewAzureLocation, "location", "l", "", "Azure location")
+	f.StringVarP(&provisionersNewAzureStorageAccountKey, "storage-account-key", "s", "", "Azure storage account key")
+	f.StringVarP(&provisionersNewAzureStorageAccountName, "storage-account-name", "n", "", "Azure storage account name")
 }
 
 var provisionersNewGoogleCmd = &cobra.Command{

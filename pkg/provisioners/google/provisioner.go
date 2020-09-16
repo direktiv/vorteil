@@ -29,8 +29,8 @@ type Provisioner struct {
 
 // Config contains configuration fields required by the Provisioner
 type Config struct {
-	Bucket string // Name of the bucket
-	Key    string // base64 encoded contents of a (JSON) Google Cloud Platform service account key file
+	Bucket string `json:"bucket"` // Name of the bucket
+	Key    string `json:"key"`    // base64 encoded contents of a (JSON) Google Cloud Platform service account key file
 }
 
 // Create a provisioner object
@@ -288,10 +288,6 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 		return fmt.Errorf("timed out waiting for image creation")
 	}
 
-	return nil
-}
-
-func (p *Provisioner) ProvisionVolume(args *provisioners.ProvisionVolumeArgs) error {
 	return nil
 }
 

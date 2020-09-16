@@ -25,7 +25,6 @@ type Provisioner interface {
 	SizeAlign() vcfg.Bytes
 	Initialize(data []byte) error
 	Provision(args *ProvisionArgs) error
-	ProvisionVolume(args *ProvisionVolumeArgs) error
 	Marshal() ([]byte, error)
 }
 
@@ -37,10 +36,6 @@ type ProvisionArgs struct {
 	Context         context.Context
 	Image           file.File
 	ReadyWhenUsable bool
-}
-
-type ProvisionVolumeArgs struct {
-	ProvisionArgs
 }
 
 func createHash(key string) string {

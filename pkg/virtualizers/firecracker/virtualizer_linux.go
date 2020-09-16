@@ -222,6 +222,7 @@ func (v *Virtualizer) Detach(source string) error {
 		PathOnHost:   filepath.Join(source, name, fmt.Sprintf("%s.raw", v.name)),
 		IsRootDevice: true,
 		IsReadOnly:   false,
+		Partuuid:     vimg.Part2UUIDString,
 	}
 	var drives []Drive
 	drives = append(drives, drive)
@@ -230,7 +231,7 @@ func (v *Virtualizer) Detach(source string) error {
 	config.Drives = drives
 	config.BootSource = BootSource{
 		KernelImagePath: v.kip,
-		BootArgs:        fmt.Sprintf("init=/vorteil/vinitd root=PARTUUID=%s reboot=k panic=1 pci=off i8042.noaux i8042.nomux i8042.nopnp i8042.dumbkbd  vt.color=0x00", vimg.Part2UUIDString),
+		BootArgs:        "init=/vorteil/vinitd reboot=k panic=1 pci=off i8042.noaux i8042.nomux i8042.nopnp i8042.dumbkbd  vt.color=0x00",
 	}
 	config.MachineConfig = MachineConfig{
 		VcpuCount:  int(v.config.VM.CPUs),

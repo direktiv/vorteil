@@ -12,12 +12,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/vorteil/vorteil/pkg/vcfg"
-
 	"github.com/spf13/cobra"
+	"github.com/vorteil/vorteil/pkg/vcfg"
 	"github.com/vorteil/vorteil/pkg/vconvert"
 	"github.com/vorteil/vorteil/pkg/vdecompiler"
 	"github.com/vorteil/vorteil/pkg/vdisk"
+	"github.com/vorteil/vorteil/pkg/virtualizers/firecracker"
 	"github.com/vorteil/vorteil/pkg/vpkg"
 	"github.com/vorteil/vorteil/pkg/vproj"
 )
@@ -1807,13 +1807,17 @@ var provisionersNewGoogleCmd = &cobra.Command{
 }
 
 var initFirecrackerCmd = &cobra.Command{
-	Use:    "init firecracker",
+	Use:    "firecracker-setup",
 	Short:  "Initialize firecracker by spawning a Bridge Device and a DHCP server",
 	Long:   `The init firecracker command is a convenience function to quickly setup the bridge device and DHCP server that firecracker will use`,
 	Hidden: true,
 	Args:   cobra.MaximumNArgs(0),
 	Run: func(cmd *cobra.Command, args []string) {
-
+		err := firecracker.SetupBridgeAndDHCPServer()
+		if err != nil {
+			log.Error(err.Error())
+			os.Exit(1)
+		}
 	},
 }
 
@@ -1891,12 +1895,12 @@ and cleaning up the instance when it's done.`,
 		// 		log.Error(err.Error())
 		// 		os.Exit(1)
 		// 	}
-		// case platformFirecracker:
-		// 	err = runFirecracker(f.Name(), cfg, flagGUI)
-		// 	if err != nil {
-		// 		log.Error(err.Error())
-		// 		os.Exit(1)
-		// 	}
+		case platformFirecracker:
+			err = runFirecracker(pkgReader, cfg)
+			if err != nil {
+				log.Error(err.Error())
+				os.Exit(1)
+			}
 		default:
 			log.Error(fmt.Errorf("platform '%s' not supported", flagPlatform).Error())
 			os.Exit(1)

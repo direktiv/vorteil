@@ -776,7 +776,7 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	fcCfg := firecracker.Config{
 		SocketPath:      filepath.Join(o.folder, fmt.Sprintf("%s.%s", o.name, "socket")),
 		KernelImagePath: o.kip,
-		KernelArgs:      "init=/vorteil/vinitd reboot=k panic=1 pci=off i8042.noaux i8042.nomux i8042.nopnp i8042.dumbkbd  vt.color=0x00",
+		KernelArgs:      fmt.Sprintf("init=/vorteil/vinitd root=PARTUUID=%s reboot=k panic=1 pci=off i8042.noaux i8042.nomux i8042.nopnp i8042.dumbkbd  vt.color=0x00", vimg.Part2UUIDString),
 		Drives:          devices,
 		MachineCfg: models.MachineConfiguration{
 			VcpuCount:  firecracker.Int64(int64(o.config.VM.CPUs)),

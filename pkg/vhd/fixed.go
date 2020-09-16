@@ -29,7 +29,7 @@ func NewFixedWriter(w io.WriteSeeker, h HolePredictor) (*FixedWriter, error) {
 }
 
 func (w *FixedWriter) Write(p []byte) (n int, err error) {
-	n, err = w.Write(p)
+	n, err = w.w.Write(p)
 	w.cursor += int64(n)
 	return
 }

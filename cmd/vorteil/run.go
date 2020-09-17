@@ -353,8 +353,8 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG) error {
 			if finished {
 				return nil
 			}
+			virt.Stop()
 			finished = true
-			go virt.Stop()
 		case <-chBool:
 			return nil
 		}
@@ -381,7 +381,7 @@ func raw(start bool) error {
 func listenForInterupt() (chan os.Signal, chan bool) {
 	var signalChannel chan os.Signal
 	signalChannel = make(chan os.Signal, 1)
-	signal.Notify(signalChannel, os.Interrupt)
+	signal.Notify(signalChannel, os.Interrupt, os.Kill)
 	chBool := make(chan bool, 1)
 
 	// check if this is running in a sygwin terminal, interupt signals are difficult to capture

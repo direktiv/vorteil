@@ -353,7 +353,12 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG) error {
 			if finished {
 				return nil
 			}
-			virt.Stop()
+			err = virt.Stop()
+			if err != nil {
+				log.Errorf(err)
+				finished = true
+			}
+			time.Sleep(time.Second * 4)
 			finished = true
 		case <-chBool:
 			return nil

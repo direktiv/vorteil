@@ -9,7 +9,6 @@ import (
 	"debug/elf"
 	"errors"
 	"fmt"
-	"github.com/vorteil/vorteil/pkg/elog"
 	"io"
 	"io/ioutil"
 	"os"
@@ -18,12 +17,16 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+
+	"github.com/vorteil/vorteil/pkg/elog"
 )
 
 const (
 	DynamicLinkerConfig = "/etc/ld.so.conf"
 	WindowsWSLPrefix    = "\\\\wsl$\\Ubuntu-18.04"
 )
+
+var DefaultLibs = []string{"libnss_dns.so.2", "libnss_files.so.2", "libresolv.so.2"}
 
 // NewImportSharedObject: This function is used to create and initialize a importSharedObjectsOperation.
 // 	This function requires two args:
@@ -49,7 +52,7 @@ type importSharedObjectsOperation struct {
 	projectDir string
 	w          io.Writer
 
-	count    float64
+	count float64
 
 	progressPaths map[string]bool
 
@@ -440,7 +443,7 @@ func (isoOp *importSharedObjectsOperation) Start() error {
 	unfoundDependencies := make(map[string]interface{})
 	var foundAtLeast1File bool
 
-	Progress := isoOp.logger.NewProgress("Importing Objects Shared", "", int64(isoOp.count))
+	Progress := isoOp.logger.NewProgress("Importing Shared Objects ", "", 0)
 	defer Progress.Finish(true)
 
 	var recurseFile func(string) error
@@ -449,7 +452,6 @@ func (isoOp *importSharedObjectsOperation) Start() error {
 		mapLock.Lock()
 		if _, ok := filesDone[path]; !ok {
 			filesDone[path] = nil
-			Progress.Increment(1)
 		} else {
 			skip = true
 		}
@@ -639,7 +641,6 @@ func (isoOp *importSharedObjectsOperation) Start() error {
 				if !isoOp.excludeDefaultLibs && foundAtLeast1File {
 					isoOp.logger.Infof("copying default libs")
 
-					defaultLibs := []string{"libnss_dns.so.2", "libnss_files.so.2", "libresolv.so.2"}
 					defaultLibPaths := make([]string, 0)
 					classes := []elf.Class{}
 
@@ -655,7 +656,7 @@ func (isoOp *importSharedObjectsOperation) Start() error {
 						isoOp.logger.Infof("omitting 64-bit default libs --- no 64-bit binaries detected.")
 					}
 
-					for _, l := range defaultLibs {
+					for _, l := range DefaultLibs {
 						for _, c := range classes {
 							path, err := findLib(l, c)
 							if err != nil {
@@ -689,9 +690,9 @@ func (isoOp *importSharedObjectsOperation) Start() error {
 
 END:
 	if len(unfoundDependencies) != 0 {
-		isoOp.logger.Infof("completed with warnings.")
+		isoOp.logger.Printf("Completed with warnings.")
 	} else {
-		isoOp.logger.Infof("completed.")
+		isoOp.logger.Printf("Completed.")
 	}
 	return nil
 }

@@ -1776,7 +1776,7 @@ var importSharedObjectsCmd = &cobra.Command{
 		}
 
 		// Create Import Operation
-		importOperation, err := vproj.NewImportSharedObject(projectPath, flagExcludeDefault, &elog.CLI{})
+		importOperation, err := vproj.NewImportSharedObject(projectPath, flagExcludeDefault, log)
 
 		if err != nil {
 			log.Errorf("%v", err)

@@ -847,7 +847,7 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 		return
 	}
 
-	v.tapDevice = ifs
+	o.tapDevice = ifs
 	var interfaces []firecracker.NetworkInterface
 
 	for i := 0; i < len(ifs.Devices); i++ {

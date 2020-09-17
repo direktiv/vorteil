@@ -1771,7 +1771,7 @@ repositories:
 		pwd, _ := cmd.Flags().GetString("password")
 		config, _ := cmd.Flags().GetString("config")
 
-		cc, err := vconvert.NewContainerConverter(args[0], config, nil)
+		cc, err := vconvert.NewContainerConverter(args[0], config, log)
 		if err != nil {
 			log.Errorf("%v", err)
 			os.Exit(1)

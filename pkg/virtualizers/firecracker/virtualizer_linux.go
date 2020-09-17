@@ -158,7 +158,7 @@ func OrganiseTapDevices(w http.ResponseWriter, r *http.Request) {
 			}
 			// write interfaces back
 			returnDevices := &Devices{
-				devices: tapDevices,
+				Devices: tapDevices,
 			}
 			body, err := json.Marshal(returnDevices)
 			if err != nil {
@@ -827,7 +827,7 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	// TODO this needs to move into where the DHCP handler is
 	var interfaces []firecracker.NetworkInterface
 
-	for i := 0; i < len(ifs.devices); i++ {
+	for i := 0; i < len(ifs.Devices); i++ {
 		fmt.Printf("IFCE DEVICES: %s\n", ifs.Devices[i])
 		interfaces = append(interfaces,
 			firecracker.NetworkInterface{

@@ -669,13 +669,13 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	o.id = strings.Split(filepath.Base(o.folder), "-")[1]
 	diskpath := filepath.ToSlash(args.ImagePath)
 
-	logger := log.New()
-	logger.SetFormatter(&log.TextFormatter{
-		DisableColors: false,
-		ForceColors:   true,
-		FullTimestamp: true,
-	})
-	logger.Out = o
+	// logger := log.New()
+	// logger.SetFormatter(&log.TextFormatter{
+	// 	DisableColors: false,
+	// 	ForceColors:   true,
+	// 	FullTimestamp: true,
+	// })
+	// logger.Out = o
 
 	ctx := context.Background()
 	vmmCtx, vmmCancel := context.WithCancel(ctx)
@@ -776,7 +776,7 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	}
 
 	machineOpts := []firecracker.Opt{
-		firecracker.WithLogger(log.NewEntry(logger)),
+		firecracker.WithLogger(log.NewEntry(o.logger)),
 	}
 
 	// append new fields to overarching struct

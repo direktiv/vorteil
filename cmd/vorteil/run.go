@@ -353,12 +353,18 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG) error {
 			if finished {
 				return nil
 			}
+			// Need this function to end before we close the virtualizer
 			err = virt.Stop()
 			if err != nil {
 				log.Errorf(err.Error())
-				finished = true
 			}
-			time.Sleep(time.Second * 4)
+			for {
+				fmt.Printf("STATE: %s\n", virt.State())
+				if virt.State() == "ready" {
+					break
+				}
+				<-time.After(time.Second)
+			}
 			finished = true
 		case <-chBool:
 			return nil

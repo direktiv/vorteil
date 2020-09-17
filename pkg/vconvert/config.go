@@ -31,7 +31,7 @@ loadDefaults:
 		log.Debugf("using config file: %s", viper.ConfigFileUsed())
 	} else {
 		if err != nil {
-			log.Debugf("%s\n", err.Error())
+			log.Debugf("%s", err.Error())
 		}
 		log.Debugf("using default repositories")
 		viper.SetDefault("repositories",

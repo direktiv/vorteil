@@ -61,11 +61,11 @@ func (cc *ContainerConverter) downloadInformationContainerd(image, tag string) e
 
 func (cc *ContainerConverter) downloadInformationDocker(image, tag string) error {
 
-	cc.logger.Printf("getting local docker image %s (%s)", image, tag)
-
 	if len(image) == 0 || len(tag) == 0 {
 		return fmt.Errorf("image and tag value required")
 	}
+
+	cc.logger.Printf("getting local docker image %s (%s)", image, tag)
 
 	ctx := context.Background()
 	cli, err := client.NewClientWithOpts(client.FromEnv)

@@ -1771,12 +1771,17 @@ repositories:
 		pwd, _ := cmd.Flags().GetString("password")
 		config, _ := cmd.Flags().GetString("config")
 
-		err := vconvert.ConvertContainer(args[0], args[1], user, pwd, config)
+		cc, err := vconvert.NewContainerConverter(args[0], config, nil)
 		if err != nil {
 			log.Errorf("%v", err)
 			os.Exit(1)
 		}
 
+		err = cc.ConvertToProject(args[1], user, pwd)
+		if err != nil {
+			log.Errorf("%v", err)
+			os.Exit(1)
+		}
 	},
 }
 

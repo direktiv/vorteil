@@ -105,6 +105,8 @@ func NewContainerConverter(app, config string, log elog.View) (*ContainerConvert
 		return nil, err
 	}
 
+	log.Printf("convert image: %s", ref.Name())
+
 	cc := &ContainerConverter{
 		imageRef: ref,
 	}
@@ -147,22 +149,36 @@ func (cc *ContainerConverter) ConvertToProject(dst, user, pwd string) error {
 		return err
 	}
 
-	reg, err := fetchRepoConfig(cc.RegistryName())
-	if err != nil {
-		return err
+	var (
+		url string
+	)
+
+	if cc.RegistryType() == RemoteRegistry {
+		reg, err := fetchRepoConfig(cc.RegistryName())
+		if err != nil {
+			return err
+		}
+
+		url = reg["url"].(string)
+		if url == "" {
+			return fmt.Errorf("url not available for registry %s", cc.RegistryName())
+		}
+
+		cc.logger.Printf("registry %s, url %s", cc.RegistryName(), url)
+
+	} else {
+		cc.logger.Printf("registry %s", cc.RegistryType())
 	}
 
-	cc.logger.Printf("registry %s, url %s", cc.RegistryName(), reg["url"])
-
-	if reg["url"] == "" {
-		return fmt.Errorf("url not available for registry %s", cc.RegistryName())
-	}
-
-	cc.downloadImageInformation(&registryConfig{
-		url:  reg["url"].(string),
+	err = cc.downloadImageInformation(&registryConfig{
+		url:  url,
 		user: user,
 		pwd:  pwd,
 	})
+
+	if err != nil {
+		return err
+	}
 
 	dir, _ := ioutil.TempDir("", "vtest")
 	defer os.RemoveAll(dir)
@@ -215,9 +231,9 @@ func (cc *ContainerConverter) downloadImageInformation(config *registryConfig) e
 
 	switch cc.registryType {
 	case DockerRegistry:
-		err = cc.downloadInformationDocker("", "")
+		err = cc.downloadInformationDocker(cc.imageRef.ShortName(), cc.imageRef.Tag())
 	case ContainerdRegistry:
-		err = cc.downloadInformationContainerd("", "")
+		err = cc.downloadInformationContainerd(cc.imageRef.ShortName(), cc.imageRef.Tag())
 	default:
 		err = cc.downloadInformationRemote(config)
 	}
@@ -226,8 +242,6 @@ func (cc *ContainerConverter) downloadImageInformation(config *registryConfig) e
 }
 
 func (cc *ContainerConverter) downloadBlobs(dir string) error {
-
-	cc.logger.Printf("downloading blobs")
 
 	if dir == "" {
 		return fmt.Errorf("directory not provided for downloads")
@@ -247,7 +261,6 @@ func (cc *ContainerConverter) downloadBlobs(dir string) error {
 			number: i,
 			dir:    dir,
 		}
-		cc.logger.Printf("sending job")
 		cc.jobsCh <- job
 
 	}
@@ -266,7 +279,7 @@ func (cc *ContainerConverter) downloadBlobs(dir string) error {
 		}
 	}
 
-	cc.logger.Printf("download done")
+	cc.logger.Printf("all layers downloaded")
 	close(cc.jobsCh)
 
 	if cc.tmpLocalTar != nil {
@@ -290,7 +303,7 @@ func (cc *ContainerConverter) untarLayers(targetDir string) error {
 			return fmt.Errorf("no file associated with layer %s", layer.hash)
 		}
 
-		cc.logger.Printf("untar layer %s into %s", layer.file, targetDir)
+		cc.logger.Printf("unpack layer %s into %s", layer.file, targetDir)
 
 		fn, err := os.Open(layer.file)
 		if err != nil {
@@ -428,7 +441,7 @@ func (cc *ContainerConverter) createVCFG(config v1.Config, targetDir string) err
 		return err
 	}
 
-	cc.logger.Printf("vcfg file:\n%v\n", string(b))
+	cc.logger.Debugf("vcfg file:\n%v\n", string(b))
 
 	return nil
 
@@ -437,9 +450,10 @@ func (cc *ContainerConverter) createVCFG(config v1.Config, targetDir string) err
 func (cc *ContainerConverter) blobDownloadWorker() {
 
 	var (
-		// filename string
 		err    error
 		reader io.ReadCloser
+		pr     io.ReadCloser
+		p      elog.Progress
 	)
 
 	for {
@@ -448,31 +462,18 @@ func (cc *ContainerConverter) blobDownloadWorker() {
 		if !opened {
 			break
 		}
-		cc.logger.Printf("getting job")
+
 		reader, err = cc.fetchReader(cc.imageRef.ShortName(), job.layer, cc.registry)
 		if err != nil {
 			goto cont
 		}
-		// cc.logger.Printf("THISIS2")
-		// pr := cc.logger.NewProgress("wehat", "%", 0).ProxyReader(reader)
 
-		//
-		// 	// if we use json we don't show bars
-		// 	var proxyReader io.ReadCloser
-		// 	if !elog.IsJSON {
-		// 		proxyReader = job.bar.ProxyReader(reader)
-		// 	} else {
-		// 		log.Infof("downloading layer %s (%s)", ih.ImageRef.ShortName(), bytefmt.ByteSize((uint64)(job.layer.size)))
-		// 		proxyReader = reader
-		// 	}
-		// defer proxyReader.Close()
-		defer reader.Close()
-
+		p = cc.logger.NewProgress(fmt.Sprintf("layer %s:", job.layer.hash), "KiB", job.layer.size)
+		pr = p.ProxyReader(reader)
+		defer pr.Close()
 		job.name = fmt.Sprintf(tarExpression, job.dir, job.layer.hash)
 
-		cc.logger.Printf("downloading file to %s", job.name)
-
-		err = writeFile(job.name, reader)
+		err = writeFile(job.name, pr)
 		if err != nil {
 			goto cont
 		}
@@ -480,9 +481,14 @@ func (cc *ContainerConverter) blobDownloadWorker() {
 	cont:
 		job.err = err
 
+		if err != nil {
+			p.Finish(false)
+		} else {
+			p.Finish(true)
+		}
+
 		// set the file to the layer
 		cc.layers[job.number].file = job.name
-
 		cc.jobsDoneCh <- job
 
 	}

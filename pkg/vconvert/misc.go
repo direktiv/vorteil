@@ -22,7 +22,7 @@ var (
   vcfgs = ["default.vcfg"]`
 
 	// ignore folders
-	folders = []string{"dev", "proc", "sys", "boot", "media", "mnt"}
+	folders = []string{"dev", "proc", "sys", "boot", "media", "mnt", "tmp"}
 )
 
 // write function to write out tar layers

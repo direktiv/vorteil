@@ -71,7 +71,7 @@ func (cc *ContainerConverter) downloadInformationRemote(config *registryConfig) 
 
 func (cc *ContainerConverter) downloadManifest(manifest schema2.Manifest) (*cmanifest.Schema2V1Image, error) {
 
-	cc.logger.Infof("downloading manifest file")
+	cc.logger.Printf("downloading manifest file")
 
 	reader, err := cc.registry.DownloadBlob(cc.imageRef.ShortName(), manifest.Target().Digest)
 	defer reader.Close()

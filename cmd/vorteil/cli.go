@@ -15,7 +15,6 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
-	"github.com/vorteil/vorteil/pkg/elog"
 	"github.com/vorteil/vorteil/pkg/vcfg"
 	"github.com/vorteil/vorteil/pkg/vconvert"
 	"github.com/vorteil/vorteil/pkg/vdecompiler"
@@ -53,8 +52,8 @@ func commandInit() {
 	addModifyFlags(runCmd.Flags())
 
 	// setup logging across all commands
-	rootCmd.PersistentFlags().BoolVar(&elog.IsJSON, "json", false, "log output in JSON")
-	rootCmd.PersistentFlags().BoolVarP(&elog.IsDebug, "debug", "d", false, "enable debug output")
+	// rootCmd.PersistentFlags().BoolVar(&elog.IsJSON, "json", false, "log output in JSON")
+	// rootCmd.PersistentFlags().BoolVarP(&elog.IsDebug, "debug", "d", false, "enable debug output")
 
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
 
@@ -65,13 +64,13 @@ func commandInit() {
 
 		log.SetLevel(log.InfoLevel)
 
-		if elog.IsJSON {
-			log.SetFormatter(&log.JSONFormatter{})
-		}
+		// if elog.IsJSON {
+		// 	log.SetFormatter(&log.JSONFormatter{})
+		// }
 
-		if elog.IsDebug {
-			log.SetLevel(log.DebugLevel)
-		}
+		// if elog.IsDebug {
+		// 	log.SetLevel(log.DebugLevel)
+		// }
 
 		return nil
 	}

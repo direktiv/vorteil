@@ -13,7 +13,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/vorteil/vorteil/pkg/elog"
 	"github.com/vorteil/vorteil/pkg/vcfg"
 
 	"github.com/containerd/containerd/archive"
@@ -181,9 +180,9 @@ func (ih *imageHandler) downloadManifest(manifest schema2.Manifest) error {
 
 func (ih *imageHandler) downloadBlobs(manifest schema2.Manifest) {
 
-	if !elog.IsJSON {
-		log.SetOutput(ioutil.Discard)
-	}
+	// if !elog.IsJSON {
+	// 	log.SetOutput(ioutil.Discard)
+	// }
 
 	var ifs = make([]interface{}, len(manifest.Layers))
 	for i, d := range manifest.Layers {
@@ -201,9 +200,9 @@ func (ih *imageHandler) downloadBlobs(manifest schema2.Manifest) {
 
 	p.Wait()
 
-	if !elog.IsJSON {
-		log.SetOutput(os.Stdout)
-	}
+	// if !elog.IsJSON {
+	// 	log.SetOutput(os.Stdout)
+	// }
 }
 
 func (ih *imageHandler) untarLayers(targetDir string) error {

@@ -13,8 +13,6 @@ import (
 	"runtime"
 	"time"
 
-	log "github.com/sirupsen/logrus"
-
 	isatty "github.com/mattn/go-isatty"
 	"github.com/mitchellh/go-homedir"
 	"github.com/thanhpk/randstr"
@@ -49,13 +47,13 @@ func runFirecracker(pkgReader vpkg.Reader, cfg *vcfg.VCFG) error {
 	// Create parent directory as it doesn't exist
 	err = os.MkdirAll(parent, os.ModePerm)
 	if err != nil {
-		log.Error(err.Error())
+		log.Errorf("%v", err)
 		os.Exit(1)
 	}
 
 	f, err := ioutil.TempFile(parent, "vorteil.disk")
 	if err != nil {
-		log.Error(err.Error())
+		log.Errorf("%v", err)
 		os.Exit(1)
 	}
 	defer os.Remove(f.Name())
@@ -71,19 +69,19 @@ func runFirecracker(pkgReader vpkg.Reader, cfg *vcfg.VCFG) error {
 		},
 	})
 	if err != nil {
-		log.Error(err.Error())
+		log.Errorf("%v", err)
 		os.Exit(1)
 	}
 
 	err = f.Close()
 	if err != nil {
-		log.Error(err.Error())
+		log.Errorf("%v", err)
 		os.Exit(1)
 	}
 
 	err = pkgReader.Close()
 	if err != nil {
-		log.Error(err.Error())
+		log.Errorf("%v", err)
 		os.Exit(1)
 	}
 
@@ -92,7 +90,7 @@ func runFirecracker(pkgReader vpkg.Reader, cfg *vcfg.VCFG) error {
 	defer virt.Close(true)
 
 	if flagGUI {
-		log.Warn("firecracker does not support displaying a gui")
+		log.Warnf("firecracker does not support displaying a gui")
 	}
 
 	config := firecracker.Config{}
@@ -119,14 +117,14 @@ func runHyperV(pkgReader vpkg.Reader, cfg *vcfg.VCFG) error {
 	// Create parent directory as it doesn't exist
 	err := os.MkdirAll(parent, os.ModePerm)
 	if err != nil {
-		log.Error(err.Error())
+		log.Errorf("%v", err)
 		os.Exit(1)
 	}
 
 	// need to create a tempfile rather than use the function to as hyper-v complains if the extension doesn't exist
 	f, err := os.Create(filepath.Join(parent, "disk.vhd"))
 	if err != nil {
-		log.Error(err.Error())
+		log.Errorf("%v", err)
 		os.Exit(1)
 	}
 
@@ -143,19 +141,19 @@ func runHyperV(pkgReader vpkg.Reader, cfg *vcfg.VCFG) error {
 		},
 	})
 	if err != nil {
-		log.Error(err.Error())
+		log.Errorf("%v", err)
 		os.Exit(1)
 	}
 
 	err = f.Close()
 	if err != nil {
-		log.Error(err.Error())
+		log.Errorf("%v", err)
 		os.Exit(1)
 	}
 
 	err = pkgReader.Close()
 	if err != nil {
-		log.Error(err.Error())
+		log.Errorf("%v", err)
 		os.Exit(1)
 	}
 
@@ -187,13 +185,13 @@ func runVirtualBox(pkgReader vpkg.Reader, cfg *vcfg.VCFG) error {
 	// Create parent directory as it doesn't exist
 	err := os.MkdirAll(parent, os.ModePerm)
 	if err != nil {
-		log.Error(err.Error())
+		log.Errorf("%v", err)
 		os.Exit(1)
 	}
 
 	f, err := ioutil.TempFile(parent, "vorteil.disk")
 	if err != nil {
-		log.Error(err.Error())
+		log.Errorf("%v", err)
 		os.Exit(1)
 	}
 	defer os.Remove(f.Name())
@@ -209,19 +207,19 @@ func runVirtualBox(pkgReader vpkg.Reader, cfg *vcfg.VCFG) error {
 		},
 	})
 	if err != nil {
-		log.Error(err.Error())
+		log.Errorf("%v", err)
 		os.Exit(1)
 	}
 
 	err = f.Close()
 	if err != nil {
-		log.Error(err.Error())
+		log.Errorf("%v", err)
 		os.Exit(1)
 	}
 
 	err = pkgReader.Close()
 	if err != nil {
-		log.Error(err.Error())
+		log.Errorf("%v", err)
 		os.Exit(1)
 	}
 
@@ -254,13 +252,13 @@ func runQEMU(pkgReader vpkg.Reader, cfg *vcfg.VCFG) error {
 	// Create parent directory as it doesn't exist
 	err := os.MkdirAll(parent, os.ModePerm)
 	if err != nil {
-		log.Error(err.Error())
+		log.Errorf("%v", err)
 		os.Exit(1)
 	}
 
 	f, err := ioutil.TempFile(parent, "vorteil.disk")
 	if err != nil {
-		log.Error(err.Error())
+		log.Errorf("%v", err)
 		os.Exit(1)
 	}
 	defer os.Remove(f.Name())
@@ -275,19 +273,19 @@ func runQEMU(pkgReader vpkg.Reader, cfg *vcfg.VCFG) error {
 		},
 	})
 	if err != nil {
-		log.Error(err.Error())
+		log.Errorf("%v", err)
 		os.Exit(1)
 	}
 
 	err = f.Close()
 	if err != nil {
-		log.Error(err.Error())
+		log.Errorf("%v", err)
 		os.Exit(1)
 	}
 
 	err = pkgReader.Close()
 	if err != nil {
-		log.Error(err.Error())
+		log.Errorf("%v", err)
 		os.Exit(1)
 	}
 

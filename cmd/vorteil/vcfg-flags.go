@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/mattn/go-shellwords"
-	log "github.com/sirupsen/logrus"
 	"github.com/spf13/pflag"
 	"github.com/vorteil/vorteil/pkg/vcfg"
 )
@@ -503,7 +502,7 @@ var sysctlFlag = stringSliceFlag{
 			x := strings.Split(s, "=")
 
 			if len(x) < 2 {
-				log.Warn("invalid sysctl tuple '%s'", s)
+				log.Warnf("invalid sysctl tuple '%s'", s)
 			}
 
 			if overrideVCFG.Sysctl == nil {

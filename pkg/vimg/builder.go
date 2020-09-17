@@ -6,6 +6,7 @@ import (
 	"io"
 	"math/rand"
 
+	"github.com/vorteil/vorteil/pkg/elog"
 	"github.com/vorteil/vorteil/pkg/vcfg"
 	"github.com/vorteil/vorteil/pkg/vkern"
 )
@@ -32,11 +33,13 @@ type BuilderArgs struct {
 	Kernel     KernelOptions
 	FSCompiler FSCompiler
 	VCFG       *vcfg.VCFG
+	Logger     elog.View
 }
 
 type Builder struct {
 
 	// The following variables need to be calculated in the NewBuilder step.
+	log           elog.View
 	rng           io.Reader
 	minSize       int64
 	fs            FSCompiler
@@ -74,14 +77,16 @@ func NewBuilder(ctx context.Context, args *BuilderArgs) (*Builder, error) {
 		return nil, err
 	}
 
-	// TODO: build logs
-
 	b := new(Builder)
 	b.rng = rand.New(rand.NewSource(args.Seed))
 	b.fs = args.FSCompiler
 	b.vcfg = args.VCFG
 	b.kernelOptions = args.Kernel
 	b.defaultMTU = 1500
+	b.log = args.Logger
+
+	progress := b.log.NewProgress("Scanning inputs", "", 0)
+	defer progress.Finish(false)
 
 	err = b.validateArgs(ctx)
 	if err != nil {
@@ -92,6 +97,8 @@ func NewBuilder(ctx context.Context, args *BuilderArgs) (*Builder, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	progress.Finish(true)
 
 	return b, nil
 }
@@ -192,11 +199,15 @@ func (b *Builder) Prebuild(ctx context.Context, size int64) error {
 
 func (b *Builder) Build(ctx context.Context, w io.WriteSeeker) error {
 
-	err := b.writePartitions(ctx, w)
+	progress := b.log.NewProgress("Writing image", "%", b.size)
+	defer progress.Finish(false)
+
+	err := b.writePartitions(ctx, elog.MultiWriteSeeker(w, progress))
 	if err != nil {
 		return err
 	}
 
+	progress.Finish(true)
 	return nil
 
 }

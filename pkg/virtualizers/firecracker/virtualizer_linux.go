@@ -42,7 +42,7 @@ func FetchBridgeDev() error {
 	}
 	return err
 }
-func SetupBridgeAndDHCPServer(port string) error {
+func SetupBridgeAndDHCPServer() error {
 
 	// Create bridge device
 	bridger, err := tenus.NewBridgeWithName("vorteil-bridge")
@@ -77,7 +77,7 @@ func SetupBridgeAndDHCPServer(port string) error {
 	// create server handler to create tap devices under sudo
 	http.HandleFunc("/", OrganiseTapDevices)
 	go func() {
-		http.Listen(":7476", port, nil)
+		http.ListenAndServe(":7476", nil)
 	}()
 
 	// create dhcp server on an interface

@@ -37,7 +37,7 @@ type Virtualizer struct {
 	folder        string         // folder to store vm details
 	disk          *os.File       // disk of the machine
 	serialLogger  *logger.Logger // serial logger for serial output of app
-	logger        *elog.CLI      // logger for the CLI
+	logger        elog.Logger    // logger for the CLI
 	// subServer *graph.Graph
 	routes []virtualizers.NetworkInterface // api network interface that displays ports
 	config *vcfg.VCFG                      // config for the vm
@@ -489,7 +489,7 @@ func (v *Virtualizer) Detach(source string) error {
 // execute is generic wrapping function to run command execs
 func (v *Virtualizer) execute(cmd *exec.Cmd) error {
 	if !strings.Contains(strings.Join(cmd.Args, " "), "showvminfo") {
-		v.logger.Infof("Executing %s", strings.Join(cmd.Args, " "))
+		v.logger.Printf("Executing %s", strings.Join(cmd.Args, " "))
 	}
 
 	stderr := new(bytes.Buffer)

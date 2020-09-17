@@ -100,7 +100,7 @@ type Virtualizer struct {
 	disk         *os.File       // disk of the machine
 	source       interface{}    // details about how the vm was made
 	kip          string         // vmlinux full path
-	logger       *elog.CLI      // logger
+	logger       elog.Logger    // logger
 	serialLogger *logger.Logger // logs for the serial of the vm
 
 	routes []virtualizers.NetworkInterface // api network interface that displays ports
@@ -644,7 +644,7 @@ func (v *Virtualizer) lookForIP() string {
 // Write method to handle logging from firecracker to use our logger interface
 func (v *Virtualizer) Write(d []byte) (n int, err error) {
 	n = len(d)
-	v.logger.Infof(string(d))
+	v.logger.Printf(string(d))
 	return
 }
 

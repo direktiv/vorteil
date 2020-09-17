@@ -16,7 +16,6 @@ import (
 	isatty "github.com/mattn/go-isatty"
 	"github.com/mitchellh/go-homedir"
 	"github.com/thanhpk/randstr"
-	"github.com/vorteil/vorteil/pkg/elog"
 	"github.com/vorteil/vorteil/pkg/vcfg"
 	"github.com/vorteil/vorteil/pkg/vdisk"
 	"github.com/vorteil/vorteil/pkg/virtualizers"
@@ -67,6 +66,7 @@ func runFirecracker(pkgReader vpkg.Reader, cfg *vcfg.VCFG) error {
 		KernelOptions: vdisk.KernelOptions{
 			Shell: flagShell,
 		},
+		Logger: log,
 	})
 	if err != nil {
 		log.Errorf("%v", err)
@@ -139,6 +139,7 @@ func runHyperV(pkgReader vpkg.Reader, cfg *vcfg.VCFG) error {
 		KernelOptions: vdisk.KernelOptions{
 			Shell: flagShell,
 		},
+		Logger: log,
 	})
 	if err != nil {
 		log.Errorf("%v", err)
@@ -205,6 +206,7 @@ func runVirtualBox(pkgReader vpkg.Reader, cfg *vcfg.VCFG) error {
 		KernelOptions: vdisk.KernelOptions{
 			Shell: flagShell,
 		},
+		Logger: log,
 	})
 	if err != nil {
 		log.Errorf("%v", err)
@@ -271,6 +273,7 @@ func runQEMU(pkgReader vpkg.Reader, cfg *vcfg.VCFG) error {
 		KernelOptions: vdisk.KernelOptions{
 			Shell: flagShell,
 		},
+		Logger: log,
 	})
 	if err != nil {
 		log.Errorf("%v", err)
@@ -319,7 +322,7 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG) error {
 		PName:     virt.Type(),
 		Start:     true,
 		Config:    cfg,
-		Logger:    &elog.CLI{},
+		Logger:    log,
 		FCPath:    filepath.Join(home, ".vorteild", "firecracker-vm"),
 		ImagePath: diskpath,
 	})

@@ -53,9 +53,9 @@ func (v *Virtualizer) Start() error {
 				if err == nil {
 					socketFound = true
 					polling = false
-					v.logger.Infof("Connected to socket at '%s'", filepath.ToSlash(filepath.Join(v.folder, "monitor.sock")))
+					v.logger.Printf("Connected to socket at '%s'", filepath.ToSlash(filepath.Join(v.folder, "monitor.sock")))
 				} else {
-					v.logger.Infof("Attempting to dial socket at '%s'", filepath.ToSlash(filepath.Join(v.folder, "monitor.sock")))
+					v.logger.Printf("Attempting to dial socket at '%s'", filepath.ToSlash(filepath.Join(v.folder, "monitor.sock")))
 				}
 				count++
 				time.Sleep(time.Second * 1)
@@ -128,7 +128,7 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	}
 	o.command.Args = append(o.command.Args, netArgs...)
 
-	o.logger.Infof("Creating QEMU VM with Args: %s", strings.Join(o.command.Args, " "))
+	o.logger.Printf("Creating QEMU VM with Args: %s", strings.Join(o.command.Args, " "))
 
 	o.state = "ready"
 

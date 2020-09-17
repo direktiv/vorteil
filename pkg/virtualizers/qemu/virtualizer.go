@@ -49,7 +49,7 @@ type Virtualizer struct {
 	disk        *os.File    // disk of the machine
 	source      interface{} // details about how the vm was made
 	// loggers
-	logger *elog.CLI
+	logger elog.Logger
 	// virtLogger   *logger.Logger // logs about the provisioning process
 	serialLogger *logger.Logger // logs for the serial of the vm
 	// QEMU Specific

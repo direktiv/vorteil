@@ -11,7 +11,6 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
-	"time"
 
 	isatty "github.com/mattn/go-isatty"
 	"github.com/mitchellh/go-homedir"
@@ -338,11 +337,10 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG) error {
 	var finished bool
 	for {
 		select {
-		case <-time.After(time.Millisecond * 200):
-			if finished {
-				virt.Close(false)
-				return nil
-			}
+		// case <-time.After(time.Millisecond * 200):
+		// 	if finished {
+		// 		return nil
+		// 	}
 		case msg, more := <-s:
 			if !more {
 				return nil
@@ -352,7 +350,10 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG) error {
 			if finished {
 				return nil
 			}
-
+			err = virt.Close(false)
+			if err != nil {
+				log.Errorf(err.Error())
+			}
 			finished = true
 		case <-chBool:
 			return nil

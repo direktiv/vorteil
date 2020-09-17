@@ -27,6 +27,7 @@ type Progress interface {
 	Increment(n int64)
 	Write(p []byte) (n int, err error)
 	Seek(offset int64, whence int) (int64, error)
+	ProxyReader(r io.Reader) io.ReadCloser
 }
 
 type ProgressReporter interface {
@@ -102,7 +103,7 @@ func (log *CLI) NewProgress(label string, units string, total int64) Progress {
 		)
 	} else {
 		p = log.progressContainer.AddBar(total,
-			mpb.BarStyle("╢▌▌░╟"),
+			// mpb.BarStyle("╢▌▌░╟"),
 			mpb.PrependDecorators(
 				// display our name with one space on the right
 				decor.Name(label, decor.WC{W: len(label) + 1, C: decor.DidentRight}),
@@ -192,6 +193,10 @@ func (pb *pb) Seek(offset int64, whence int) (int64, error) {
 	}
 
 	return abs, nil
+}
+
+func (pb *pb) ProxyReader(r io.Reader) io.ReadCloser {
+	return pb.p.ProxyReader(r)
 }
 
 type mws struct {

@@ -339,6 +339,7 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG) error {
 		select {
 		case <-time.After(time.Millisecond * 200):
 			if finished && virt.State() == "ready" {
+				serialSubscription.Close()
 				return nil
 			}
 		case msg, more := <-s:
@@ -355,7 +356,6 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG) error {
 				log.Errorf(err.Error())
 			}
 			finished = true
-			serialSubscription.Close()
 		case <-chBool:
 			return nil
 		}

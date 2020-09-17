@@ -94,8 +94,8 @@ func SetupBridgeAndDHCPServer(port string) error {
 }
 
 type CreateDevices struct {
-	id     string   `json:"id"`
-	routes []string `json:"routes"`
+	id     string                           `json:"id"`
+	routes []virtualizers.NetworkInterfaces `json:"routes"`
 }
 
 type Devices struct {
@@ -170,7 +170,7 @@ func OrganiseTapDevices(w http.ResponseWriter, r *http.Request) {
 			io.Copy(w, bytes.NewBuffer(body))
 		}
 	case http.MethodDelete:
-		var dd DeleteDevices
+		var dd Devices
 		err := json.NewDecoder(r.Body).Decode(&dd)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
@@ -800,12 +800,12 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 		id:     o.id,
 		routes: o.routes,
 	}
-	cd, err = json.Marshal(cd)
+	cdm, err = json.Marshal(cd)
 	if err != nil {
 		returnErr = err
 		return
 	}
-	resp, err := http.Post("http://localhost:7476/", "application/json", bytes.NewBuffer(cd))
+	resp, err := http.Post("http://localhost:7476/", "application/json", bytes.NewBuffer(cdm))
 	if err != nil {
 		returnErr = err
 		return
@@ -818,7 +818,7 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 		return
 	}
 	var ifs Devices
-	err = json.Unmarshal(body, Devices)
+	err = json.Unmarshal(body, ifs)
 	if err != nil {
 		returnErr = err
 		return
@@ -827,7 +827,7 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	// TODO this needs to move into where the DHCP handler is
 	var interfaces []firecracker.NetworkInterface
 
-	for i := 0; i < ifs.devices.length; i++ {
+	for i := 0; i < len(ifs.devices); i++ {
 		interfaces = append(interfaces,
 			firecracker.NetworkInterface{
 				StaticConfiguration: &firecracker.StaticNetworkConfiguration{

@@ -108,7 +108,7 @@ func OrganiseTapDevices(w http.ResponseWriter, r *http.Request) {
 		var cd CreateDevices
 		var tapDevices []string
 
-		err := json.NewDecoder(r.Body).Decode(cd)
+		err := json.NewDecoder(r.Body).Decode(&cd)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 		}

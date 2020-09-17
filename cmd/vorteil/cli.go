@@ -1742,7 +1742,7 @@ func init() {
 var convertContainerCmd = &cobra.Command{
 	Use:   "convert-container REPO:APP DESTFOLDER",
 	Args:  cobra.ExactValidArgs(2),
-	Short: "Convert containers into vortil.io virtual machines",
+	Short: "Convert containers into vorteil.io virtual machines",
 	Long: `Convert containers into vorteil.io project folders. This command can convert
 containers from a remote repository as well as from local container runtimes.
 At the moment docker and containerd are supported.

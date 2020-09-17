@@ -691,12 +691,15 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 		return
 	}
 	o.log("debug", "Finished getting VMLinux")
+
+	// TODO this needs to move into where the DHCP handler is
 	// get bridge device
 	bridgeDev, err := tenus.BridgeFromName("vorteil-bridge")
 	if err != nil {
 		returnErr = err
 		return
 	}
+
 	o.bridgeDevice = bridgeDev
 	var interfaces []firecracker.NetworkInterface
 	// set network adapters
@@ -750,6 +753,7 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 			o.tapDevice = append(o.tapDevice, linkDev)
 		}
 	}
+	//END TODO
 
 	fcCfg := firecracker.Config{
 		SocketPath:      filepath.Join(o.folder, fmt.Sprintf("%s.%s", o.name, "socket")),

@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/mitchellh/go-homedir"
-	log "github.com/sirupsen/logrus"
 	"github.com/sisatech/tablewriter"
 	"github.com/sisatech/toml"
 	"github.com/spf13/pflag"
@@ -29,7 +28,7 @@ func main() {
 
 	err := rootCmd.Execute()
 	if err != nil {
-		log.Error(err.Error())
+		log.Errorf("%v", err.Error())
 		os.Exit(1)
 	}
 }

@@ -108,7 +108,7 @@ func OrganiseTapDevices(w http.ResponseWriter, r *http.Request) {
 		var cd CreateDevices
 		var tapDevices []string
 
-		err := json.NewDecoder(r.Body).Decode(&cd)
+		err := json.NewDecoder(r.Body).Decode(cd)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 		}
@@ -807,6 +807,7 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 		returnErr = err
 		return
 	}
+	fmt.Printf("SENDING: %s\n", string(cdm))
 	resp, err := http.Post("http://localhost:7476/", "application/json", bytes.NewBuffer(cdm))
 	if err != nil {
 		fmt.Printf("ER2")

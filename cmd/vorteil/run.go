@@ -11,6 +11,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"syscall"
 	"time"
 
 	isatty "github.com/mattn/go-isatty"
@@ -340,13 +341,11 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG) error {
 		select {
 		case <-time.After(time.Millisecond * 200):
 			if finished && virt.State() == "ready" {
-				fmt.Printf("HEY...")
 				virt.Close(true)
 				return nil
 			}
 		case msg, more := <-s:
 			if !more {
-				fmt.Printf("HELLO..")
 				virt.Close(true)
 				return nil
 			}
@@ -354,6 +353,10 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG) error {
 		case <-signalChannel:
 			if finished {
 				return nil
+			}
+			err = virt.Stop()
+			if err != nil {
+				log.Errorf(err.Error())
 			}
 			finished = true
 		case <-chBool:
@@ -382,7 +385,7 @@ func raw(start bool) error {
 func listenForInterupt() (chan os.Signal, chan bool) {
 	var signalChannel chan os.Signal
 	signalChannel = make(chan os.Signal, 1)
-	signal.Notify(signalChannel, os.Interrupt, os.Kill)
+	signal.Notify(signalChannel, os.Interrupt, os.Kill, syscall.SIGTERM)
 	chBool := make(chan bool, 1)
 
 	// check if this is running in a sygwin terminal, interupt signals are difficult to capture

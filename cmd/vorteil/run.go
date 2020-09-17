@@ -337,7 +337,7 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG) error {
 	for {
 		select {
 		case <-time.After(time.Millisecond * 200):
-			if finished && virt.State() == "ready" {
+			if finished && virt.State() == "deleted" {
 				serialSubscription.Close()
 				return nil
 			}

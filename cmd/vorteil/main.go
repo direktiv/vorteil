@@ -27,8 +27,8 @@ func main() {
 	commandInit()
 
 	err := rootCmd.Execute()
+
 	if err != nil {
-		log.Errorf("%v", err.Error())
 		os.Exit(1)
 	}
 }

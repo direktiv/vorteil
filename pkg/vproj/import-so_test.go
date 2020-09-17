@@ -3,6 +3,7 @@ package vproj
 import (
 	"debug/elf"
 	"fmt"
+	"github.com/vorteil/vorteil/pkg/elog"
 	"io"
 	"io/ioutil"
 	"os"
@@ -14,7 +15,7 @@ import (
 )
 
 func TestSharedObjectInitializationInvalid(t *testing.T) {
-	isoOp, err := NewImportSharedObject("/tmp/no-existent-Path", true)
+	isoOp, err := NewImportSharedObject("/tmp/no-existent-Path", true, &elog.CLI{})
 	assert.Error(t, err)
 	assert.Nil(t, isoOp)
 }
@@ -28,7 +29,7 @@ func TestSharedObjectInitializationValid(t *testing.T) {
 	assert.NoError(t, err, "Could not copy Go binary to Temp Path: " + dir)
 
 
-	isoOp, err := NewImportSharedObject(dir, true)
+	isoOp, err := NewImportSharedObject(dir, true, &elog.CLI{})
 	assert.NoError(t, err)
 	assert.NotNil(t, isoOp)
 }
@@ -47,14 +48,14 @@ func TestSharedObjectInitializationStart(t *testing.T) {
 	err = copyGoBinaryToDir(dir)
 	assert.NoError(t, err, "Could not copy Go binary to Temp Path: " + dir)
 
-	isoOp, err := NewImportSharedObject(dir, false)
+	isoOp, err := NewImportSharedObject(dir, false, &elog.CLI{})
 	assert.NoError(t, err)
 	assert.NotNil(t, isoOp)
 
 	err = isoOp.Start()
 	assert.NoError(t, err)
 
-	isoOpExclude, err := NewImportSharedObject(dirExclude, true)
+	isoOpExclude, err := NewImportSharedObject(dirExclude, true, &elog.CLI{})
 	assert.NoError(t, err)
 	assert.NotNil(t, isoOpExclude)
 
@@ -132,7 +133,7 @@ func TestSharedObjectFindDeps(t *testing.T) {
 	assert.NoError(t, err, "Could not get Go binary dependencies")
 	assert.Greater(t, len(goDeps), 0, "Go binary has no dependencies")
 
-	isoOp, err := NewImportSharedObject(dir, true)
+	isoOp, err := NewImportSharedObject(dir, true, &elog.CLI{})
 	assert.NoError(t, err)
 	assert.NotNil(t, isoOp)
 

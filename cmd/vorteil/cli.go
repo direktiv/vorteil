@@ -5,6 +5,7 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"fmt"
+	"github.com/vorteil/vorteil/pkg/elog"
 	"io"
 	"io/ioutil"
 	"os"
@@ -1763,7 +1764,7 @@ var importSharedObjectsCmd = &cobra.Command{
 		}
 
 		// Create Import Operation
-		importOperation, err := vproj.NewImportSharedObject(projectPath, flagExcludeDefault)
+		importOperation, err := vproj.NewImportSharedObject(projectPath, flagExcludeDefault, &elog.CLI{})
 
 		if err != nil {
 			log.Error(err.Error())

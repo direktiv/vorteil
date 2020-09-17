@@ -504,7 +504,7 @@ func (o *operation) finished(err error) {
 		o.Status <- fmt.Sprintf("Failed: %v", err)
 		o.Error <- err
 	}
-
+	o.logger.Errorf("Error: %v", err)
 	close(o.Logs)
 	close(o.Status)
 	close(o.Error)

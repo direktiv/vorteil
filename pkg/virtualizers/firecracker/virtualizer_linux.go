@@ -535,12 +535,37 @@ func (v *Virtualizer) Stop() error {
 	if v.state != virtualizers.Ready {
 		v.state = virtualizers.Changing
 
-		err := v.machine.Shutdown(v.vmmCtx)
+		// API way of shutting down vm seems bugged going to send request myself for now.
+		// err := v.machine.Shutdown(v.vmmCtx)
+		// if err != nil {
+		// 	return err
+		// }
+		client := &http.Client{
+			Transport: &http.Transport{
+				Dial: net.Dial("unix", v.fconfig.SocketPath)
+			},
+		}
+		reqBody := map[string]string{
+			"action_type": "SendCtrlAltDel",
+		}
+		data, err := json.Marshal(reqBody)
 		if err != nil {
 			return err
 		}
-		// wait for shutdown don't think theres a better way other than a sleep
 
+		req, err := http.NewRequest("PUT", "http://localhost/actions", bytes.NewBuffer(data))
+		if err != nil {
+			return err
+		}
+
+		req.Header.Add("accept", "application/json")
+		req.Header.Add("Content-Type", "application/json")
+
+		resp, err := client.Do(req)
+		if err != nil {
+			return err
+		}
+defer resp.Body.Close()
 		v.state = virtualizers.Ready
 
 	} else {

@@ -12,8 +12,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/vorteil/vorteil/pkg/elog"
-
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 

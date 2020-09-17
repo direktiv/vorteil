@@ -11,6 +11,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"time"
 
 	isatty "github.com/mattn/go-isatty"
 	"github.com/mitchellh/go-homedir"
@@ -321,9 +322,9 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG) error {
 		PName:     virt.Type(),
 		Start:     true,
 		Config:    cfg,
-		Logger:    log,
 		FCPath:    filepath.Join(home, ".vorteild", "firecracker-vm"),
 		ImagePath: diskpath,
+		Logger:    log,
 	})
 
 	serial := virt.Serial()
@@ -337,12 +338,14 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG) error {
 	var finished bool
 	for {
 		select {
-		// case <-time.After(time.Millisecond * 200):
-		// 	if finished {
-		// 		return nil
-		// 	}
+		case <-time.After(time.Millisecond * 200):
+			if finished && virt.State() == "ready" {
+				virt.Close(false)
+				return nil
+			}
 		case msg, more := <-s:
 			if !more {
+				virt.Close(false)
 				return nil
 			}
 			fmt.Print(string(msg))
@@ -350,11 +353,8 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG) error {
 			if finished {
 				return nil
 			}
-			err = virt.Close(false)
-			if err != nil {
-				log.Errorf(err.Error())
-			}
 			finished = true
+			go virt.Stop()
 		case <-chBool:
 			return nil
 		}
@@ -386,6 +386,7 @@ func listenForInterupt() (chan os.Signal, chan bool) {
 
 	// check if this is running in a sygwin terminal, interupt signals are difficult to capture
 	if isatty.IsCygwinTerminal(os.Stdout.Fd()) {
+
 		go func() {
 			raw(true)
 			for {

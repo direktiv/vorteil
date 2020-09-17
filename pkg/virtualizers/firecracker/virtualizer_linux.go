@@ -83,7 +83,6 @@ func SetupBridgeAndDHCPServer() error {
 	// create server handler to create tap devices under sudo
 	http.HandleFunc("/", OrganiseTapDevices)
 	go func() {
-		fmt.Println("listenandserve")
 		http.ListenAndServe(":7476", nil)
 	}()
 	// Start dhcp server to listen
@@ -104,7 +103,6 @@ type Devices struct {
 func OrganiseTapDevices(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodPost:
-		fmt.Printf("POST")
 		var cd CreateDevices
 		var tapDevices []string
 
@@ -112,7 +110,6 @@ func OrganiseTapDevices(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 		}
-		fmt.Printf("CD: %v", cd)
 
 		// get bridge device
 		bridgeDev, err := tenus.BridgeFromName("vorteil-bridge")
@@ -803,16 +800,12 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 
 	cdm, err := json.Marshal(cd)
 	if err != nil {
-		fmt.Printf("ER")
 		returnErr = err
 		return
 	}
 
-	fmt.Printf("SENDING: %s\n", cdm)
 	resp, err := http.Post("http://localhost:7476/", "application/json", bytes.NewBuffer(cdm))
 	if err != nil {
-		fmt.Printf("ER2")
-
 		returnErr = err
 		return
 	}
@@ -820,17 +813,13 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	defer resp.Body.Close()
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		fmt.Printf("ER3")
 		returnErr = err
 		return
 	}
 
-	fmt.Printf("BODY:%s\n", string(body))
 	var ifs Devices
 	err = json.Unmarshal(body, &ifs)
 	if err != nil {
-		fmt.Printf("ER4")
-
 		returnErr = err
 		return
 	}
@@ -839,10 +828,11 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	var interfaces []firecracker.NetworkInterface
 
 	for i := 0; i < len(ifs.devices); i++ {
+		fmt.Printf("IFCE DEVICES: %s\n", ifs.Devices[i])
 		interfaces = append(interfaces,
 			firecracker.NetworkInterface{
 				StaticConfiguration: &firecracker.StaticNetworkConfiguration{
-					HostDevName: ifs.devices[i],
+					HostDevName: ifs.Devices[i],
 				},
 			},
 		)

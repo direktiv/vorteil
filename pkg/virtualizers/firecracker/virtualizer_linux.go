@@ -97,7 +97,7 @@ type CreateDevices struct {
 }
 
 type Devices struct {
-	devices []string `json:"devices"`
+	Devices []string `json:"devices"`
 }
 
 func OrganiseTapDevices(w http.ResponseWriter, r *http.Request) {

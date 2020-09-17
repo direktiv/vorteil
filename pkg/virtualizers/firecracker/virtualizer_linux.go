@@ -93,8 +93,8 @@ func SetupBridgeAndDHCPServer() error {
 }
 
 type CreateDevices struct {
-	id     string `json:"id"`
-	routes int    `json:"count"`
+	Id     string `json:"id"`
+	Routes int    `json:"count"`
 }
 
 type Devices struct {
@@ -122,9 +122,9 @@ func OrganiseTapDevices(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// set network adapters
-		if cd.routes > 0 {
-			for i := 0; i < cd.routes; i++ {
-				ifceName := fmt.Sprintf("%s-%s", cd.id, strconv.Itoa(i))
+		if cd.Routes > 0 {
+			for i := 0; i < cd.Routes; i++ {
+				ifceName := fmt.Sprintf("%s-%s", cd.Id, strconv.Itoa(i))
 
 				// create tap device
 				config := water.Config{
@@ -797,8 +797,8 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	o.log("debug", "Finished getting VMLinux")
 
 	cd := CreateDevices{
-		id:     o.id,
-		routes: len(o.routes),
+		Id:     o.id,
+		Routes: len(o.routes),
 	}
 
 	cdm, err := json.Marshal(cd)

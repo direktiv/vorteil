@@ -94,6 +94,16 @@ func (log *CLI) NewProgress(label string, units string, total int64) Progress {
 		log.bars = make(map[*mpb.Bar]bool)
 	}
 
+	var decorators []decor.Decorator
+	switch units {
+	default:
+		fallthrough
+	case "%":
+		decorators = append(decorators, decor.Percentage())
+	case "KiB":
+		decorators = append(decorators, decor.Counters(decor.UnitKiB, "% .1f / % .1f"))
+	}
+
 	var p *mpb.Bar
 	if total == 0 {
 		p = log.progressContainer.AddSpinner(0, mpb.SpinnerOnLeft,
@@ -112,7 +122,7 @@ func (log *CLI) NewProgress(label string, units string, total int64) Progress {
 					decor.AverageETA(decor.ET_STYLE_GO, decor.WC{W: 4}), "done",
 				),
 			),
-			mpb.AppendDecorators(decor.Percentage()),
+			mpb.AppendDecorators(decorators...),
 		)
 	}
 

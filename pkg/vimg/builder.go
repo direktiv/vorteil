@@ -199,7 +199,7 @@ func (b *Builder) Prebuild(ctx context.Context, size int64) error {
 
 func (b *Builder) Build(ctx context.Context, w io.WriteSeeker) error {
 
-	progress := b.log.NewProgress("Writing image", "%", b.size)
+	progress := b.log.NewProgress("Writing image", "KiB", b.size)
 	defer progress.Finish(false)
 
 	err := b.writePartitions(ctx, elog.MultiWriteSeeker(w, progress))

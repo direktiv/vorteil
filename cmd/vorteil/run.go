@@ -385,7 +385,7 @@ func raw(start bool) error {
 func listenForInterupt() (chan os.Signal, chan bool) {
 	var signalChannel chan os.Signal
 	signalChannel = make(chan os.Signal, 1)
-	signal.Notify(signalChannel, syscall.SIGTERM)
+	signal.Notify(signalChannel, os.Interrupt, syscall.SIGTERM)
 	chBool := make(chan bool, 1)
 
 	// check if this is running in a sygwin terminal, interupt signals are difficult to capture

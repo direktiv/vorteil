@@ -2026,7 +2026,7 @@ and cleaning up the instance when it's done.`,
 
 func init() {
 	f := runCmd.Flags()
-	f.StringVar(&flagPlatform, "platform", "qemu", "run a virtual machine with appropriate hypervisor (QEMU, Firecracker, Virtualbox, Hyper-V)")
+	f.StringVar(&flagPlatform, "platform", "qemu", "run a virtual machine with appropriate hypervisor (qemu, firecracker, virtualbox, hyper-v)")
 	f.BoolVar(&flagGUI, "gui", false, "when running virtual machine show gui of hypervisor")
 	f.BoolVar(&flagShell, "shell", false, "add a busybox shell environment to the image")
 }

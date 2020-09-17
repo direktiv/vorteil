@@ -641,6 +641,13 @@ func (v *Virtualizer) lookForIP() string {
 	return ""
 }
 
+// Write method to handle logging from firecracker to use our logger interface
+func (v *Virtualizer) Write(d []byte) (n int, err error) {
+	n = len(d)
+	v.logger.Printf(string(d))
+	return
+}
+
 // prepare sets the fields and arguments to spawn the virtual machine
 func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	var returnErr error
@@ -668,8 +675,7 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 		ForceColors:   true,
 		FullTimestamp: true,
 	})
-	// dump firecracker to the screen
-	logger.Out = os.Stdout
+	logger.Out = o.logger
 
 	ctx := context.Background()
 	vmmCtx, vmmCancel := context.WithCancel(ctx)

@@ -675,7 +675,7 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 		ForceColors:   true,
 		FullTimestamp: true,
 	})
-	logger.Out = v
+	logger.Out = o
 
 	ctx := context.Background()
 	vmmCtx, vmmCancel := context.WithCancel(ctx)

@@ -2,6 +2,7 @@
 package firecracker
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -40,7 +41,7 @@ func FetchBridgeDev() error {
 	}
 	return err
 }
-func SetupBridgeAndDHCPServer() error {
+func SetupBridgeAndDHCPServer(port string) error {
 
 	// Create bridge device
 	bridger, err := tenus.NewBridgeWithName("vorteil-bridge")
@@ -71,6 +72,13 @@ func SetupBridgeAndDHCPServer() error {
 			return err
 		}
 	}
+
+	// create server handler to create tap devices under sudo
+	http.HandleFunc("/", OrganiseTapDevices)
+	go func() {
+		http.ListenAndServe(":7476", port, nil)
+	}()
+
 	// create dhcp server on an interface
 	server := dhcpHandler.NewHandler()
 	pc, err := conn.NewUDP4BoundListener("vorteil-bridge", ":67")
@@ -82,6 +90,95 @@ func SetupBridgeAndDHCPServer() error {
 	dhcp.Serve(pc, server)
 
 	return nil
+}
+
+type CreateDevices struct {
+	id     string   `json:"id"`
+	routes []string `json:"routes"`
+}
+
+type Devices struct {
+	devices []string `json:"devices"`
+}
+
+func OrganiseTapDevices(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodPost:
+		var cd CreateDevices
+		var tapDevices []string
+
+		err := json.NewDecoder(r.Body).Decode(&cd)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		}
+
+		// get bridge device
+		bridgeDev, err := tenus.BridgeFromName("vorteil-bridge")
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+
+		}
+
+		// set network adapters
+		if len(cd.routes) > 0 {
+			for i := 0; i < len(cd.routes); i++ {
+				ifceName := fmt.Sprintf("%s-%s", cd.id, strconv.Itoa(i))
+
+				// create tap device
+				config := water.Config{
+					DeviceType: water.TAP,
+				}
+				config.Name = ifceName
+				config.Persist = true
+				ifce, err := water.New(config)
+				if err != nil {
+					http.Error(w, err.Error(), http.StatusBadRequest)
+				}
+				// close interface so firecracker can read it
+				err = ifce.Close()
+				if err != nil {
+					http.Error(w, err.Error(), http.StatusBadRequest)
+				}
+
+				// get tap device
+				linkDev, err := tenus.NewLinkFrom(ifceName)
+				if err != nil {
+					http.Error(w, err.Error(), http.StatusBadRequest)
+				}
+				//set tap device up
+				err = linkDev.SetLinkUp()
+				if err != nil {
+					http.Error(w, err.Error(), http.StatusBadRequest)
+				}
+				// add network interface to bridge
+				err = bridgeDev.AddSlaveIfc(linkDev.NetInterface())
+				if err != nil {
+					http.Error(w, err.Error(), http.StatusBadRequest)
+				}
+				tapDevices = append(tapDevices, ifceName)
+			}
+			// write interfaces back
+			returnDevices := &Devices{
+				http.Error(w, err.Error(), http.StatusBadRequest)
+
+			}
+			body, err := json.Marshal(returnDevices)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+
+			}
+			io.Copy(w, bytes.NewBuffer(body))
+		}
+	case http.MethodDelete:
+		var dd DeleteDevices
+		err := json.NewDecoder(r.Body).Decode(&dd)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		}
+
+	default:
+		http.Error(w, "method not available", http.StatusBadRequest)
+	}
 }
 
 // DownloadPath is the path where we pull firecracker-vmlinux's from
@@ -674,7 +771,6 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	logger.SetFormatter(&log.TextFormatter{
 		DisableColors: false,
 		ForceColors:   true,
-		FullTimestamp: true,
 	})
 	logger.Out = o
 
@@ -700,67 +796,47 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	}
 	o.log("debug", "Finished getting VMLinux")
 
-	// TODO this needs to move into where the DHCP handler is
-	// get bridge device
-	bridgeDev, err := tenus.BridgeFromName("vorteil-bridge")
+	cd := &CreateDevices{
+		id:     o.id,
+		routes: o.routes,
+	}
+	cd, err := json.Marshal(cd)
+	if err != nil {
+		returnErr = err
+		return
+	}
+	resp, err := http.Post("http://localhost:7476/", "application/json", bytes.NewBuffer(cd))
 	if err != nil {
 		returnErr = err
 		return
 	}
 
-	o.bridgeDevice = bridgeDev
-	var interfaces []firecracker.NetworkInterface
-	// set network adapters
-	if len(o.routes) > 0 {
-		for i := 0; i < len(o.routes); i++ {
-			ifceName := fmt.Sprintf("%s-%s", o.id, strconv.Itoa(i))
-			interfaces = append(interfaces,
-				firecracker.NetworkInterface{
-					StaticConfiguration: &firecracker.StaticNetworkConfiguration{
-						HostDevName: ifceName,
-					},
-				},
-			)
-			// create tap device
-			config := water.Config{
-				DeviceType: water.TAP,
-			}
-			config.Name = ifceName
-			config.Persist = true
-			ifce, err := water.New(config)
-			if err != nil {
-				returnErr = err
-				return
-			}
-			// close interface so firecracker can read it
-			err = ifce.Close()
-			if err != nil {
-				returnErr = err
-				return
-			}
-
-			// get tap device
-			linkDev, err := tenus.NewLinkFrom(ifceName)
-			if err != nil {
-				returnErr = err
-				return
-			}
-			//set tap device up
-			err = linkDev.SetLinkUp()
-			if err != nil {
-				returnErr = err
-				return
-			}
-
-			// add network interface to bridge
-			err = bridgeDev.AddSlaveIfc(linkDev.NetInterface())
-			if err != nil {
-				returnErr = err
-				return
-			}
-			o.tapDevice = append(o.tapDevice, linkDev)
-		}
+	defer resp.Body.Close()
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		returnErr = err
+		return
 	}
+var devices Devices
+	err := json.Unmarshal(body, Devices)
+	if err != nil {
+		returnErr =err
+		return
+	}
+
+	// TODO this needs to move into where the DHCP handler is
+	var interfaces []firecracker.NetworkInterface
+
+	for i:=0; i < devices.devices.length; i++ {
+		interfaces = append(interfaces,
+			firecracker.NetworkInterface{
+				StaticConfiguration: &firecracker.StaticNetworkConfiguration{
+					HostDevName: devices.devices[i],
+				},
+			},
+		)
+	}
+
 	//END TODO
 
 	fcCfg := firecracker.Config{

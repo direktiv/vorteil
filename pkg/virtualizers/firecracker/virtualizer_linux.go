@@ -509,7 +509,10 @@ func (o *operation) finished(err error) {
 		o.Status <- fmt.Sprintf("Failed: %v", err)
 		o.Error <- err
 	}
-	o.logger.Errorf("Error: %v", err)
+	if err != nil {
+		o.logger.Errorf("Error: %v", err)
+	}
+
 	close(o.Logs)
 	close(o.Status)
 	close(o.Error)
@@ -863,7 +866,7 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	fcCfg := firecracker.Config{
 		SocketPath:      filepath.Join(o.folder, fmt.Sprintf("%s.%s", o.name, "socket")),
 		KernelImagePath: o.kip,
-		KernelArgs:      fmt.Sprintf("init=/vorteil/vinitd root=PARTUUID=%s loglevel=9 reboot=k panic=1 pci=off i8042.noaux i8042.nomux i8042.nopnp i8042.dumbkbd  vt.color=0x00", vimg.Part2UUIDString),
+		KernelArgs:      fmt.Sprintf("loglevel=9 init=/vorteil/vinitd root=PARTUUID=%s reboot=k panic=1 pci=off i8042.noaux i8042.nomux i8042.nopnp i8042.dumbkbd  vt.color=0x00", vimg.Part2UUIDString),
 		Drives:          devices,
 		MachineCfg: models.MachineConfiguration{
 			VcpuCount:  firecracker.Int64(int64(o.config.VM.CPUs)),

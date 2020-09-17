@@ -529,6 +529,11 @@ func (v *Virtualizer) Serial() *logger.Logger {
 	return v.serialLogger
 }
 
+// Dial unix
+func fakeDial(proto, addr string) (conn net.Conn, err error) {
+	return net.Dial("unix", sock)
+}
+
 // Stop stops the vm and changes it back to ready
 func (v *Virtualizer) Stop() error {
 	v.logger.Debugf("Stopping VM")
@@ -542,7 +547,7 @@ func (v *Virtualizer) Stop() error {
 		// }
 		client := &http.Client{
 			Transport: &http.Transport{
-				Dial: net.Dial("unix", v.fconfig.SocketPath),
+				Dial: fakeDial,
 			},
 		}
 		reqBody := map[string]string{

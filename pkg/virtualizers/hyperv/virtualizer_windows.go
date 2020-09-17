@@ -13,7 +13,7 @@ import (
 func (v *Virtualizer) initLogs() error {
 	conn, err := npipe.Dial(fmt.Sprintf("\\\\.\\pipe\\%s", v.id))
 	if err != nil {
-		v.log("error", "Error Dialing Pipe: %v", err)
+		v.logger.Errorf("Error Dialing Pipe: %s", err.Error())
 		return err
 	}
 	v.sock = conn

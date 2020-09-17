@@ -620,7 +620,6 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	o.config.VM.RAM.Align(vcfg.MiB * 4)
 
 	vmxString := GenerateVMX(strconv.Itoa(int(o.config.VM.CPUs)), strconv.Itoa(o.config.VM.RAM.Units(vcfg.MiB)), o.disk.Name(), o.name, o.folder, len(o.routes), o.networkType, o.id)
-	// o.Virtualizer.log("info", "VMX Start:\n%s\nVMX End", vmxString)
 
 	vmxPath := filepath.Join(o.folder, o.name+".vmx")
 	o.vmxPath = vmxPath
@@ -648,7 +647,8 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	if args.Start {
 		err = o.Start()
 		if err != nil {
-			o.Virtualizer.log("error", "Error starting vm: %v", err)
+			returnErr = fmt.Errorf("Error starting vm: %v", err)
+			return
 		}
 	}
 }

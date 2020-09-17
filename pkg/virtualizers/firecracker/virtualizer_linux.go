@@ -23,6 +23,7 @@ import (
 	"github.com/milosgajdos/tenus"
 	log "github.com/sirupsen/logrus"
 	"github.com/songgao/water"
+	"github.com/vorteil/vorteil/pkg/elog"
 	"github.com/vorteil/vorteil/pkg/vcfg"
 	"github.com/vorteil/vorteil/pkg/vimg"
 	"github.com/vorteil/vorteil/pkg/vio"
@@ -99,7 +100,7 @@ type Virtualizer struct {
 	disk         *os.File       // disk of the machine
 	source       interface{}    // details about how the vm was made
 	kip          string         // vmlinux full path
-	virtLogger   *logger.Logger // logs about the provisioning process
+	logger       *elog.CLI      // logger
 	serialLogger *logger.Logger // logs for the serial of the vm
 
 	routes []virtualizers.NetworkInterface // api network interface that displays ports
@@ -387,21 +388,6 @@ func ByteCountDecimal(b int64) string {
 	return fmt.Sprintf("%.1f %cB", float64(b)/float64(div), "kMGTPE"[exp])
 }
 
-// log writes a log line to the logger and adds prefix and suffix depending on what type of log was sent.
-func (v *Virtualizer) log(logType string, text string, args ...interface{}) {
-	switch logType {
-	case "error":
-		text = fmt.Sprintf("%s%s%s\n", "\033[31m", text, "\033[0m")
-	case "warning":
-		text = fmt.Sprintf("%s%s%s\n", "\033[33m", text, "\033[0m")
-	case "info":
-		text = fmt.Sprintf("%s%s%s\n", "\u001b[37;1m", text, "\u001b[0m")
-	default:
-		text = fmt.Sprintf("%s\n", text)
-	}
-	v.virtLogger.Write([]byte(fmt.Sprintf(text, args...)))
-}
-
 // log writes a log to the channel for the job
 func (o *operation) log(text string, v ...interface{}) {
 	o.Logs <- fmt.Sprintf(text, v...)
@@ -433,11 +419,6 @@ func (o *operation) updateStatus(text string) {
 	o.Logs <- text
 }
 
-// Logs returns virtualizer logs. Shows what to execute
-func (v *Virtualizer) Logs() *logger.Logger {
-	return v.virtLogger
-}
-
 // Serial returns the serial logger which contains the serial output of the application
 func (v *Virtualizer) Serial() *logger.Logger {
 	return v.serialLogger
@@ -445,7 +426,7 @@ func (v *Virtualizer) Serial() *logger.Logger {
 
 // Stop stops the vm and changes it back to ready
 func (v *Virtualizer) Stop() error {
-	v.log("debug", "Stopping VM")
+	v.logger.Debugf("Stopping VM")
 	if v.state != virtualizers.Ready {
 		v.state = virtualizers.Changing
 
@@ -454,7 +435,6 @@ func (v *Virtualizer) Stop() error {
 			return err
 		}
 		// wait for shutdown don't think theres a better way other than a sleep
-		// time.Sleep(time.Second * 4)
 
 		v.state = virtualizers.Ready
 
@@ -471,7 +451,7 @@ func (v *Virtualizer) State() string {
 
 // Download returns the disk
 func (v *Virtualizer) Download() (vio.File, error) {
-	v.log("debug", "Downloading Disk")
+	v.logger.Debugf("Downloading Disk")
 	if !(v.state == virtualizers.Ready) {
 		return nil, fmt.Errorf("the machine must be in a stopped or ready state")
 	}
@@ -486,7 +466,7 @@ func (v *Virtualizer) Download() (vio.File, error) {
 
 // Close shuts down the virutal machien and cleans up the disk and folders
 func (v *Virtualizer) Close(force bool) error {
-	v.log("debug", "Deleting VM")
+	v.logger.Debugf("Deleting VM")
 
 	if !force {
 		// if state not ready stop it so it is
@@ -578,9 +558,9 @@ func (v *Virtualizer) Prepare(args *virtualizers.PrepareArgs) *virtualizers.Virt
 	v.created = time.Now()
 	v.config = args.Config
 	v.source = args.Source
-	v.virtLogger = logger.NewLogger(2048)
+	v.logger = args.Logger
 	v.serialLogger = logger.NewLogger(2048 * 10)
-	v.log("debug", "Preparing VM")
+	v.logger.Debugf("Preparing VM")
 	v.routes = v.Routes()
 
 	op.Logs = make(chan string, 128)
@@ -812,8 +792,7 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 
 // Start create the virtualmachine and runs it
 func (v *Virtualizer) Start() error {
-	v.log("debug", "Starting VM")
-
+	v.logger.Debugf("Starting VM")
 	switch v.State() {
 	case "ready":
 		v.state = virtualizers.Changing
@@ -821,7 +800,7 @@ func (v *Virtualizer) Start() error {
 		go func() {
 			executable, err := virtualizers.GetExecutable(VirtualizerID)
 			if err != nil {
-				v.log("error", "Error Fetching executable: %v", err)
+				v.logger.Errorf("Error Fetching executable: %s", err.Error())
 			}
 
 			cmd := firecracker.VMCommandBuilder{}.WithBin(executable).WithSocketPath(v.fconfig.SocketPath).WithStdout(v.serialLogger).WithStderr(v.serialLogger).Build(v.gctx)
@@ -829,25 +808,19 @@ func (v *Virtualizer) Start() error {
 
 			v.machine, err = firecracker.NewMachine(v.vmmCtx, v.fconfig, v.machineOpts...)
 			if err != nil {
-				v.log("error", "Error creating machine: %v", err)
+				v.logger.Errorf("Error creating machine: %s", err.Error())
 			}
 
 			if err := v.machine.Start(v.vmmCtx); err != nil {
-				v.log("error", "Error starting virtual machine: %v", err)
+				v.logger.Errorf("Error starting virtual machine: %s".err.Error())
 			}
 			v.state = virtualizers.Alive
 
 			go v.lookForIP()
 
 			if err := v.machine.Wait(v.vmmCtx); err != nil {
-				v.log("error", "Wait returned an error %s", err)
+				v.logger.Errorf("Wait returned an error: %s", err.Error())
 			}
-			// sleep for shutdown signal
-			// time.Sleep(time.Second * 3)
-			// err = v.machine.StopVMM()
-			// if err != nil {
-			// 	v.log("error", "Stopping VMM manager %s", err)
-			// }
 		}()
 	}
 	return nil

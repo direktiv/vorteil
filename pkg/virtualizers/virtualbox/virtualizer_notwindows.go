@@ -14,18 +14,17 @@ import (
 // initLogging setup and read from the socket wait till the socker appears
 // time out send the vm to 'broken' state
 func (v *Virtualizer) initLogging() error {
-	v.virtLogger.Write([]byte(fmt.Sprintf("initializing logger...\n")))
-
+	v.logger.Debugf("Initializing Serial Logger...")
 	count := 0
 	for {
 		if count == 15 {
-			v.virtLogger.Write([]byte(fmt.Sprintf("error: %s\n", "unable to listen on unix socket within timeframe.")))
+			v.logger.Errorf("Error: %s", "unable to listen on unix socket within timeframe")
 			return fmt.Errorf("unable to listen on unix socket within timeframe.")
 		}
 		conn, err := net.Dial("unix", filepath.ToSlash(filepath.Join(v.folder, "monitor.sock")))
 		if err != nil {
 			if !strings.Contains(err.Error(), "no such file or directory") {
-				v.virtLogger.Write([]byte(fmt.Sprintf("error: %v\n", err)))
+				v.logger.Errorf("Error: %s", err.Error())
 				return err
 			}
 		} else {

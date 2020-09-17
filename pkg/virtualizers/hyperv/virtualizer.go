@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/vorteil/vorteil/pkg/elog"
 	"github.com/vorteil/vorteil/pkg/vcfg"
 	"github.com/vorteil/vorteil/pkg/vio"
 	"github.com/vorteil/vorteil/pkg/virtualizers"
@@ -21,17 +22,17 @@ import (
 
 // Virtualizer is a struct which will implement the interface so the manager can create one
 type Virtualizer struct {
-	id           string                          // rando has for named pipes and folder names
-	name         string                          // name of vm
-	pname        string                          // name of virtualizer
-	source       interface{}                     // details on how the virtual machine was made
-	state        string                          // the state of the vm
-	headless     bool                            // whether to show a gui when spawning a vm
-	created      time.Time                       // time the vm was created
-	switchName   string                          // The virtual switch hyper-v will use
-	folder       string                          // The folder to store vm details and objects
-	disk         *os.File                        // disk of the machine
-	virtLogger   *logger.Logger                  // logs about the provisioning process
+	id           string      // rando has for named pipes and folder names
+	name         string      // name of vm
+	pname        string      // name of virtualizer
+	source       interface{} // details on how the virtual machine was made
+	state        string      // the state of the vm
+	headless     bool        // whether to show a gui when spawning a vm
+	created      time.Time   // time the vm was created
+	switchName   string      // The virtual switch hyper-v will use
+	folder       string      // The folder to store vm details and objects
+	disk         *os.File    // disk of the machine
+	logger       *elog.CLI
 	serialLogger *logger.Logger                  // logs for the serial of the vm
 	routes       []virtualizers.NetworkInterface // api network interface that displays ports and network types
 
@@ -44,7 +45,7 @@ type Virtualizer struct {
 // execute is a general function for running commands through powershell
 func (v *Virtualizer) execute(cmd *exec.Cmd) (string, error) {
 	if !strings.Contains(strings.Join(cmd.Args, " "), "| Select State") {
-		v.log("info", "Executing %s", cmd.Args)
+		v.logger.Infof("Executing %s", cmd.Args)
 	}
 	resp, err := cmd.CombinedOutput()
 	if err != nil {
@@ -66,24 +67,9 @@ func (v *Virtualizer) State() string {
 	return v.state
 }
 
-// log writes a log line to the logger and adds prefix and suffix depending on what type of log was sent.
-func (v *Virtualizer) log(logType string, text string, args ...interface{}) {
-	switch logType {
-	case "error":
-		text = fmt.Sprintf("%s%s%s\n", "\033[31m", text, "\033[0m")
-	case "warning":
-		text = fmt.Sprintf("%s%s%s\n", "\033[33m", text, "\033[0m")
-	case "info":
-		text = fmt.Sprintf("%s%s%s\n", "\u001b[37;1m", text, "\u001b[0m")
-	default:
-		text = fmt.Sprintf("%s\n", text)
-	}
-	v.virtLogger.Write([]byte(fmt.Sprintf(text, args...)))
-}
-
 // Stop stops the vm and changes the status back to 'ready'
 func (v *Virtualizer) Stop() error {
-	v.log("debug", "Stopping VM")
+	v.logger.Debugf("Stopping VM")
 	if v.state != virtualizers.Ready {
 		v.state = virtualizers.Changing
 
@@ -91,14 +77,14 @@ func (v *Virtualizer) Stop() error {
 			time.Sleep(time.Second * 12)
 			state, err := v.getState()
 			if err != nil {
-				v.log("error", "Getting State: %s", err)
+				v.logger.Errorf("Getting State: %s", err)
 			}
 			// remove vm as unable to stop within 10 seconds
 			if state == "Running" {
 				cmd := exec.Command(virtualizers.Powershell, "Remove-VM", "-Name", v.name, "-Force")
 				_, err := v.execute(cmd)
 				if err != nil {
-					v.log("error", "Error Remove-VM: %v", err)
+					v.logger.Errorf("Error Remove-VM: %v", err)
 				}
 			}
 		}()
@@ -106,11 +92,11 @@ func (v *Virtualizer) Stop() error {
 		cmd := exec.Command(virtualizers.Powershell, "Stop-VM", "-Name", v.name)
 		output, err := v.execute(cmd)
 		if err != nil {
-			v.log("error", "Error Stop-VM: %v", err)
+			v.logger.Errorf("Error Stop-VM: %v", err)
 			return err
 		}
 		if len(output) != 0 {
-			v.log("info", "%s", output)
+			v.logger.Infof("%s", output)
 		}
 
 		v.state = virtualizers.Ready
@@ -120,7 +106,7 @@ func (v *Virtualizer) Stop() error {
 
 // Start creates the virtualmachine and runs it
 func (v *Virtualizer) Start() error {
-	v.log("debug", "Starting VM")
+	v.logger.Debugf("Starting VM")
 	switch v.State() {
 	case "ready":
 		v.state = virtualizers.Changing
@@ -128,12 +114,12 @@ func (v *Virtualizer) Start() error {
 		cmd := exec.Command(virtualizers.Powershell, "Start-VM", "-Name", v.name)
 		output, err := v.execute(cmd)
 		if err != nil {
-			v.log("error", "Error Start-VM: %v", err)
+			v.logger.Errorf("Error Start-VM: %v", err)
 			return err
 		}
 
 		if len(output) != 0 {
-			v.log("info", "%s", output)
+			v.logger.Infof("%s", output)
 		}
 
 		err = v.initLogs()
@@ -150,14 +136,14 @@ func (v *Virtualizer) Start() error {
 		if !v.headless {
 			vmconnect, err := exec.LookPath("vmconnect.exe")
 			if err != nil {
-				return fmt.Errorf("error finding vmconnect: %v", err)
+				return fmt.Errorf("Error finding vmconnect: %v", err)
 			}
 			// goroutine this as it hangs the processes forking a program on windows to open connection with vm
 			go func() {
 				cmd = exec.Command(vmconnect, "localhost", v.name)
 				_, err := v.execute(cmd)
 				if err != nil {
-					v.log("error", "Error VMConnect: %v", err)
+					v.logger.Errorf("Error VMConnect: %v", err)
 				}
 			}()
 		}
@@ -237,7 +223,7 @@ func (v *Virtualizer) Download() (vio.File, error) {
 	}
 	f, err := vio.LazyOpen(v.disk.Name())
 	if err != nil {
-		v.log("error", "Error Downloading Disk Image: %v", err)
+		v.logger.Errorf("Error Downloading Disk Image: %s", err.Error())
 		return nil, err
 	}
 	return f, nil
@@ -284,13 +270,13 @@ func (v *Virtualizer) ConvertToVM() interface{} {
 
 // Close shuts down the virtual machine and cleans up the disk and folders
 func (v *Virtualizer) Close(force bool) error {
-	v.log("debug", "Deleting VM")
+	v.logger.Debugf("Deleting VM")
 	// if !(force) {
 	if !(v.state == virtualizers.Ready) {
 		err := v.Stop()
 		if err != nil {
 			if !strings.Contains(err.Error(), "not currently running") {
-				v.log("error", "Error Stopping VM: %v", err)
+				v.logger.Errorf("Error Stopping VM: %v", err)
 				return err
 			}
 		}
@@ -301,7 +287,7 @@ func (v *Virtualizer) Close(force bool) error {
 	cmd := exec.Command(virtualizers.Powershell, "Remove-VM", "-Name", v.name, "-Force")
 	_, err := v.execute(cmd)
 	if err != nil {
-		v.log("error", "Error Remove-VM: %v", err)
+		v.logger.Errorf("Error Remove-VM: %v", err)
 	}
 	v.state = virtualizers.Deleted
 
@@ -372,7 +358,7 @@ func (v *Virtualizer) getState() (string, error) {
 	cmd := exec.Command(virtualizers.Powershell, "Get-VM", "-Name", v.name, "|", "Select", "State")
 	output, err := v.execute(cmd)
 	if err != nil {
-		v.log("error", "Error Get-VM: %v", err)
+		v.logger.Errorf("Error Get-VM: %v", err)
 		return "", err
 	}
 	if len(output) != 0 {
@@ -385,7 +371,7 @@ func (v *Virtualizer) getState() (string, error) {
 	if strings.Contains(output, "Hyper-V was unable to find a virtual machine with name") {
 		err = v.Close(true)
 		if err != nil {
-			v.log("error", "Error closing VM as it doesn't exist: %v", err)
+			v.logger.Errorf("Error closing VM as it doesn't exist: %v", err)
 		}
 		return "", errors.New("machine doesn't exist on hyper-v anymore")
 	}
@@ -398,7 +384,7 @@ func (v *Virtualizer) checkState() {
 	for {
 		state, err := v.getState()
 		if err != nil {
-			v.log("error", "Getting State: %s", err)
+			v.logger.Errorf("Getting State: %s", err)
 			break
 		}
 		if state == "Off" {
@@ -413,11 +399,6 @@ func (v *Virtualizer) checkState() {
 func (o *operation) updateStatus(text string) {
 	o.Status <- text
 	o.Logs <- text
-}
-
-// Logs returns virtualizer logs. Shows what to execute
-func (v *Virtualizer) Logs() *logger.Logger {
-	return v.virtLogger
 }
 
 // Serial returns the serial logger which contains the serial output of the app.
@@ -501,7 +482,7 @@ func (v *Virtualizer) Detach(source string) error {
 	cmd := exec.Command(virtualizers.Powershell, "Remove-VM", "-Name", v.name, "-Force")
 	_, err := v.execute(cmd)
 	if err != nil {
-		v.log("error", "Error Remove-VM: %v", err)
+		v.logger.Errorf("Error Remove-VM: %v", err)
 	}
 	v.state = virtualizers.Deleted
 
@@ -534,9 +515,9 @@ func (v *Virtualizer) Prepare(args *virtualizers.PrepareArgs) *virtualizers.Virt
 	v.state = virtualizers.Changing
 	v.vmdrive = args.VMDrive
 	v.created = time.Now()
-	v.virtLogger = logger.NewLogger(2048)
+	v.logger = args.Logger
 	v.serialLogger = logger.NewLogger(2048 * 10)
-	v.log("debug", "Preparing VM")
+	v.logger.Debugf("Preparing VM")
 
 	op.Logs = make(chan string, 128)
 	op.Error = make(chan error, 1)
@@ -560,7 +541,7 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	o.updateStatus(fmt.Sprintf("Preparing hyperv files..."))
 	defer func() {
 		if returnErr != nil {
-			o.Virtualizer.log("error", "Error Preparing VM: %v", returnErr)
+			o.logger.Errorf("Error Preparing VM: %v", returnErr)
 		}
 		o.finished(returnErr)
 	}()
@@ -581,10 +562,10 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 		"-BootDevice", "VHD", "-VHDPath", filepath.ToSlash(args.ImagePath), "-Path", o.folder, "-Generation", "1", "-SwitchName", fmt.Sprintf("\"%s\"", o.switchName))
 	output, err := o.execute(cmd)
 	if err != nil {
-		o.Virtualizer.log("error", "Error New-VM: %v", err)
+		o.logger.Errorf("Error New-VM: %v", err)
 	}
 	if len(output) != 0 {
-		o.Virtualizer.log("info", "%s", output)
+		o.logger.Errorf("%s", output)
 
 	}
 
@@ -592,10 +573,10 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	cmd = exec.Command(virtualizers.Powershell, "Set-VMMemory", "-VMName", o.name, "-DynamicMemoryEnabled", "0", "-StartupBytes", size)
 	output, err = o.execute(cmd)
 	if err != nil {
-		o.Virtualizer.log("error", "Error Set-VMMemory: %v", err)
+		o.logger.Errorf("Error Set-VMMemory: %v", err)
 	}
 	if len(output) != 0 {
-		o.Virtualizer.log("info", "%s", output)
+		o.logger.Infof("%s", output)
 	}
 
 	// set network adapters
@@ -604,10 +585,10 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 			cmd = exec.Command(virtualizers.Powershell, "Add-VMNetworkAdapter", "-VMName", o.name, "-SwitchName", fmt.Sprintf("\"%s\"", o.switchName))
 			output, err = o.execute(cmd)
 			if err != nil {
-				o.Virtualizer.log("error", "Error Adding VMNetwork Adapter: %v", err)
+				o.logger.Errorf("Error Adding VMNetwork Adapter: %v", err)
 			}
 			if len(output) != 0 {
-				o.Virtualizer.log("info", "%s", output)
+				o.logger.Infof("%s", output)
 			}
 		}
 	}
@@ -615,11 +596,10 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	cmd = exec.Command(virtualizers.Powershell, "Set-VMProcessor", "-VMName", o.name, "-Count", strconv.Itoa(int(o.config.VM.CPUs)), "-ExposeVirtualizationExtensions", "$true")
 	output, err = o.execute(cmd)
 	if err != nil {
-		o.Virtualizer.log("error", "Error Set-VMProcessor: %v", err)
+		o.logger.Errorf("Error Set-VMProcessor: %v", err)
 	}
 	if len(output) != 0 {
-		o.Virtualizer.log("info", "%s", output)
-
+		o.logger.Infof("%s", output)
 	}
 
 	pipePath := fmt.Sprintf("\\\\.\\pipe\\%s", o.id)
@@ -627,10 +607,10 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	cmd = exec.Command(virtualizers.Powershell, "Set-VMComPort", "-VMName", o.name, "-Path", fmt.Sprintf("\"%s\"", pipePath), "-Number", "1")
 	output, err = o.execute(cmd)
 	if err != nil {
-		o.Virtualizer.log("error", "Error Set-VMComPort: %v", err)
+		o.logger.Errorf("error", "Error Set-VMComPort: %v", err)
 	}
 	if len(output) != 0 {
-		o.Virtualizer.log("info", "%s", output)
+		o.logger.Infof("info", "%s", output)
 	}
 
 	o.state = "ready"

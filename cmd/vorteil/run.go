@@ -18,6 +18,7 @@ import (
 	isatty "github.com/mattn/go-isatty"
 	"github.com/mitchellh/go-homedir"
 	"github.com/thanhpk/randstr"
+	"github.com/vorteil/vorteil/pkg/elog"
 	"github.com/vorteil/vorteil/pkg/vcfg"
 	"github.com/vorteil/vorteil/pkg/vdisk"
 	"github.com/vorteil/vorteil/pkg/virtualizers"
@@ -320,20 +321,16 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG) error {
 		PName:     virt.Type(),
 		Start:     true,
 		Config:    cfg,
+		Logger:    &elog.CLI{},
 		FCPath:    filepath.Join(home, ".vorteild", "firecracker-vm"),
 		ImagePath: diskpath,
 	})
 
 	serial := virt.Serial()
-	virtualizerLogs := virt.Logs()
-	defer virtualizerLogs.Close()
 	defer serial.Close()
-	virtSubscription := virtualizerLogs.Subscribe()
 	serialSubscription := serial.Subscribe()
-	defer virtSubscription.Close()
 	defer serialSubscription.Close()
 	s := serialSubscription.Inbox()
-	v := virtSubscription.Inbox()
 
 	signalChannel, chBool := listenForInterupt()
 
@@ -345,12 +342,6 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG) error {
 				virt.Close(false)
 				return nil
 			}
-		case msg, more := <-v:
-			if !more {
-				virt.Close(false)
-				return nil
-			}
-			fmt.Print(string(msg))
 		case msg, more := <-s:
 			if !more {
 				virt.Close(false)

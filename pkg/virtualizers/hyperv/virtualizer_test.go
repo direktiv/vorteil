@@ -38,28 +38,13 @@ func TestLookForIp(t *testing.T) {
 }
 func TestLoggerAndSerial(t *testing.T) {
 	v := &Virtualizer{
-		virtLogger:   logger.NewLogger(2048),
 		serialLogger: logger.NewLogger(2048),
 	}
 
-	virtl := v.Logs()
 	seriall := v.Serial()
 
-	if virtl == nil || seriall == nil {
+	if seriall == nil {
 		t.Errorf("unable to get loggers from virtualizer")
-	}
-}
-func TestPowershell(t *testing.T) {
-	v := &Virtualizer{
-		virtLogger: logger.NewLogger(2048),
-	}
-	cmd := exec.Command(virtualizers.Powershell, "Write-Host", "hello")
-	output, err := v.execute(cmd)
-	if err != nil {
-		t.Errorf("executing command failed due to err: %v", err)
-	}
-	if strings.TrimSpace(output) != "hello" {
-		t.Errorf("executing command failed expected \"hello\" but got \"%s\"", strings.TrimSpace(output))
 	}
 }
 
@@ -81,34 +66,7 @@ func TestState(t *testing.T) {
 		t.Errorf("unable to get state properly, expected 'ready' but got %s", state)
 	}
 }
-func TestLogWrite(t *testing.T) {
-	v := &Virtualizer{
-		virtLogger: logger.NewLogger(2048),
-	}
-	exactText := []byte(fmt.Sprintf("%s%s%s\n", "\033[31m", "hello", "\033[0m"))
-	v.log("error", "%s", "hello")
 
-	sub := v.virtLogger.Subscribe()
-
-	var logs []byte
-	var done bool
-	for !done {
-		select {
-		case logdata, more := <-sub.Inbox():
-			if !more {
-				break
-			}
-			logs = append(logs, logdata...)
-		default:
-			done = true
-		}
-	}
-
-	if strings.TrimSpace(string(logs)) != strings.TrimSpace(string(exactText)) {
-		t.Errorf("logging \"hello\" failed, expected \"%v\" but got \"%v\"", strings.TrimSpace(string(exactText)), strings.TrimSpace(string(logs)))
-	}
-
-}
 func TestInitialize(t *testing.T) {
 	var c = &Config{
 		Headless:   true,
@@ -137,7 +95,6 @@ func TestDownload(t *testing.T) {
 	}
 	defer f.Close()
 	v := &Virtualizer{
-		virtLogger: logger.NewLogger(2048),
 		disk:       f,
 		state:      "ready",
 	}
@@ -162,7 +119,6 @@ func TestRoutes(t *testing.T) {
 		Networks: vcfgI,
 	}
 	v := &Virtualizer{
-		virtLogger: logger.NewLogger(2048),
 		config:     vcfg,
 	}
 

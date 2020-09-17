@@ -641,6 +641,14 @@ func (v *Virtualizer) lookForIP() string {
 	return ""
 }
 
+// Write method to handle logging from firecracker to use our logger interface
+// Cant use logger interface as it duplicates
+func (v *Virtualizer) Write(d []byte) (n int, err error) {
+	n = len(d)
+	fmt.Print(string(d))
+	return
+}
+
 // prepare sets the fields and arguments to spawn the virtual machine
 func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	var returnErr error
@@ -661,6 +669,14 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	o.folder = filepath.Dir(args.ImagePath)
 	o.id = strings.Split(filepath.Base(o.folder), "-")[1]
 	diskpath := filepath.ToSlash(args.ImagePath)
+
+	logger := log.New()
+	logger.SetFormatter(&log.TextFormatter{
+		DisableColors: false,
+		ForceColors:   true,
+		FullTimestamp: true,
+	})
+	logger.Out = o
 
 	ctx := context.Background()
 	vmmCtx, vmmCancel := context.WithCancel(ctx)

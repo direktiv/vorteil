@@ -94,8 +94,8 @@ func SetupBridgeAndDHCPServer(port string) error {
 }
 
 type CreateDevices struct {
-	id     string                           `json:"id"`
-	routes []virtualizers.NetworkInterfaces `json:"routes"`
+	id     string                          `json:"id"`
+	routes []virtualizers.NetworkInterface `json:"routes"`
 }
 
 type Devices struct {

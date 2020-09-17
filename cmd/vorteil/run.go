@@ -340,12 +340,10 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG) error {
 		select {
 		case <-time.After(time.Millisecond * 200):
 			if finished && virt.State() == "ready" {
-				virt.Close(true)
 				return nil
 			}
 		case msg, more := <-s:
 			if !more {
-				virt.Close(true)
 				return nil
 			}
 			fmt.Print(string(msg))
@@ -353,8 +351,11 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG) error {
 			if finished {
 				return nil
 			}
+			err = virt.Stop()
+			if err != nil {
+				log.Errorf(err.Error())
+			}
 			finished = true
-			go virt.Stop()
 		case <-chBool:
 			return nil
 		}

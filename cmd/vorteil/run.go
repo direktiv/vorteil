@@ -294,7 +294,6 @@ func runQEMU(pkgReader vpkg.Reader, cfg *vcfg.VCFG) error {
 
 	alloc := qemu.Allocator
 	virt := alloc.Alloc()
-	defer virt.Close(true)
 
 	config := qemu.Config{
 		Headless: !flagGUI,
@@ -351,7 +350,8 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG) error {
 			if finished {
 				return nil
 			}
-			err = virt.Stop()
+			// Close virtual machine without forcing to handle stopping the virtual machine gracefully
+			err = virt.Close(false)
 			if err != nil {
 				log.Errorf(err.Error())
 			}

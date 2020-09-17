@@ -70,7 +70,6 @@ func (v *Virtualizer) Start() error {
 				if v.state == virtualizers.Alive {
 					if !socketFound {
 						v.state = virtualizers.Broken
-
 					} else {
 						err = v.Stop()
 						if err != nil {

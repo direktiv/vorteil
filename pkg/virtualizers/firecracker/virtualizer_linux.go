@@ -21,6 +21,7 @@ import (
 	dhcp "github.com/krolaw/dhcp4"
 	conn "github.com/krolaw/dhcp4/conn"
 	"github.com/milosgajdos/tenus"
+	log "github.com/sirupsen/logrus"
 	"github.com/songgao/water"
 	"github.com/vorteil/vorteil/pkg/elog"
 	"github.com/vorteil/vorteil/pkg/vcfg"
@@ -651,6 +652,7 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 
 	o.state = "initializing"
 	o.name = args.Name
+	// o.id = randstr.Hex(5)
 	err := os.MkdirAll(args.FCPath, os.ModePerm)
 	if err != nil {
 		returnErr = err
@@ -759,7 +761,7 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	}
 
 	machineOpts := []firecracker.Opt{
-		firecracker.WithLogger(o.logger),
+		firecracker.WithLogger(log.NewEntry(o.logger)),
 	}
 
 	// append new fields to overarching struct

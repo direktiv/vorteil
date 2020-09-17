@@ -570,6 +570,7 @@ func (v *Virtualizer) Stop() error {
 		if err != nil {
 			return err
 		}
+
 		defer resp.Body.Close()
 		v.state = virtualizers.Ready
 

@@ -757,7 +757,6 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 
 	o.state = "initializing"
 	o.name = args.Name
-	// o.id = randstr.Hex(5)
 	err := os.MkdirAll(args.FCPath, os.ModePerm)
 	if err != nil {
 		returnErr = err
@@ -800,13 +799,17 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 		id:     o.id,
 		routes: o.routes,
 	}
+
 	cdm, err := json.Marshal(cd)
 	if err != nil {
+		fmt.Printf("ER")
 		returnErr = err
 		return
 	}
 	resp, err := http.Post("http://localhost:7476/", "application/json", bytes.NewBuffer(cdm))
 	if err != nil {
+		fmt.Printf("ER2")
+
 		returnErr = err
 		return
 	}
@@ -814,12 +817,16 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	defer resp.Body.Close()
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
+		fmt.Printf("ER3")
+
 		returnErr = err
 		return
 	}
 	var ifs Devices
 	err = json.Unmarshal(body, ifs)
 	if err != nil {
+		fmt.Printf("ER4")
+
 		returnErr = err
 		return
 	}

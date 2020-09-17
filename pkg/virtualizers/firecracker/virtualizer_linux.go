@@ -73,13 +73,6 @@ func SetupBridgeAndDHCPServer() error {
 			return err
 		}
 	}
-
-	// create server handler to create tap devices under sudo
-	http.HandleFunc("/", OrganiseTapDevices)
-	go func() {
-		http.ListenAndServe(":7476", nil)
-	}()
-
 	// create dhcp server on an interface
 	server := dhcpHandler.NewHandler()
 	pc, err := conn.NewUDP4BoundListener("vorteil-bridge", ":67")
@@ -87,6 +80,12 @@ func SetupBridgeAndDHCPServer() error {
 		return err
 	}
 
+	// create server handler to create tap devices under sudo
+	http.HandleFunc("/", OrganiseTapDevices)
+	go func() {
+		fmt.Println("listenandserve")
+		http.ListenAndServe(":7476", nil)
+	}()
 	// Start dhcp server to listen
 	dhcp.Serve(pc, server)
 
@@ -105,6 +104,7 @@ type Devices struct {
 func OrganiseTapDevices(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodPost:
+		fmt.Printf("POST")
 		var cd CreateDevices
 		var tapDevices []string
 
@@ -112,6 +112,7 @@ func OrganiseTapDevices(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 		}
+		fmt.Printf("CD: %v", cd)
 
 		// get bridge device
 		bridgeDev, err := tenus.BridgeFromName("vorteil-bridge")

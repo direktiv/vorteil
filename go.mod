@@ -21,8 +21,8 @@ require (
 	github.com/djherbis/buffer v1.1.0
 	github.com/djherbis/nio v2.0.3+incompatible
 	github.com/docker/distribution v2.7.1+incompatible
-	github.com/docker/go-events v0.0.0-20190806004212-e31b211e4f1c // indirect
-	github.com/fatih/color v1.9.0 // indirect
+	github.com/fatih/color v1.9.0
+	github.com/firecracker-microvm/firecracker-go-sdk v0.21.0
 	github.com/gobwas/glob v0.2.3
 	github.com/google/go-containerregistry v0.1.2
 	github.com/gosuri/uilive v0.0.4 // indirect
@@ -32,10 +32,11 @@ require (
 	github.com/inconshreveable/log15 v0.0.0-20200109203555-b30bc20e4fd1 // indirect
 	github.com/klauspost/compress v1.11.0
 	github.com/krolaw/dhcp4 v0.0.0-20190909130307-a50d88189771
-	github.com/mattn/go-colorable v0.1.7 // indirect
+	github.com/mattn/go-colorable v0.1.7
 	github.com/mattn/go-isatty v0.0.12
 	github.com/mattn/go-runewidth v0.0.9 // indirect
 	github.com/mattn/go-shellwords v1.0.10
+	github.com/milosgajdos/tenus v0.0.3
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/natefinch/npipe v0.0.0-20160621034901-c1b8fa8bdcce
 	github.com/novln/docker-parser v1.0.0
@@ -46,6 +47,7 @@ require (
 	github.com/sisatech/tablewriter v0.0.0-20161130023222-815eceb01ee6
 	github.com/sisatech/toml v0.0.0-20181010232116-ca247dd35773
 	github.com/sndnvaps/md5sum-go v0.0.0-20170102022112-af4a8cab5126 // indirect
+	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 	github.com/spf13/cobra v1.0.0
 	github.com/spf13/pflag v1.0.5
 	github.com/spf13/viper v1.7.0

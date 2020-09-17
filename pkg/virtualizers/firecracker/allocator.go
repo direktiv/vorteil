@@ -1,22 +1,20 @@
-package hyperv
+package firecracker
 
 import (
 	"encoding/json"
-	"errors"
 
 	"github.com/vorteil/vorteil/pkg/vcfg"
 	"github.com/vorteil/vorteil/pkg/vdisk"
 	"github.com/vorteil/vorteil/pkg/virtualizers"
 )
 
-// VirtualizerID is a unique identifier for Hyperv
-var VirtualizerID = "hyperv"
+// VirtualizerID is a unique identifier for Firecracker
+var VirtualizerID = "firecracker"
 
-// Config required for creating a Hyper-V VM
-type Config struct {
-	Headless   bool
-	SwitchName string
-}
+type allocator struct{}
+
+// Config to run the virtualizer
+type Config struct{}
 
 // Marshal the config into a byte[]
 func (c *Config) Marshal() []byte {
@@ -36,72 +34,44 @@ func (c *Config) Unmarshal(data []byte) error {
 	return nil
 }
 
-type allocator struct {
-}
-
-// Allocator for Hyper-V
+// Allocator for Firecracker
 var Allocator virtualizers.VirtualizerAllocator = &allocator{}
 
-// Alloc returns a new Virtualizer
+// Alloc returns a new virtualizer
 func (a *allocator) Alloc() virtualizers.Virtualizer {
 	return new(Virtualizer)
 }
 
-// DiskAlignment returns the alignment Hyper-V requires to run properly
+// DiskAlignment returns the alignment Firecracker requires to run properly
 func (a *allocator) DiskAlignment() vcfg.Bytes {
 	return 2 * vcfg.MiB
+}
+
+// DiskFormat return the format the hypervisor should be using
+func (a *allocator) DiskFormat() vdisk.Format {
+	return vdisk.RAWFormat
 }
 
 // IsAvailable returns true if the hypervisor is installed
 func (a *allocator) IsAvailable() bool {
 	installed, _ := virtualizers.Backends()
-
 	for _, platform := range installed {
-		if platform == "hyperv" {
+		if platform == "firecracker" {
 			return true
 		}
 	}
-
 	return false
-}
-
-// DiskFormat returns the format the hypervisor should be using
-func (a *allocator) DiskFormat() vdisk.Format {
-	return vdisk.VHDFormat
 }
 
 // ValidateArgs check if valid args are passed to create a valid Virtualizer
 func (a *allocator) ValidateArgs(data []byte) error {
-	c := new(Config)
-	err := c.Unmarshal(data)
-	if err != nil {
-		return err
-	}
-
-	switches, err := virtualizers.VSwitches()
-	if err != nil {
-		return err
-	}
-
-	switchFound := false
-	for _, name := range switches {
-		if name == c.SwitchName {
-			switchFound = true
-		}
-	}
-
-	if !switchFound {
-		return errors.New("switch not found in list")
-	}
-
+	// nothing to validate return nil
 	return nil
 }
 
 // Create creates a virtualizer using the provided manager
-func Create(mgr *virtualizers.Manager, name string, headless bool, switchName string) error {
+func Create(mgr *virtualizers.Manager, name string) error {
 	c := new(Config)
-	c.Headless = headless
-	c.SwitchName = switchName
 	err := mgr.CreateVirtualizer(name, VirtualizerID, c.Marshal())
 	if err != nil {
 		return err

@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"code.vorteil.io/vorteil/tools/cli/pkg/compiler"
 	"github.com/vorteil/vorteil/pkg/vcfg"
+	"github.com/vorteil/vorteil/pkg/vdisk"
 	"github.com/vorteil/vorteil/pkg/virtualizers"
 )
 
@@ -49,8 +49,8 @@ func (a *allocator) Alloc() virtualizers.Virtualizer {
 }
 
 // DiskAlignment returns the alignment Virtualbox requries to run properly
-func (a *allocator) DiskAlignment() size.Bytes {
-	return 2 * size.MiB
+func (a *allocator) DiskAlignment() vcfg.Bytes {
+	return 2 * vcfg.MiB
 }
 
 // IsAvailable returns true if the hypervisor is installed.
@@ -66,7 +66,7 @@ func (a *allocator) IsAvailable() bool {
 
 // DiskFormat returns the format the hypervisor should be using.
 func (a *allocator) DiskFormat() vdisk.Format {
-	return compiler.ImageFormatVMDK
+	return vdisk.VMDKFormat
 }
 
 // ValidateArgs check if valid args are passed to create a valid Virtualizer

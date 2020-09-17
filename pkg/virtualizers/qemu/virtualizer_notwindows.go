@@ -5,7 +5,6 @@ package qemu
 import (
 	"errors"
 	"fmt"
-	"io"
 	"net"
 	"os"
 	"os/exec"
@@ -14,7 +13,6 @@ import (
 	"time"
 
 	"github.com/mattn/go-shellwords"
-	"github.com/thanhpk/randstr"
 	"github.com/vorteil/vorteil/pkg/vcfg"
 	"github.com/vorteil/vorteil/pkg/virtualizers"
 )
@@ -28,7 +26,6 @@ func (v *Virtualizer) Start() error {
 
 	case "ready":
 		v.state = virtualizers.Changing
-		// v.subServer.SubServer.Publish(graph.VMUpdater)
 
 		err := v.initLogging()
 		if err != nil {
@@ -64,7 +61,6 @@ func (v *Virtualizer) Start() error {
 				time.Sleep(time.Second * 1)
 			}
 			v.state = virtualizers.Alive
-			// v.subServer.SubServer.Publish(graph.VMUpdater)
 
 			_, err = v.command.Process.Wait()
 			if err == nil || err.Error() != fmt.Errorf("wait: no child processes").Error() {
@@ -74,7 +70,6 @@ func (v *Virtualizer) Start() error {
 				if v.state == virtualizers.Alive {
 					if !socketFound {
 						v.state = virtualizers.Broken
-						// v.subServer.SubServer.Publish(graph.VMUpdater)
 
 					} else {
 						err = v.Stop()
@@ -109,31 +104,16 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	o.networkType = "nat"
 	o.state = "initializing"
 	o.name = args.Name
-	o.id = randstr.Hex(5)
-	o.folder = filepath.Join(o.vmdrive, fmt.Sprintf("%s-%s", o.id, o.Type()))
+	o.folder = filepath.Dir(args.ImagePath)
+	o.id = strings.Split(filepath.Base(o.folder), "-")[1]
 
-	o.updateStatus(fmt.Sprintf("Copying disk to managed location"))
+	// err = os.MkdirAll(o.folder, os.ModePerm)
+	// if err != nil {
+	// 	returnErr = err
+	// 	return
+	// }
 
-	err = os.MkdirAll(o.folder, os.ModePerm)
-	if err != nil {
-		returnErr = err
-		return
-	}
-
-	f, err := os.Create(filepath.Join(o.folder, o.name+".raw"))
-	if err != nil {
-		returnErr = err
-		return
-	}
-	_, err = io.Copy(f, args.Image)
-	if err != nil {
-		returnErr = err
-		return
-	}
-	defer f.Close()
-	o.disk = f
-
-	diskpath := filepath.ToSlash(o.disk.Name())
+	diskpath := filepath.ToSlash(args.ImagePath)
 	diskformat := "raw"
 
 	argsCommand := createArgs(o.config.VM.CPUs, o.config.VM.RAM.Units(vcfg.MiB), o.headless, diskpath, diskformat)

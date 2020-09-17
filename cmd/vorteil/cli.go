@@ -20,6 +20,7 @@ import (
 	"github.com/vorteil/vorteil/pkg/vconvert"
 	"github.com/vorteil/vorteil/pkg/vdecompiler"
 	"github.com/vorteil/vorteil/pkg/vdisk"
+	"github.com/vorteil/vorteil/pkg/virtualizers/firecracker"
 	"github.com/vorteil/vorteil/pkg/vpkg"
 	"github.com/vorteil/vorteil/pkg/vproj"
 )
@@ -30,9 +31,18 @@ var (
 	flagExcludeDefault   bool
 	flagFormat           string
 	flagOutput           string
+	flagPlatform         string
+	flagGUI              bool
 	flagOS               bool
 	flagShell            bool
 	flagTouched          bool
+)
+
+const (
+	platformQEMU        = "qemu"
+	platformVirtualBox  = "virtualbox"
+	platformHyperV      = "hyper-v"
+	platformFirecracker = "firecracker"
 )
 
 func commandInit() {
@@ -81,6 +91,7 @@ func commandInit() {
 	rootCmd.AddCommand(projectsCmd)
 	rootCmd.AddCommand(provisionersCmd)
 	rootCmd.AddCommand(runCmd)
+	rootCmd.AddCommand(initFirecrackerCmd)
 
 	imagesCmd.AddCommand(buildCmd)
 	imagesCmd.AddCommand(decompileCmd)
@@ -1853,6 +1864,21 @@ var provisionersNewGoogleCmd = &cobra.Command{
 	},
 }
 
+var initFirecrackerCmd = &cobra.Command{
+	Use:    "firecracker-setup",
+	Short:  "Initialize firecracker by spawning a Bridge Device and a DHCP server",
+	Long:   `The init firecracker command is a convenience function to quickly setup the bridge device and DHCP server that firecracker will use`,
+	Hidden: true,
+	Args:   cobra.MaximumNArgs(0),
+	Run: func(cmd *cobra.Command, args []string) {
+		err := firecracker.SetupBridgeAndDHCPServer()
+		if err != nil {
+			log.Error(err.Error())
+			os.Exit(1)
+		}
+	},
+}
+
 var runCmd = &cobra.Command{
 	Use:   "run [RUNNABLE]",
 	Short: "Quick-launch a virtual machine",
@@ -1908,47 +1934,42 @@ and cleaning up the instance when it's done.`,
 			os.Exit(1)
 		}
 
-		f, err := ioutil.TempFile("", "vorteil.disk")
-		if err != nil {
-			log.Error(err.Error())
-			os.Exit(1)
-		}
-		defer os.Remove(f.Name())
-		defer f.Close()
-
-		err = vdisk.Build(context.Background(), f, &vdisk.BuildArgs{
-			PackageReader: pkgReader,
-			Format:        vdisk.RAWFormat,
-			KernelOptions: vdisk.KernelOptions{
-				Shell: flagShell,
-			},
-		})
-		if err != nil {
-			log.Error(err.Error())
-			os.Exit(1)
-		}
-
-		err = f.Close()
-		if err != nil {
-			log.Error(err.Error())
-			os.Exit(1)
-		}
-
-		err = pkgReader.Close()
-		if err != nil {
-			log.Error(err.Error())
+		switch flagPlatform {
+		case platformQEMU:
+			err = runQEMU(pkgReader, cfg)
+			if err != nil {
+				log.Error(err.Error())
+				os.Exit(1)
+			}
+		case platformVirtualBox:
+			err = runVirtualBox(pkgReader, cfg)
+			if err != nil {
+				log.Error(err.Error())
+				os.Exit(1)
+			}
+		case platformHyperV:
+			err = runHyperV(pkgReader, cfg)
+			if err != nil {
+				log.Error(err.Error())
+				os.Exit(1)
+			}
+		case platformFirecracker:
+			err = runFirecracker(pkgReader, cfg)
+			if err != nil {
+				log.Error(err.Error())
+				os.Exit(1)
+			}
+		default:
+			log.Error(fmt.Errorf("platform '%s' not supported", flagPlatform).Error())
 			os.Exit(1)
 		}
 
-		err = runQEMU(f.Name(), cfg)
-		if err != nil {
-			log.Error(err.Error())
-			os.Exit(1)
-		}
 	},
 }
 
 func init() {
 	f := runCmd.Flags()
+	f.StringVar(&flagPlatform, "platform", "qemu", "run a virtual machine with appropriate hypervisor (QEMU, Firecracker, Virtualbox, Hyper-V)")
+	f.BoolVar(&flagGUI, "gui", false, "when running virtual machine show gui of hypervisor")
 	f.BoolVar(&flagShell, "shell", false, "add a busybox shell environment to the image")
 }

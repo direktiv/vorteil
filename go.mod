@@ -8,18 +8,26 @@ require (
 	github.com/cavaliercoder/grab v2.0.0+incompatible
 	github.com/cirruslabs/echelon v1.2.2
 	github.com/cloudfoundry/bytefmt v0.0.0-20200131002437-cf55d5288a48
+	github.com/containerd/cgroups v0.0.0-20200824123100-0b889c03f102 // indirect
 	github.com/containerd/console v1.0.0 // indirect
-	github.com/containerd/containerd v1.3.0
+	github.com/containerd/containerd v1.4.1
 	github.com/containerd/continuity v0.0.0-20200710164510-efbc4488d8fe // indirect
+	github.com/containerd/fifo v0.0.0-20200410184934-f15a3290365b // indirect
+	github.com/containerd/go-runc v0.0.0-20200911161753-ad1414ddd16e // indirect
+	github.com/containerd/ttrpc v1.0.1 // indirect
+	github.com/containerd/typeurl v1.0.1 // indirect
 	github.com/containers/image v3.0.2+incompatible
 	github.com/coreos/go-semver v0.3.0
 	github.com/davecgh/go-spew v1.1.1
 	github.com/djherbis/buffer v1.1.0
 	github.com/djherbis/nio v2.0.3+incompatible
 	github.com/docker/distribution v2.7.1+incompatible
+	github.com/docker/docker v1.4.2-0.20190924003213-a8608b5b67c7
+	github.com/docker/go-events v0.0.0-20190806004212-e31b211e4f1c // indirect
 	github.com/fatih/color v1.9.0
 	github.com/firecracker-microvm/firecracker-go-sdk v0.21.0
 	github.com/gobwas/glob v0.2.3
+	github.com/gogo/googleapis v1.4.0 // indirect
 	github.com/google/go-containerregistry v0.1.2
 	github.com/gosuri/uilive v0.0.4
 	github.com/gosuri/uiprogress v0.0.1
@@ -37,6 +45,8 @@ require (
 	github.com/natefinch/npipe v0.0.0-20160621034901-c1b8fa8bdcce
 	github.com/novln/docker-parser v1.0.0
 	github.com/opencontainers/runc v0.1.1 // indirect
+	github.com/opencontainers/runtime-spec v1.0.2 // indirect
+	github.com/opencontainers/selinux v1.6.0 // indirect
 	github.com/pkg/errors v0.9.1
 	github.com/sirupsen/logrus v1.6.0
 	github.com/sisatech/goapi v0.0.0-20200218003521-8dcdab8c7a5e
@@ -47,10 +57,13 @@ require (
 	github.com/spf13/cobra v1.0.0
 	github.com/spf13/pflag v1.0.5
 	github.com/spf13/viper v1.7.0
+	github.com/stretchr/testify v1.6.1
+	github.com/syndtr/gocapability v0.0.0-20200815063812-42c35b437635 // indirect
 	github.com/thanhpk/randstr v1.0.4
 	github.com/vbauerster/mpb v3.4.0+incompatible
 	github.com/vbauerster/mpb/v5 v5.3.0
 	golang.org/x/crypto v0.0.0-20200820211705-5c72a883971a
 	golang.org/x/sync v0.0.0-20200625203802-6e8e738ad208
 	gopkg.in/yaml.v2 v2.3.0
+	gotest.tools/v3 v3.0.2 // indirect
 )

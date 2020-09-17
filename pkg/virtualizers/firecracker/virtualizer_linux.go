@@ -21,7 +21,6 @@ import (
 	dhcp "github.com/krolaw/dhcp4"
 	conn "github.com/krolaw/dhcp4/conn"
 	"github.com/milosgajdos/tenus"
-	log "github.com/sirupsen/logrus"
 	"github.com/songgao/water"
 	"github.com/vorteil/vorteil/pkg/elog"
 	"github.com/vorteil/vorteil/pkg/vcfg"
@@ -641,13 +640,6 @@ func (v *Virtualizer) lookForIP() string {
 	return ""
 }
 
-// Write method to handle logging from firecracker to use our logger interface
-func (v *Virtualizer) Write(d []byte) (n int, err error) {
-	n = len(d)
-	v.logger.Printf(string(d))
-	return
-}
-
 // prepare sets the fields and arguments to spawn the virtual machine
 func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	var returnErr error
@@ -659,7 +651,6 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 
 	o.state = "initializing"
 	o.name = args.Name
-	// o.id = randstr.Hex(5)
 	err := os.MkdirAll(args.FCPath, os.ModePerm)
 	if err != nil {
 		returnErr = err
@@ -668,14 +659,6 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	o.folder = filepath.Dir(args.ImagePath)
 	o.id = strings.Split(filepath.Base(o.folder), "-")[1]
 	diskpath := filepath.ToSlash(args.ImagePath)
-
-	// logger := log.New()
-	// logger.SetFormatter(&log.TextFormatter{
-	// 	DisableColors: false,
-	// 	ForceColors:   true,
-	// 	FullTimestamp: true,
-	// })
-	// logger.Out = o
 
 	ctx := context.Background()
 	vmmCtx, vmmCancel := context.WithCancel(ctx)
@@ -776,7 +759,7 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	}
 
 	machineOpts := []firecracker.Opt{
-		firecracker.WithLogger(log.NewEntry(o.logger)),
+		firecracker.WithLogger(o.logger),
 	}
 
 	// append new fields to overarching struct

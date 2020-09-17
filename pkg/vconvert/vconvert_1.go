@@ -4,10 +4,6 @@
  */
 package vconvert
 
-import (
-	log "github.com/sirupsen/logrus"
-)
-
 const (
 	localIdentifier = "local."
 )
@@ -23,11 +19,11 @@ func ConvertContainer(app, dest, user, pwd, config string) error {
 	// defer os.RemoveAll(handler.tmpDir)
 	//
 	initConfig(config)
-	converter, err := NewContainerConverter(app, dest)
-	if err != nil {
-
-	}
-	log.Infof("REGISTRY %s", converter.ImageRef.Registry())
+	// converter, err := NewContainerConverter(app, dest)
+	// if err != nil {
+	//
+	// }
+	// log.Infof("REGISTRY %s", converter.ImageRef.Registry())
 
 	//
 	// err = handler.DownloadTar("/h")

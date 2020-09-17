@@ -6,9 +6,11 @@ package vconvert
 
 import (
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 
+	"github.com/docker/distribution"
 	"github.com/heroku/docker-registry-client/registry"
 	log "github.com/sirupsen/logrus"
 )
@@ -18,12 +20,16 @@ type RegistryConfig struct {
 	URL, User, Pwd string
 }
 
-func (cc *ContainerConverter) downloadInformationRemote(config *RegistryConfig) error {
+func remoteGetReader(image string, layer *layer, registry *registry.Registry) (io.ReadCloser, error) {
+	olayer := layer.layer.(distribution.Descriptor)
+	reader, err := registry.DownloadBlob(image, olayer.Digest)
+	if err != nil {
+		return nil, err
+	}
+	return reader, nil
+}
 
-	// check if it exists and empty
-	// if _, err := os.Stat(dest); err == nil {
-	// 	return fmt.Errorf("file %s exists already", dest)
-	// }
+func (cc *ContainerConverter) downloadInformationRemote(config *RegistryConfig) error {
 
 	if config == nil || config.URL == "" {
 		return fmt.Errorf("config is nil or URL is empty")
@@ -36,22 +42,22 @@ func (cc *ContainerConverter) downloadInformationRemote(config *RegistryConfig) 
 
 	cc.registry = r
 
-	manifest, err := r.ManifestV2(cc.ImageRef.ShortName(), cc.ImageRef.Tag())
+	manifest, err := r.ManifestV2(cc.imageRef.ShortName(), cc.imageRef.Tag())
 	if err != nil {
 		return err
 	}
 
-	var ifs = make([]*Layer, len(manifest.Layers))
+	var ifs = make([]*layer, len(manifest.Layers))
 	for i, d := range manifest.Layers {
-		ifs[i] = &Layer{
-			Layer: d,
-			Hash:  string(d.Digest[7:15]),
-			Size:  d.Size,
+		ifs[i] = &layer{
+			layer: d,
+			hash:  string(d.Digest[7:15]),
+			size:  d.Size,
 		}
 	}
-	cc.Layers = ifs
+	cc.layers = ifs
 
-	// downloadBlobs
+	// cc.downloadBlobs()
 
 	// blob, err = cc.downloadManifest(manifest.Manifest)
 	// if err != nil {

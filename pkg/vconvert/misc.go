@@ -12,9 +12,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/docker/distribution"
-	v1 "github.com/google/go-containerregistry/pkg/v1"
-	"github.com/heroku/docker-registry-client/registry"
+	// "github.com/docker/distribution"
+
 	"github.com/mitchellh/go-homedir"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
@@ -184,6 +183,10 @@ func checkDirectories(targetDir string) error {
 
 }
 
+// func distributor() {
+//
+// }
+
 // func distributor(layers []*layer, p *mpb.Progress, jobs chan job) {
 //
 // 	log.Infof("downloading %d layers", len(layers))
@@ -211,21 +214,3 @@ func checkDirectories(targetDir string) error {
 //
 // 	close(jobs)
 // }
-
-func localGetReader(image string, layer *Layer, registry *registry.Registry) (io.ReadCloser, error) {
-	l := layer.Layer.(v1.Layer)
-	reader, err := l.Compressed()
-	if err != nil {
-		return nil, err
-	}
-	return reader, nil
-}
-
-func remoteGetReader(image string, layer *Layer, registry *registry.Registry) (io.ReadCloser, error) {
-	olayer := layer.Layer.(distribution.Descriptor)
-	reader, err := registry.DownloadBlob(image, olayer.Digest)
-	if err != nil {
-		return nil, err
-	}
-	return reader, nil
-}

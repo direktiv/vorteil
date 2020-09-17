@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"net"
 	"os"
 	"os/exec"
@@ -14,36 +13,31 @@ import (
 	"sync"
 	"time"
 
-	"code.vorteil.io/vorteil/tools/cli/pkg/daemon/api"
-	"code.vorteil.io/vorteil/tools/cli/pkg/daemon/graph"
-	"github.com/vorteil/vorteil/pkg/vio"
 	"github.com/vorteil/vorteil/pkg/vcfg"
+	"github.com/vorteil/vorteil/pkg/vio"
 	"github.com/vorteil/vorteil/pkg/virtualizers"
 	logger "github.com/vorteil/vorteil/pkg/virtualizers/logging"
-	"github.com/vorteil/vorteil/pkg/vcfg"
-	"github.com/thanhpk/randstr"
 )
 
 // Virtualizer is a struct which will implement the interface so the manager can create one
 type Virtualizer struct {
-	id           string                 // rando has for named pipes and folder names
-	name         string                 // name of vm
-	pname        string                 // name of virtualizer
-	source       interface{}            // details on how the virtual machine was made
-	state        string                 // the state of the vm
-	headless     bool                   // whether to show a gui when spawning a vm
-	created      time.Time              // time the vm was created
-	switchName   string                 // The virtual switch hyper-v will use
-	folder       string                 // The folder to store vm details and objects
-	disk         *os.File               // disk of the machine
-	virtLogger   *logger.Logger         // logs about the provisioning process
-	serialLogger *logger.Logger         // logs for the serial of the vm
-	routes       []api.NetworkInterface // api network interface that displays ports and network types
+	id           string                          // rando has for named pipes and folder names
+	name         string                          // name of vm
+	pname        string                          // name of virtualizer
+	source       interface{}                     // details on how the virtual machine was made
+	state        string                          // the state of the vm
+	headless     bool                            // whether to show a gui when spawning a vm
+	created      time.Time                       // time the vm was created
+	switchName   string                          // The virtual switch hyper-v will use
+	folder       string                          // The folder to store vm details and objects
+	disk         *os.File                        // disk of the machine
+	virtLogger   *logger.Logger                  // logs about the provisioning process
+	serialLogger *logger.Logger                  // logs for the serial of the vm
+	routes       []virtualizers.NetworkInterface // api network interface that displays ports and network types
 
-	config    *vcfg.VCFG // config for the vm
-	sock      net.Conn   // net connection to listen for serial on
-	subServer *graph.Graph
-	vmdrive   string // store disks in this directory
+	config  *vcfg.VCFG // config for the vm
+	sock    net.Conn   // net connection to listen for serial on
+	vmdrive string     // store disks in this directory
 
 }
 
@@ -92,7 +86,6 @@ func (v *Virtualizer) Stop() error {
 	v.log("debug", "Stopping VM")
 	if v.state != virtualizers.Ready {
 		v.state = virtualizers.Changing
-		v.subServer.SubServer.Publish(graph.VMUpdater)
 
 		go func() {
 			time.Sleep(time.Second * 12)
@@ -121,7 +114,6 @@ func (v *Virtualizer) Stop() error {
 		}
 
 		v.state = virtualizers.Ready
-		v.subServer.SubServer.Publish(graph.VMUpdater)
 	}
 	return nil
 }
@@ -132,7 +124,6 @@ func (v *Virtualizer) Start() error {
 	switch v.State() {
 	case "ready":
 		v.state = virtualizers.Changing
-		v.subServer.SubServer.Publish(graph.VMUpdater)
 
 		cmd := exec.Command(virtualizers.Powershell, "Start-VM", "-Name", v.name)
 		output, err := v.execute(cmd)
@@ -151,7 +142,6 @@ func (v *Virtualizer) Start() error {
 		}
 
 		v.state = virtualizers.Alive
-		v.subServer.SubServer.Publish(graph.VMUpdater)
 
 		go v.checkState()
 		go v.lookForIP()
@@ -240,12 +230,12 @@ func (v *Virtualizer) lookForIP() {
 
 }
 
-// Download returns the disk as a file.File
-func (v *Virtualizer) Download() (file.File, error) {
+// Download returns the disk as a vio.File
+func (v *Virtualizer) Download() (vio.File, error) {
 	if !(v.state == virtualizers.Ready) {
 		return nil, fmt.Errorf("virtual machine must be in state ready to be downloaded")
 	}
-	f, err := file.LazyOpen(v.disk.Name())
+	f, err := vio.LazyOpen(v.disk.Name())
 	if err != nil {
 		v.log("error", "Error Downloading Disk Image: %v", err)
 		return nil, err
@@ -258,17 +248,17 @@ func (v *Virtualizer) ConvertToVM() interface{} {
 	info := v.config.Info
 	vm := v.config.VM
 	system := v.config.System
-	programs := make([]api.ProgramSummaries, 0)
+	programs := make([]virtualizers.ProgramSummaries, 0)
 
 	for _, p := range v.config.Programs {
-		programs = append(programs, api.ProgramSummaries{
+		programs = append(programs, virtualizers.ProgramSummaries{
 			Binary: p.Binary,
 			Args:   string(p.Args),
 			Env:    p.Env,
 		})
 	}
 
-	machine := &api.VirtualMachine{
+	machine := &virtualizers.VirtualMachine{
 		ID:       v.name,
 		Author:   info.Author,
 		CPUs:     int(vm.CPUs),
@@ -277,13 +267,13 @@ func (v *Virtualizer) ConvertToVM() interface{} {
 		Created:  v.created,
 		Date:     info.Date.Time(),
 		Networks: v.routes,
-		Kernel:   vm.Kernel.String(),
+		Kernel:   vm.Kernel,
 		Name:     info.Name,
 		Summary:  info.Summary,
 		URL:      string(info.URL),
 		Version:  info.Version,
 		Programs: programs,
-		Source:   v.source.(api.Source),
+		Source:   v.source.(virtualizers.Source),
 		Hostname: system.Hostname,
 		Platform: v.pname,
 		Status:   v.state,
@@ -307,7 +297,6 @@ func (v *Virtualizer) Close(force bool) error {
 	}
 	// }
 	v.state = virtualizers.Changing
-	v.subServer.SubServer.Publish(graph.VMUpdater)
 
 	cmd := exec.Command(virtualizers.Powershell, "Remove-VM", "-Name", v.name, "-Force")
 	_, err := v.execute(cmd)
@@ -315,7 +304,6 @@ func (v *Virtualizer) Close(force bool) error {
 		v.log("error", "Error Remove-VM: %v", err)
 	}
 	v.state = virtualizers.Deleted
-	v.subServer.SubServer.Publish(graph.VMUpdater)
 
 	v.disk.Close()
 	if v.sock != nil {
@@ -415,7 +403,6 @@ func (v *Virtualizer) checkState() {
 		}
 		if state == "Off" {
 			v.state = virtualizers.Ready
-			v.subServer.SubServer.Publish(graph.VMUpdater)
 
 		}
 		time.Sleep(time.Second * 1)
@@ -448,9 +435,9 @@ func (v *Virtualizer) GeneratePowershell(source string) error {
 	if err != nil {
 		return err
 	}
-	v.config.VM.RAM.Align(size.MiB * 2)
+	v.config.VM.RAM.Align(vcfg.MiB * 2)
 
-	size := fmt.Sprintf("%v%s", v.config.VM.RAM.Units(size.MiB), "MB")
+	size := fmt.Sprintf("%v%s", v.config.VM.RAM.Units(vcfg.MiB), "MB")
 
 	var args []string
 	// New-VM
@@ -517,7 +504,6 @@ func (v *Virtualizer) Detach(source string) error {
 		v.log("error", "Error Remove-VM: %v", err)
 	}
 	v.state = virtualizers.Deleted
-	v.subServer.SubServer.Publish(graph.VMUpdater)
 
 	v.disk.Close()
 	if v.sock != nil {
@@ -546,8 +532,6 @@ func (v *Virtualizer) Prepare(args *virtualizers.PrepareArgs) *virtualizers.Virt
 	v.source = args.Source
 	v.routes = v.Routes()
 	v.state = virtualizers.Changing
-	v.subServer = args.Subserver
-	v.subServer.SubServer.Publish(graph.VMUpdater)
 	v.vmdrive = args.VMDrive
 	v.created = time.Now()
 	v.virtLogger = logger.NewLogger(2048)
@@ -581,45 +565,20 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 		o.finished(returnErr)
 	}()
 	o.name = args.Name
-	o.id = randstr.Hex(5)
-	o.folder = filepath.Join(o.vmdrive, fmt.Sprintf("%s-%s", o.id, o.Type()))
-	err := os.MkdirAll(o.folder, os.ModePerm)
-	if err != nil {
-		returnErr = err
-	}
+	o.folder = filepath.Dir(args.ImagePath)
+	o.id = strings.Split(filepath.Base(o.folder), "-")[1]
 
 	_, loaded := virtualizers.ActiveVMs.LoadOrStore(o.name, o.Virtualizer)
 	if loaded {
 		returnErr = errors.New("virtual machine already exists")
 	}
-	diskPath := filepath.Join(o.folder, fmt.Sprintf("disk%s", ".vhd"))
 
-	tempDisk, err := os.Create(diskPath)
-	if err != nil {
-		o.Virtualizer.log("error", "Error Creating Disk: %v", err)
-	}
-	_, err = io.Copy(tempDisk, args.Image)
-	if err != nil {
-		o.Virtualizer.log("error", "Error Copying Disk: %v", err)
-	}
+	o.config.VM.RAM.Align(vcfg.MiB * 2)
 
-	err = tempDisk.Sync()
-	if err != nil {
-		o.Virtualizer.log("error", "Error Syncing Disk: %v", err)
-	}
-
-	err = tempDisk.Close()
-	if err != nil {
-		o.Virtualizer.log("error", "Error Closing Disk: %v", err)
-	}
-
-	o.disk = tempDisk
-	o.config.VM.RAM.Align(size.MiB * 2)
-
-	size := fmt.Sprintf("%v%s", o.config.VM.RAM.Units(size.MiB), "MB")
+	size := fmt.Sprintf("%v%s", o.config.VM.RAM.Units(vcfg.MiB), "MB")
 
 	cmd := exec.Command(virtualizers.Powershell, "New-VM", "-Name", o.name,
-		"-BootDevice", "VHD", "-VHDPath", o.disk.Name(), "-Path", o.folder, "-Generation", "1", "-SwitchName", fmt.Sprintf("\"%s\"", o.switchName))
+		"-BootDevice", "VHD", "-VHDPath", filepath.ToSlash(args.ImagePath), "-Path", o.folder, "-Generation", "1", "-SwitchName", fmt.Sprintf("\"%s\"", o.switchName))
 	output, err := o.execute(cmd)
 	if err != nil {
 		o.Virtualizer.log("error", "Error New-VM: %v", err)
@@ -687,7 +646,7 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 
 // Routes converts the VCFG.routes to the apiNetworkInterface which allows
 // us to easiler return to currently written graphql APIs
-func (v *Virtualizer) Routes() []api.NetworkInterface {
+func (v *Virtualizer) Routes() []virtualizers.NetworkInterface {
 
 	routes := virtualizers.Routes{}
 	var nics = v.config.Networks
@@ -729,9 +688,9 @@ func (v *Virtualizer) Routes() []api.NetworkInterface {
 			routes.NIC[i].Protocol[p] = existingPorts
 		}
 	}
-	apiNics := make([]api.NetworkInterface, 0)
+	apiNics := make([]virtualizers.NetworkInterface, 0)
 	for i, net := range v.config.Networks {
-		newNetwork := api.NetworkInterface{
+		newNetwork := virtualizers.NetworkInterface{
 			Name:    "",
 			IP:      net.IP,
 			Mask:    net.Mask,
@@ -747,7 +706,7 @@ func (v *Virtualizer) Routes() []api.NetworkInterface {
 					}
 				}
 			}
-			newNetwork.UDP = append(newNetwork.UDP, api.RouteMap{
+			newNetwork.UDP = append(newNetwork.UDP, virtualizers.RouteMap{
 				Port:    port,
 				Address: addr,
 			})
@@ -762,7 +721,7 @@ func (v *Virtualizer) Routes() []api.NetworkInterface {
 					}
 				}
 			}
-			newNetwork.TCP = append(newNetwork.TCP, api.RouteMap{
+			newNetwork.TCP = append(newNetwork.TCP, virtualizers.RouteMap{
 				Port:    port,
 				Address: addr,
 			})
@@ -777,7 +736,7 @@ func (v *Virtualizer) Routes() []api.NetworkInterface {
 					}
 				}
 			}
-			newNetwork.HTTP = append(newNetwork.HTTP, api.RouteMap{
+			newNetwork.HTTP = append(newNetwork.HTTP, virtualizers.RouteMap{
 				Port:    port,
 				Address: addr,
 			})
@@ -792,7 +751,7 @@ func (v *Virtualizer) Routes() []api.NetworkInterface {
 					}
 				}
 			}
-			newNetwork.HTTPS = append(newNetwork.HTTPS, api.RouteMap{
+			newNetwork.HTTPS = append(newNetwork.HTTPS, virtualizers.RouteMap{
 				Port:    port,
 				Address: addr,
 			})

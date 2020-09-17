@@ -26,6 +26,7 @@ func NewDynamicWriter(w io.WriteSeeker, h HolePredictor) (*DynamicWriter, error)
 	dw := new(DynamicWriter)
 	dw.w = w
 	dw.h = h
+	dw.buffer = new(bytes.Buffer)
 
 	err := dw.writeRedundantFooter()
 	if err != nil {

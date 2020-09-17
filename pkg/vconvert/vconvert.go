@@ -9,9 +9,11 @@ import (
 	"io"
 	"strings"
 
+	log "github.com/sirupsen/logrus"
+	"github.com/vorteil/vorteil/pkg/elog"
+
 	"github.com/heroku/docker-registry-client/registry"
 	parser "github.com/novln/docker-parser"
-	"github.com/vbauerster/mpb"
 )
 
 const (
@@ -35,46 +37,41 @@ type RegistryType string
 var (
 	LocalRegistry  RegistryType = "local"
 	RemoteRegistry RegistryType = "remote"
+	NullRegistry   RegistryType = ""
 )
 
 type job struct {
-	layer  *Layer
-	bar    *mpb.Bar
+	layer  *layer
 	number int
 }
 
 // compat struct for layers from local runtimes and remote image repos
-type Layer struct {
-	Layer interface{}
-	Size  int64
-	Hash  string
+type layer struct {
+	layer interface{}
+	size  int64
+	hash  string
 }
 
 // ContainerConverter is the base object. Create a client with NewContainerConverter.
 type ContainerConverter struct {
-	ImageRef     *parser.Reference
-	RegistryType RegistryType
-	Layers       []*Layer
+	imageRef     *parser.Reference
+	registry     *registry.Registry
+	registryType RegistryType
 
-	registry *registry.Registry
+	layers      []*layer
+	fetchReader func(string, *layer, *registry.Registry) (io.ReadCloser, error)
+	jobsCh      chan job
 
-	// provieds reader for either local or remote registries
-	fetchReader func(string, *Layer, *registry.Registry) (io.ReadCloser, error)
-
-	// registryConf *RegistryConfig
-	// imageConfig  v1.Config
-	// tmpDir       string
-	//
-	// user, pwd string
-	// wg        sync.WaitGroup
-	// jobs      chan job
+	logger elog.View
 }
 
 // NewContainerConverter returns a ContainerConverter for the given image
-// It parses and validates the application name.
-//
-// It accepts user and password if the
-func NewContainerConverter(app string, dest string) (*ContainerConverter, error) {
+// It parses and validates the application name., Logger elog.View
+func NewContainerConverter(app string, log elog.View) (*ContainerConverter, error) {
+
+	if log == nil {
+		log = &elog.CLI{}
+	}
 
 	// get the ref first
 	ref, err := parser.Parse(app)
@@ -82,14 +79,8 @@ func NewContainerConverter(app string, dest string) (*ContainerConverter, error)
 		return nil, err
 	}
 
-	// check if folder exists and is empty
-	err = checkDirectories(dest)
-	if err != nil {
-		return nil, err
-	}
-
 	cc := &ContainerConverter{
-		ImageRef: ref,
+		imageRef: ref,
 	}
 
 	if strings.HasPrefix(ref.Registry(), localIdentifier) {
@@ -103,7 +94,7 @@ func NewContainerConverter(app string, dest string) (*ContainerConverter, error)
 		case containerdRuntime:
 			{
 				cc.fetchReader = localGetReader
-				cc.RegistryType = LocalRegistry
+				cc.registryType = LocalRegistry
 			}
 		default:
 			{
@@ -112,12 +103,20 @@ func NewContainerConverter(app string, dest string) (*ContainerConverter, error)
 		}
 
 	} else {
-		cc.RegistryType = RemoteRegistry
+		cc.registryType = RemoteRegistry
 		cc.fetchReader = remoteGetReader
 	}
 
+	cc.logger = log
+	cc.jobsCh = make(chan job)
+
 	return cc, nil
 
+}
+
+// RegistryType returns the type of registry: local, remote or none
+func (cc *ContainerConverter) RegistryType() RegistryType {
+	return cc.registryType
 }
 
 // RegistryName returns the name of the image registry
@@ -126,8 +125,8 @@ func (cc *ContainerConverter) RegistryName() string {
 
 	registry := ""
 
-	if cc.RegistryType == RemoteRegistry {
-		return cc.ImageRef.Registry()
+	if cc.registryType == RemoteRegistry {
+		return cc.imageRef.Registry()
 	}
 
 	return registry
@@ -137,13 +136,13 @@ func (cc *ContainerConverter) RegistryName() string {
 // DownloadImageInformation downloads the information required to download the
 // layers of an image. After downloading the layer information is stored in ContainerConverter.
 // For remote registries the config needs to be provided with at least the url of the registry.
-func (cc *ContainerConverter) DownloadImageInformation(config *RegistryConfig) error {
+func (cc *ContainerConverter) downloadImageInformation(config *RegistryConfig) error {
 
-	if cc.ImageRef == nil {
+	if cc.imageRef == nil {
 		return fmt.Errorf("image reference missing")
 	}
 
-	if cc.RegistryType == LocalRegistry {
+	if cc.registryType == LocalRegistry {
 
 	} else {
 		cc.downloadInformationRemote(config)
@@ -152,54 +151,54 @@ func (cc *ContainerConverter) DownloadImageInformation(config *RegistryConfig) e
 	return nil
 }
 
-func (ih *ContainerConverter) downloadRemoteTar() error {
-	//
-	// 	var url string
-	//
-	// 	repos, err := fetchRepoConfig(ih.ImageRef.Registry())
-	// 	if err != nil {
-	// 		return err
-	// 	}
-	//
-	// 	if repos[configURL] == nil {
-	// 		return err
-	// 	}
-	//
-	// 	url = repos[configURL].(string)
-	// 	log.Infof("connecting to registry url: %s", url)
-	//
-	// 	hub, err := newRegistry(url, ih.user, ih.pwd)
-	// 	if err != nil {
-	// 		return err
-	// 	}
-	// 	ih.registry = hub
-	//
-	// 	log.Infof("fetching manifest for %s", ih.ImageRef.ShortName())
-	// 	manifest, err := hub.ManifestV2(ih.ImageRef.ShortName(), ih.ImageRef.Tag())
-	// 	if err != nil {
-	// 		return err
-	// 	}
-	//
-	// 	err = ih.downloadManifest(manifest.Manifest)
-	// 	if err != nil {
-	// 		return err
-	// 	}
-	//
-	// 	var ifs = make([]*layer, len(manifest.Layers))
-	// 	for i, d := range manifest.Layers {
-	// 		ifs[i] = &layer{
-	// 			layer: d,
-	// 			hash:  string(d.Digest[7:15]),
-	// 			size:  d.Size,
-	// 		}
-	// 	}
-	// 	ih.layers = ifs
-	//
-	// 	ih.downloadBlobs()
-	//
-	return nil
-	//
-}
+// func (ih *ContainerConverter) downloadRemoteTar() error {
+//
+// 	var url string
+//
+// 	repos, err := fetchRepoConfig(ih.ImageRef.Registry())
+// 	if err != nil {
+// 		return err
+// 	}
+//
+// 	if repos[configURL] == nil {
+// 		return err
+// 	}
+//
+// 	url = repos[configURL].(string)
+// 	log.Infof("connecting to registry url: %s", url)
+//
+// 	hub, err := newRegistry(url, ih.user, ih.pwd)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	ih.registry = hub
+//
+// 	log.Infof("fetching manifest for %s", ih.ImageRef.ShortName())
+// 	manifest, err := hub.ManifestV2(ih.ImageRef.ShortName(), ih.ImageRef.Tag())
+// 	if err != nil {
+// 		return err
+// 	}
+//
+// 	err = ih.downloadManifest(manifest.Manifest)
+// 	if err != nil {
+// 		return err
+// 	}
+//
+// 	var ifs = make([]*layer, len(manifest.Layers))
+// 	for i, d := range manifest.Layers {
+// 		ifs[i] = &layer{
+// 			layer: d,
+// 			hash:  string(d.Digest[7:15]),
+// 			size:  d.Size,
+// 		}
+// 	}
+// 	ih.layers = ifs
+//
+// 	ih.downloadBlobs()
+//
+// 	return nil
+// 	//
+// }
 
 // func (cc *ContainerConverter) downloadManifest(manifest schema2.Manifest) error {
 //
@@ -238,8 +237,10 @@ func (ih *ContainerConverter) downloadRemoteTar() error {
 // 	return nil
 // }
 
-func (ih *ContainerConverter) downloadBlobs() {
+func (cc *ContainerConverter) downloadBlobs() {
 
+	cc.logger.Infof("Downloading Blobs")
+	// cc.logger.
 	// if !elog.IsJSON {
 	// 	log.SetOutput(ioutil.Discard)
 	// }
@@ -396,35 +397,38 @@ func (ih *ContainerConverter) createVCFG(targetDir string) error {
 
 }
 
-func (ih *ContainerConverter) worker() {
+func (cc *ContainerConverter) blobDownloadWorker() {
 
-	// for {
-	// 	job, opened := <-ih.jobs
-	// 	if !opened {
-	// 		break
-	// 	}
-	//
-	// 	reader, err := ih.fetchReader(ih.ImageRef.ShortName(), job.layer, ih.registry)
-	// 	if err != nil {
-	// 		if !elog.IsJSON {
-	// 			log.SetOutput(os.Stdout)
-	// 		}
-	// 		log.Fatalf("can not download layer %s: %s", job.layer.hash, err.Error())
-	// 		os.Exit(1)
-	// 	}
-	//
-	// 	// if we use json we don't show bars
-	// 	var proxyReader io.ReadCloser
-	// 	if !elog.IsJSON {
-	// 		proxyReader = job.bar.ProxyReader(reader)
-	// 	} else {
-	// 		log.Infof("downloading layer %s (%s)", ih.ImageRef.ShortName(), bytefmt.ByteSize((uint64)(job.layer.size)))
-	// 		proxyReader = reader
-	// 	}
-	// 	defer proxyReader.Close()
-	//
-	// 	writeFile(fmt.Sprintf(tarExpression, ih.tmpDir, job.layer.hash), proxyReader)
-	// 	ih.wg.Done()
-	// }
+	for {
+		job, opened := <-cc.jobsCh
+		if !opened {
+			break
+		}
+
+		log.Infof("JOB %v", job)
+
+		//
+		// 	reader, err := ih.fetchReader(ih.ImageRef.ShortName(), job.layer, ih.registry)
+		// 	if err != nil {
+		// 		if !elog.IsJSON {
+		// 			log.SetOutput(os.Stdout)
+		// 		}
+		// 		log.Fatalf("can not download layer %s: %s", job.layer.hash, err.Error())
+		// 		os.Exit(1)
+		// 	}
+		//
+		// 	// if we use json we don't show bars
+		// 	var proxyReader io.ReadCloser
+		// 	if !elog.IsJSON {
+		// 		proxyReader = job.bar.ProxyReader(reader)
+		// 	} else {
+		// 		log.Infof("downloading layer %s (%s)", ih.ImageRef.ShortName(), bytefmt.ByteSize((uint64)(job.layer.size)))
+		// 		proxyReader = reader
+		// 	}
+		// 	defer proxyReader.Close()
+		//
+		// 	writeFile(fmt.Sprintf(tarExpression, ih.tmpDir, job.layer.hash), proxyReader)
+		// 	ih.wg.Done()
+	}
 
 }

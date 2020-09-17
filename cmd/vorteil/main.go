@@ -119,7 +119,6 @@ func initKernels() error {
 	if err != nil {
 		return err
 	}
-
 	vorteild := filepath.Join(home, ".vorteild")
 	conf := filepath.Join(vorteild, "conf.toml")
 	var kernels, watch string
@@ -129,7 +128,7 @@ func initKernels() error {
 	if err != nil {
 		kernels = filepath.Join(vorteild, "kernels")
 		watch = filepath.Join(kernels, "watch")
-		sources = []string{"https://downloads.vorteil.io/system"}
+		sources = []string{"https://downloads.vorteil.io/kernels"}
 	} else {
 		vconf := new(vorteildConf)
 		err = toml.Unmarshal(confData, vconf)

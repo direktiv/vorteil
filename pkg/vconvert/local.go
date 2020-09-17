@@ -16,6 +16,8 @@ import (
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/platforms"
 	"github.com/docker/docker/client"
+	v1 "github.com/google/go-containerregistry/pkg/v1"
+	"github.com/heroku/docker-registry-client/registry"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -132,4 +134,13 @@ func (ih *ContainerConverter) localHandler(path string) error {
 	// ih.downloadBlobs()
 
 	return nil
+}
+
+func localGetReader(image string, layer *layer, registry *registry.Registry) (io.ReadCloser, error) {
+	l := layer.layer.(v1.Layer)
+	reader, err := l.Compressed()
+	if err != nil {
+		return nil, err
+	}
+	return reader, nil
 }

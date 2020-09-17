@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"code.vorteil.io/vorteil/tools/cli/pkg/vorteil/vcfg"
+	"github.com/vorteil/vorteil/pkg/vcfg"
 
-	logger "code.vorteil.io/vorteil/tools/cli/pkg/virtualizers/logging"
+	logger "github.com/vorteil/vorteil/pkg/virtualizers/logging"
 )
 
 func TestLoggerAndSerial(t *testing.T) {

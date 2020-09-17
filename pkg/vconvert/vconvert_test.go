@@ -3,13 +3,13 @@ package vconvert
 import (
 	"io/ioutil"
 	"os"
-
-	// "path/filepath"
+	"path/filepath"
 	"testing"
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/vorteil/vorteil/pkg/elog"
+	"github.com/vorteil/vorteil/pkg/vcfg"
 )
 
 func TestNewContainerConverter(t *testing.T) {
@@ -20,8 +20,8 @@ func TestNewContainerConverter(t *testing.T) {
 		success bool
 	}{
 		{"", NullRegistry, false},
-		{"local.docker/myapp", LocalRegistry, true},
-		{"local.containerd/myapp", LocalRegistry, true},
+		{"local.docker/myapp", DockerRegistry, true},
+		{"local.containerd/myapp", ContainerdRegistry, true},
 		{"local.unknown/myapp", NullRegistry, false},
 		{"tomcat", RemoteRegistry, true},
 		{"myrepo.io/tomcat", RemoteRegistry, true},
@@ -30,22 +30,30 @@ func TestNewContainerConverter(t *testing.T) {
 	}
 
 	for _, c := range cc {
-		r, err := NewContainerConverter(c.app, nil)
+		r, err := NewContainerConverter(c.app, "", nil)
 		if c.success {
 			assert.NoError(t, err)
-			assert.Equal(t, r.registryType, c.rtype)
+			assert.Equal(t, r.RegistryType(), c.rtype)
 		} else {
 			assert.Error(t, err)
 		}
 	}
 
+	r, err := NewContainerConverter("tomcat", "", nil)
+	assert.NoError(t, err)
+	assert.Equal(t, r.RegistryName(), "docker.io")
+
+	r, err = NewContainerConverter("myrepo.io/tomcat", "", nil)
+	assert.NoError(t, err)
+	assert.Equal(t, r.RegistryName(), "myrepo.io")
+
 }
 
 func TestBlobDownloadWorker(t *testing.T) {
 
-	r, _ := NewContainerConverter("hello-world", nil)
-	err := r.downloadImageInformation(&RegistryConfig{
-		URL: "https://registry-1.docker.io",
+	r, _ := NewContainerConverter("hello-world", "", nil)
+	err := r.downloadImageInformation(&registryConfig{
+		url: "https://registry-1.docker.io",
 	})
 	assert.NoError(t, err)
 	assert.NotNil(t, r.layers[0])
@@ -86,22 +94,47 @@ func TestCreateVCFG(t *testing.T) {
 	err := r.createVCFG(config, "/does/not/exist")
 	assert.Error(t, err)
 
-	dir, _ := ioutil.TempDir("", "vtest")
-	defer os.RemoveAll(dir)
-
 	// no command error
-	err = r.createVCFG(config, dir)
+	err = r.createVCFG(config, "../../test/vconvert/")
 	assert.Error(t, err)
 
-	// config.WorkingDir = "/testdir"
-	// config.WorkingDir = "/testdir"
+	config.Cmd = []string{"bin", "run", "smooth"}
 
-	config.Entrypoint = []string{"ep"}
-	config.Cmd = []string{"bin"}
+	// can not find binary
+	err = r.createVCFG(config, "../../test/vconvert/")
+	assert.Error(t, err)
 
-	err = r.createVCFG(config, dir)
+	// cwd works
+	config.WorkingDir = "/find"
+	err = r.createVCFG(config, "../../test/vconvert/")
+	assert.NoError(t, err)
+	defer os.Remove("../../test/vconvert/default.vcfg")
+	defer os.Remove("../../test/vconvert/.vorteilproject")
+
+	// pathy works
+	config.WorkingDir = "/"
+	config.Env = []string{"PATH=/find"}
+
+	type dummy struct{}
+	ep := make(map[string]struct{})
+	ep["8080/tcp"] = dummy{}
+	ep["9090/udp"] = dummy{}
+	ep["6969"] = dummy{}
+
+	config.ExposedPorts = ep
+
+	err = r.createVCFG(config, "../../test/vconvert/")
 	assert.NoError(t, err)
 
+	v, _ := ioutil.ReadFile("../../test/vconvert/default.vcfg")
+	vf := new(vcfg.VCFG)
+	vf.Load(v)
+
+	assert.Equal(t, len(vf.Networks[0].TCP), 2)
+	assert.Equal(t, "9090", vf.Networks[0].UDP[0])
+
+	assert.Equal(t, vf.Programs[0].Args, "/find/bin run smooth")
+	assert.Equal(t, len(vf.Programs[0].Env), 1)
 }
 
 func TestDownloadBlobs(t *testing.T) {
@@ -109,9 +142,9 @@ func TestDownloadBlobs(t *testing.T) {
 	dir, _ := ioutil.TempDir("", "vtest")
 	defer os.RemoveAll(dir)
 
-	r, _ := NewContainerConverter("hello-world", nil)
-	err := r.downloadImageInformation(&RegistryConfig{
-		URL: "https://registry-1.docker.io",
+	r, _ := NewContainerConverter("hello-world", "", nil)
+	err := r.downloadImageInformation(&registryConfig{
+		url: "https://registry-1.docker.io",
 	})
 	assert.NoError(t, err)
 
@@ -125,7 +158,7 @@ func TestDownloadBlobs(t *testing.T) {
 
 func TestUntarLayers(t *testing.T) {
 
-	r, _ := NewContainerConverter("hello-world", nil)
+	r, _ := NewContainerConverter("hello-world", "", nil)
 
 	// not allowed
 	err := r.untarLayers("/dev")
@@ -156,5 +189,23 @@ func TestUntarLayers(t *testing.T) {
 	// there should be only one file in the dir
 	files, _ := ioutil.ReadDir(dir)
 	assert.Equal(t, 1, len(files))
+
+}
+
+func TestConvertToProject(t *testing.T) {
+
+	r, _ := NewContainerConverter("hello-world", "", nil)
+
+	err := r.ConvertToProject("../../test/vconvert", "", "")
+	assert.Error(t, err)
+
+	dir, _ := ioutil.TempDir("", "vtest")
+	defer os.RemoveAll(dir)
+
+	err = r.ConvertToProject(dir, "", "")
+	assert.NoError(t, err)
+
+	assert.FileExists(t, filepath.Join(dir, "default.vcfg"))
+	assert.FileExists(t, filepath.Join(dir, ".vorteilproject"))
 
 }

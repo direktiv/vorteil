@@ -12,15 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	// "github.com/docker/distribution"
-
-	"github.com/mitchellh/go-homedir"
 	log "github.com/sirupsen/logrus"
-	"github.com/spf13/viper"
-)
-
-const (
-	configFileName = "vconvert.yaml"
 )
 
 var (
@@ -32,37 +24,6 @@ var (
 	// ignore folders
 	folders = []string{"dev", "proc", "sys", "boot", "media", "mnt"}
 )
-
-// reads in config file, uses defaults if not found
-func initConfig(cfgFile string) {
-
-	if cfgFile != "" {
-		viper.SetConfigFile(cfgFile)
-	} else {
-		home, err := homedir.Dir()
-		if err != nil {
-			goto loadDefaults
-		}
-		viper.AddConfigPath(home)
-		viper.SetConfigName(configFileName)
-	}
-
-loadDefaults:
-	if err := viper.ReadInConfig(); err == nil {
-		log.Debugf("using config file: %s", viper.ConfigFileUsed())
-	} else {
-		if err != nil {
-			log.Debugf("%s\n", err.Error())
-		}
-		log.Debugf("using default repositories")
-		viper.SetDefault("repositories",
-			map[string]interface{}{
-				"docker.io":         map[string]interface{}{"url": "https://registry-1.docker.io"},
-				"mcr.microsoft.com": map[string]interface{}{"url": "https://mcr.microsoft.com"},
-				"gcr.io":            map[string]interface{}{"url": "https://gcr.io"},
-			})
-	}
-}
 
 // write function to write out tar layers
 func writeFile(name string, r io.Reader) error {
@@ -88,22 +49,6 @@ func writeFile(name string, r io.Reader) error {
 	}
 
 	return nil
-}
-
-func fetchRepoConfig(repo string) (map[string]interface{}, error) {
-
-	repositoriesMap := viper.Get(configRepo)
-	if repositoriesMap == nil {
-		return nil, fmt.Errorf("No repositories specified")
-	}
-
-	repositoryMap := repositoriesMap.(map[string]interface{})[repo]
-
-	if repositoryMap == nil {
-		return nil, fmt.Errorf("No repository with name %s specified", repo)
-	}
-
-	return repositoryMap.(map[string]interface{}), nil
 }
 
 // findBinary tries to find the executable in the expanded container image
@@ -158,7 +103,7 @@ func findBinary(name string, env []string, cwd string, targetDir string) (string
 	return "", fmt.Errorf("can not find binary %s", name)
 }
 
-func checkDirectoriy(targetDir string) error {
+func checkDirectory(targetDir string) error {
 
 	// check if it exists and empty
 	if _, err := os.Stat(targetDir); err != nil {
@@ -173,44 +118,6 @@ func checkDirectoriy(targetDir string) error {
 		return fmt.Errorf("target directory %s not empty", targetDir)
 	}
 
-	// create temporary extract folder
-	// dir, err := ioutil.TempDir(os.TempDir(), "image")
-	// if err != nil {
-	// 	return "", err
-	// }
-
 	return nil
 
 }
-
-// func distributor() {
-//
-// }
-
-// func distributor(layers []*layer, p *mpb.Progress, jobs chan job) {
-//
-// 	log.Infof("downloading %d layers", len(layers))
-// 	for i, layer := range layers {
-//
-// 		job := job{
-// 			layer:  layer,
-// 			number: i,
-// 		}
-//
-// 		if !elog.IsJSON {
-// 			job.bar = p.AddBar(int64(layer.size),
-// 				mpb.PrependDecorators(
-// 					decor.Name(fmt.Sprintf("layer %d (%s): ", i, layer.hash)),
-// 				),
-// 				mpb.AppendDecorators(
-// 					decor.OnComplete(
-// 						decor.CountersKiloByte("%.1f / %.1f"), "downloaded",
-// 					),
-// 				),
-// 			)
-// 		}
-// 		jobs <- job
-// 	}
-//
-// 	close(jobs)
-// }

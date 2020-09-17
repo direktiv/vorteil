@@ -1,9 +1,6 @@
 package vconvert
 
 import (
-	// "io/ioutil"
-	// "os"
-
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -15,10 +12,10 @@ func TestDownloadInformationRemoteFailure(t *testing.T) {
 
 	// should all fail
 	var cc = []struct {
-		config *RegistryConfig
+		config *registryConfig
 	}{
 		{nil},
-		{&RegistryConfig{}},
+		{&registryConfig{}},
 	}
 
 	for _, c := range cc {
@@ -33,10 +30,10 @@ func TestDownloadInformationRemoteFailure(t *testing.T) {
 
 func TestDownloadInformationRemoteSuccess(t *testing.T) {
 
-	r, _ := NewContainerConverter("hello-world", nil)
+	r, _ := NewContainerConverter("hello-world", "", nil)
 
-	err := r.downloadImageInformation(&RegistryConfig{
-		URL: "https://registry-1.docker.io",
+	err := r.downloadImageInformation(&registryConfig{
+		url: "https://registry-1.docker.io",
 	})
 	assert.NoError(t, err)
 

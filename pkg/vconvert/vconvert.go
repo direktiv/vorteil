@@ -11,6 +11,7 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"regexp"
 	"strings"
 
 	"github.com/vorteil/vorteil/pkg/vcfg"
@@ -46,9 +47,10 @@ type RegistryType string
 
 // RegistryType values where local is e.g. docker and remote docker hub
 var (
-	LocalRegistry  RegistryType = "local"
-	RemoteRegistry RegistryType = "remote"
-	NullRegistry   RegistryType = ""
+	DockerRegistry     RegistryType = "docker"
+	ContainerdRegistry RegistryType = "containerd"
+	RemoteRegistry     RegistryType = "remote"
+	NullRegistry       RegistryType = ""
 )
 
 type job struct {
@@ -82,17 +84,20 @@ type ContainerConverter struct {
 	fetchReader func(string, *layer, *registry.Registry) (io.ReadCloser, error)
 	jobsCh      chan *job
 	jobsDoneCh  chan *job
+	tmpLocalTar *os.File
 
 	logger elog.View
 }
 
 // NewContainerConverter returns a ContainerConverter for the given image
 // It parses and validates the application name., Logger elog.View
-func NewContainerConverter(app string, log elog.View) (*ContainerConverter, error) {
+func NewContainerConverter(app, config string, log elog.View) (*ContainerConverter, error) {
 
 	if log == nil {
 		log = &elog.CLI{}
 	}
+
+	initConfig(config)
 
 	// get the ref first
 	ref, err := parser.Parse(app)
@@ -111,16 +116,13 @@ func NewContainerConverter(app string, log elog.View) (*ContainerConverter, erro
 
 		switch s[1] {
 		case dockerRuntime:
-			fallthrough
+			cc.fetchReader = localGetReader
+			cc.registryType = DockerRegistry
 		case containerdRuntime:
-			{
-				cc.fetchReader = localGetReader
-				cc.registryType = LocalRegistry
-			}
+			cc.fetchReader = localGetReader
+			cc.registryType = ContainerdRegistry
 		default:
-			{
-				return nil, fmt.Errorf("unknown local container runtime")
-			}
+			return nil, fmt.Errorf("unknown local container runtime")
 		}
 
 	} else {
@@ -136,6 +138,53 @@ func NewContainerConverter(app string, log elog.View) (*ContainerConverter, erro
 
 }
 
+// ConvertToProject exports a container image as a vorteil.io VM into the dst directory
+func (cc *ContainerConverter) ConvertToProject(dst, user, pwd string) error {
+
+	// check if folder exists
+	err := checkDirectory(dst)
+	if err != nil {
+		return err
+	}
+
+	reg, err := fetchRepoConfig(cc.RegistryName())
+	if err != nil {
+		return err
+	}
+
+	cc.logger.Printf("registry %s, url %s", cc.RegistryName(), reg["url"])
+
+	if reg["url"] == "" {
+		return fmt.Errorf("url not available for registry %s", cc.RegistryName())
+	}
+
+	cc.downloadImageInformation(&registryConfig{
+		url:  reg["url"].(string),
+		user: user,
+		pwd:  pwd,
+	})
+
+	dir, _ := ioutil.TempDir("", "vtest")
+	defer os.RemoveAll(dir)
+
+	err = cc.downloadBlobs(dir)
+	if err != nil {
+		return err
+	}
+
+	err = cc.untarLayers(dst)
+	if err != nil {
+		return err
+	}
+
+	err = cc.createVCFG(cc.imageConfig, dst)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // RegistryType returns the type of registry: local, remote or none
 func (cc *ContainerConverter) RegistryType() RegistryType {
 	return cc.registryType
@@ -144,7 +193,6 @@ func (cc *ContainerConverter) RegistryType() RegistryType {
 // RegistryName returns the name of the image registry
 // Returns empty string for local registries
 func (cc *ContainerConverter) RegistryName() string {
-
 	registry := ""
 
 	if cc.registryType == RemoteRegistry {
@@ -152,112 +200,30 @@ func (cc *ContainerConverter) RegistryName() string {
 	}
 
 	return registry
-
 }
 
-// DownloadImageInformation downloads the information required to download the
+// downloadImageInformation downloads the information required to download the
 // layers of an image. After downloading the layer information is stored in ContainerConverter.
 // For remote registries the config needs to be provided with at least the url of the registry.
-func (cc *ContainerConverter) downloadImageInformation(config *RegistryConfig) error {
+func (cc *ContainerConverter) downloadImageInformation(config *registryConfig) error {
 
 	if cc.imageRef == nil {
 		return fmt.Errorf("image reference missing")
 	}
 
-	if cc.registryType == LocalRegistry {
+	var err error
 
-	} else {
-		cc.downloadInformationRemote(config)
+	switch cc.registryType {
+	case DockerRegistry:
+		err = cc.downloadInformationDocker("", "")
+	case ContainerdRegistry:
+		err = cc.downloadInformationContainerd("", "")
+	default:
+		err = cc.downloadInformationRemote(config)
 	}
 
-	return nil
+	return err
 }
-
-// func (ih *ContainerConverter) downloadRemoteTar() error {
-//
-// 	var url string
-//
-// 	repos, err := fetchRepoConfig(ih.ImageRef.Registry())
-// 	if err != nil {
-// 		return err
-// 	}
-//
-// 	if repos[configURL] == nil {
-// 		return err
-// 	}
-//
-// 	url = repos[configURL].(string)
-// 	log.Infof("connecting to registry url: %s", url)
-//
-// 	hub, err := newRegistry(url, ih.user, ih.pwd)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	ih.registry = hub
-//
-// 	log.Infof("fetching manifest for %s", ih.ImageRef.ShortName())
-// 	manifest, err := hub.ManifestV2(ih.ImageRef.ShortName(), ih.ImageRef.Tag())
-// 	if err != nil {
-// 		return err
-// 	}
-//
-// 	err = ih.downloadManifest(manifest.Manifest)
-// 	if err != nil {
-// 		return err
-// 	}
-//
-// 	var ifs = make([]*layer, len(manifest.Layers))
-// 	for i, d := range manifest.Layers {
-// 		ifs[i] = &layer{
-// 			layer: d,
-// 			hash:  string(d.Digest[7:15]),
-// 			size:  d.Size,
-// 		}
-// 	}
-// 	ih.layers = ifs
-//
-// 	ih.downloadBlobs()
-//
-// 	return nil
-// 	//
-// }
-
-// func (cc *ContainerConverter) downloadManifest(manifest schema2.Manifest) error {
-//
-// 	log.Infof("downloading manifest file")
-// 	reader, err := cc.registry.DownloadBlob(cc.ImageRef.ShortName(), manifest.Target().Digest)
-// 	defer reader.Close()
-// 	if err != nil {
-// 		return err
-// 	}
-//
-// 	buf := new(bytes.Buffer)
-// 	n, err := buf.ReadFrom(reader)
-// 	if err != nil {
-// 		return err
-// 	}
-//
-// 	var img cmanifest.Schema2V1Image
-// 	err = json.Unmarshal(buf.Bytes()[:n], &img)
-// 	if err != nil {
-// 		return err
-// 	}
-//
-// 	ih.imageConfig.Cmd = make([]string, len(img.Config.Cmd))
-// 	ih.imageConfig.Entrypoint = make([]string, len(img.Config.Entrypoint))
-// 	ih.imageConfig.Env = make([]string, len(img.Config.Env))
-// 	ih.imageConfig.ExposedPorts = make(map[string]struct{})
-// 	for k, v := range img.Config.ExposedPorts {
-// 		ih.imageConfig.ExposedPorts[string(k)] = v
-// 	}
-//
-// 	copy(ih.imageConfig.Cmd, img.Config.Cmd)
-// 	copy(ih.imageConfig.Entrypoint, img.Config.Entrypoint)
-// 	copy(ih.imageConfig.Env, img.Config.Env)
-// 	ih.imageConfig.WorkingDir = img.Config.WorkingDir
-//
-// 	return nil
-// }
 
 func (cc *ContainerConverter) downloadBlobs(dir string) error {
 
@@ -281,6 +247,7 @@ func (cc *ContainerConverter) downloadBlobs(dir string) error {
 			number: i,
 			dir:    dir,
 		}
+		cc.logger.Printf("sending job")
 		cc.jobsCh <- job
 
 	}
@@ -302,12 +269,17 @@ func (cc *ContainerConverter) downloadBlobs(dir string) error {
 	cc.logger.Printf("download done")
 	close(cc.jobsCh)
 
+	if cc.tmpLocalTar != nil {
+		os.Remove(cc.tmpLocalTar.Name())
+		cc.tmpLocalTar = nil
+	}
+
 	return nil
 }
 
 func (cc *ContainerConverter) untarLayers(targetDir string) error {
 
-	err := checkDirectoriy(targetDir)
+	err := checkDirectory(targetDir)
 	if err != nil {
 		return err
 	}
@@ -396,50 +368,50 @@ func (cc *ContainerConverter) createVCFG(config v1.Config, targetDir string) err
 		return fmt.Errorf("can not generate command: %s", finalCmd)
 	}
 
-	// bin, err := findBinary(finalCmd[0], ih.imageConfig.Env, vcfgFile.Programs[0].Cwd, targetDir)
-	// if err != nil {
-	// 	return err
-	// }
-	// vcfgFile.Programs[0].Binary = bin
-	//
-	// var args []string
-	//
-	// for _, arg := range finalCmd[1:] {
-	// 	if len(arg) == 1 {
-	// 		continue
-	// 	}
-	// 	if strings.Index(arg, " ") > 0 {
-	// 		args = append(args, fmt.Sprintf("'%s'", arg))
-	// 	} else {
-	// 		args = append(args, arg)
-	// 	}
-	// }
-	//
-	// // argsString := strings.Join(args, " ")
-	// // space := regexp.MustCompile(`\s+`)
-	// // s := space.ReplaceAllString(argsString, " ")
-	// // vcfgFile.Programs[0].Args = vcfg.Args(s)
-	//
-	// // environment variables
-	// vcfgFile.Programs[0].Env = ih.imageConfig.Env
-	//
-	// var portTCP []string
-	// var portUDP []string
-	// for key := range ih.imageConfig.ExposedPorts {
-	// 	p := strings.SplitN(string(key), "/", 2)
-	// 	if len(p) == 2 {
-	// 		if p[1] == "tcp" {
-	// 			portTCP = append(portTCP, p[0])
-	// 		} else {
-	// 			portUDP = append(portUDP, p[0])
-	// 		}
-	// 	} else {
-	// 		portTCP = append(portTCP, p[0])
-	// 	}
-	// }
-	// vcfgFile.Networks[0].TCP = portTCP
-	// vcfgFile.Networks[0].UDP = portUDP
-	//
+	bin, err := findBinary(finalCmd[0], config.Env, config.WorkingDir, targetDir)
+	if err != nil {
+		return err
+	}
+
+	var args []string
+	args = append(args, bin)
+
+	for _, arg := range finalCmd[1:] {
+		if len(arg) == 1 {
+			continue
+		}
+		if strings.Index(arg, " ") > 0 {
+			args = append(args, fmt.Sprintf("'%s'", arg))
+		} else {
+			args = append(args, arg)
+		}
+	}
+
+	argsString := strings.Join(args, " ")
+	space := regexp.MustCompile(`\s+`)
+	s := space.ReplaceAllString(argsString, " ")
+	vcfgFile.Programs[0].Args = s
+
+	// environment variables
+	vcfgFile.Programs[0].Env = config.Env
+
+	var portTCP []string
+	var portUDP []string
+	for key := range config.ExposedPorts {
+		p := strings.SplitN(string(key), "/", 2)
+		if len(p) == 2 {
+			if p[1] == "tcp" {
+				portTCP = append(portTCP, p[0])
+			} else {
+				portUDP = append(portUDP, p[0])
+			}
+		} else {
+			portTCP = append(portTCP, p[0])
+		}
+	}
+	vcfgFile.Networks[0].TCP = portTCP
+	vcfgFile.Networks[0].UDP = portUDP
+
 	b, err := vcfgFile.Marshal()
 	if err != nil {
 		return err
@@ -476,7 +448,7 @@ func (cc *ContainerConverter) blobDownloadWorker() {
 		if !opened {
 			break
 		}
-
+		cc.logger.Printf("getting job")
 		reader, err = cc.fetchReader(cc.imageRef.ShortName(), job.layer, cc.registry)
 		if err != nil {
 			goto cont

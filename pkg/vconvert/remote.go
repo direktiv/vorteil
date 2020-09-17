@@ -16,12 +16,11 @@ import (
 	"github.com/docker/distribution"
 	"github.com/docker/distribution/manifest/schema2"
 	"github.com/heroku/docker-registry-client/registry"
-	log "github.com/sirupsen/logrus"
 )
 
 // RegistryConfig contains the url of the remote registry.
-type RegistryConfig struct {
-	URL, User, Pwd string
+type registryConfig struct {
+	url, user, pwd string
 }
 
 func remoteGetReader(image string, layer *layer, registry *registry.Registry) (io.ReadCloser, error) {
@@ -33,13 +32,13 @@ func remoteGetReader(image string, layer *layer, registry *registry.Registry) (i
 	return reader, nil
 }
 
-func (cc *ContainerConverter) downloadInformationRemote(config *RegistryConfig) error {
+func (cc *ContainerConverter) downloadInformationRemote(config *registryConfig) error {
 
-	if config == nil || config.URL == "" {
+	if config == nil || config.url == "" {
 		return fmt.Errorf("config is nil or URL is empty")
 	}
 
-	r, err := newRegistry(config.URL, config.User, config.Pwd)
+	r, err := newRegistry(config.url, config.user, config.pwd, cc.logger.Debugf)
 	if err != nil {
 		return err
 	}
@@ -108,11 +107,10 @@ func (cc *ContainerConverter) downloadManifest(manifest schema2.Manifest) (*cman
 	return img, nil
 }
 
-//
 // although there is a New(...) function in the registry
 // but there is no way to set the log function before
 // this function is basically a copy of the original New(...) function
-func newRegistry(registryURL, user, pwd string) (*registry.Registry, error) {
+func newRegistry(registryURL, user, pwd string, fn func(format string, x ...interface{})) (*registry.Registry, error) {
 
 	url := strings.TrimSuffix(registryURL, "/")
 	transport := http.DefaultTransport
@@ -122,7 +120,7 @@ func newRegistry(registryURL, user, pwd string) (*registry.Registry, error) {
 		Client: &http.Client{
 			Transport: transport,
 		},
-		Logf: log.Debugf,
+		Logf: fn,
 	}
 
 	if err := registry.Ping(); err != nil {

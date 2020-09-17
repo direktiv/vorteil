@@ -28,6 +28,7 @@ import (
 var log elog.View
 
 var (
+	flagJSON             bool
 	flagVerbose          bool
 	flagDebug            bool
 	flagCompressionLevel uint
@@ -59,14 +60,22 @@ func commandInit() {
 	// setup logging across all commands
 	rootCmd.PersistentFlags().BoolVarP(&flagVerbose, "verbose", "v", false, "enable verbose output")
 	rootCmd.PersistentFlags().BoolVarP(&flagVerbose, "debug", "d", false, "enable debug output")
+	rootCmd.PersistentFlags().BoolVarP(&flagJSON, "json", "j", false, "enable json output")
 
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
 
 		logger := &elog.CLI{}
-		logrus.SetFormatter(&logrus.TextFormatter{
-			DisableColors:    false,
-			DisableTimestamp: true,
-		})
+
+		if flagJSON {
+			logger.DisableTTY = true
+			logrus.SetFormatter(&logrus.JSONFormatter{})
+		} else {
+			logrus.SetFormatter(&logrus.TextFormatter{
+				DisableColors:    false,
+				DisableTimestamp: true,
+			})
+		}
+
 		logrus.SetLevel(logrus.DebugLevel)
 
 		if flagDebug {
@@ -246,7 +255,7 @@ Supported disk formats include:
 			KernelOptions: vdisk.KernelOptions{
 				Shell: flagShell,
 			},
-			Logger: &elog.CLI{},
+			Logger: log,
 		})
 		if err != nil {
 			log.Errorf("%v", err)

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"io"
+	"io/ioutil"
 	"os"
 	"sync"
 
@@ -40,6 +41,7 @@ type View interface {
 }
 
 type CLI struct {
+	DisableTTY         bool
 	IsDebug            bool
 	IsVerbose          bool
 	lock               sync.Mutex
@@ -82,6 +84,12 @@ func (log *CLI) IsDebugEnabled() bool {
 }
 
 func (log *CLI) NewProgress(label string, units string, total int64) Progress {
+
+	if log.DisableTTY {
+		return &nilProgress{
+			total: total,
+		}
+	}
 
 	log.lock.Lock()
 	defer log.lock.Unlock()
@@ -134,6 +142,52 @@ func (log *CLI) NewProgress(label string, units string, total int64) Progress {
 		total: total,
 	}
 
+}
+
+type nilProgress struct {
+	cursor int64
+	total  int64
+}
+
+func (np *nilProgress) Increment(n int64) {
+
+}
+
+func (np *nilProgress) Finish(success bool) {
+
+}
+
+func (np *nilProgress) Write(p []byte) (n int, err error) {
+	n = len(p)
+	np.cursor += int64(n)
+	return
+}
+
+func (np *nilProgress) Seek(offset int64, whence int) (int64, error) {
+	var abs int64
+
+	switch whence {
+	case io.SeekCurrent:
+		abs = np.cursor + offset
+	case io.SeekStart:
+		abs = offset
+	case io.SeekEnd:
+		abs = np.total + offset
+	default:
+		return 0, errors.New("invalid whence")
+	}
+
+	np.cursor = abs
+	return abs, nil
+}
+
+func (np *nilProgress) ProxyReader(r io.Reader) io.ReadCloser {
+
+	if rc, ok := r.(io.ReadCloser); ok {
+		return rc
+	}
+
+	return ioutil.NopCloser(r)
 }
 
 type pb struct {

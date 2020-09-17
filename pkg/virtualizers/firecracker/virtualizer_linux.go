@@ -77,7 +77,7 @@ func SetupBridgeAndDHCPServer(port string) error {
 	// create server handler to create tap devices under sudo
 	http.HandleFunc("/", OrganiseTapDevices)
 	go func() {
-		http.ListenAndServe(":7476", port, nil)
+		http.Listen(":7476", port, nil)
 	}()
 
 	// create dhcp server on an interface
@@ -800,7 +800,7 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 		id:     o.id,
 		routes: o.routes,
 	}
-	cdm, err = json.Marshal(cd)
+	cdm, err := json.Marshal(cd)
 	if err != nil {
 		returnErr = err
 		return

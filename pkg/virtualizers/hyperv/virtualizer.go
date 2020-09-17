@@ -45,7 +45,7 @@ type Virtualizer struct {
 // execute is a general function for running commands through powershell
 func (v *Virtualizer) execute(cmd *exec.Cmd) (string, error) {
 	if !strings.Contains(strings.Join(cmd.Args, " "), "| Select State") {
-		v.logger.Printf("Executing %s", cmd.Args)
+		v.logger.Infof("Executing %s", cmd.Args)
 	}
 	resp, err := cmd.CombinedOutput()
 	if err != nil {
@@ -96,7 +96,7 @@ func (v *Virtualizer) Stop() error {
 			return err
 		}
 		if len(output) != 0 {
-			v.logger.Printf("%s", output)
+			v.logger.Infof("%s", output)
 		}
 
 		v.state = virtualizers.Ready
@@ -119,7 +119,7 @@ func (v *Virtualizer) Start() error {
 		}
 
 		if len(output) != 0 {
-			v.logger.Printf("%s", output)
+			v.logger.Infof("%s", output)
 		}
 
 		err = v.initLogs()
@@ -576,7 +576,7 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 		o.logger.Errorf("Error Set-VMMemory: %v", err)
 	}
 	if len(output) != 0 {
-		o.logger.Printf("%s", output)
+		o.logger.Infof("%s", output)
 	}
 
 	// set network adapters
@@ -588,7 +588,7 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 				o.logger.Errorf("Error Adding VMNetwork Adapter: %v", err)
 			}
 			if len(output) != 0 {
-				o.logger.Printf("%s", output)
+				o.logger.Infof("%s", output)
 			}
 		}
 	}
@@ -599,7 +599,7 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 		o.logger.Errorf("Error Set-VMProcessor: %v", err)
 	}
 	if len(output) != 0 {
-		o.logger.Printf("%s", output)
+		o.logger.Infof("%s", output)
 	}
 
 	pipePath := fmt.Sprintf("\\\\.\\pipe\\%s", o.id)
@@ -610,7 +610,7 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 		o.logger.Errorf("error", "Error Set-VMComPort: %v", err)
 	}
 	if len(output) != 0 {
-		o.logger.Printf("info", "%s", output)
+		o.logger.Infof("info", "%s", output)
 	}
 
 	o.state = "ready"

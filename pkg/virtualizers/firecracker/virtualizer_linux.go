@@ -928,7 +928,10 @@ func (v *Virtualizer) Start() error {
 			go v.lookForIP()
 
 			if err := v.machine.Wait(v.vmmCtx); err != nil {
-				v.logger.Errorf("Wait returned an error: %s", err.Error())
+				// Should end when we ctrl-c no need to print this.
+				if !strings.Contains(err.Error(), "* signal: interrupt") {
+					v.logger.Errorf("Wait returned an error: %s", err.Error())
+				}
 			}
 		}()
 	}

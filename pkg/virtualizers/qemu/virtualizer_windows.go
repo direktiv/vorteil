@@ -106,7 +106,7 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	}
 	o.command.Args = append(o.command.Args, netArgs...)
 
-	o.logger.Printf("Creating QEMU VM with Args: %s", strings.Join(o.command.Args, " "))
+	o.logger.Infof("Creating QEMU VM with Args: %s", strings.Join(o.command.Args, " "))
 
 	o.state = "ready"
 

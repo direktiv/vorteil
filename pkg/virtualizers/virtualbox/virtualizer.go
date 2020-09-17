@@ -489,7 +489,7 @@ func (v *Virtualizer) Detach(source string) error {
 // execute is generic wrapping function to run command execs
 func (v *Virtualizer) execute(cmd *exec.Cmd) error {
 	if !strings.Contains(strings.Join(cmd.Args, " "), "showvminfo") {
-		v.logger.Printf("Executing %s", strings.Join(cmd.Args, " "))
+		v.logger.Infof("Executing %s", strings.Join(cmd.Args, " "))
 	}
 
 	stderr := new(bytes.Buffer)

@@ -345,25 +345,12 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG) error {
 			}
 		case msg, more := <-s:
 			if !more {
-				virt.Close(true)
 				return nil
 			}
-			fmt.Print(string(msg))
+			log.Printf(string(msg))
 		case <-signalChannel:
 			if finished {
 				return nil
-			}
-			// Need this function to end before we close the virtualizer
-			err = virt.Stop()
-			if err != nil {
-				log.Errorf(err.Error())
-			}
-			for {
-				fmt.Printf("STATE: %s\n", virt.State())
-				if virt.State() == "ready" {
-					break
-				}
-				<-time.After(time.Second)
 			}
 			finished = true
 		case <-chBool:

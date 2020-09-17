@@ -158,7 +158,7 @@ func findBinary(name string, env []string, cwd string, targetDir string) (string
 	return "", fmt.Errorf("can not find binary %s", name)
 }
 
-func checkDirectories(targetDir string) error {
+func checkDirectoriy(targetDir string) error {
 
 	// check if it exists and empty
 	if _, err := os.Stat(targetDir); err != nil {

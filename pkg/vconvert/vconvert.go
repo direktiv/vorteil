@@ -5,10 +5,19 @@
 package vconvert
 
 import (
+	"archive/tar"
+	"context"
 	"fmt"
 	"io"
+	"io/ioutil"
+	"os"
 	"strings"
 
+	"github.com/vorteil/vorteil/pkg/vcfg"
+
+	"github.com/containerd/containerd/archive"
+	"github.com/containerd/containerd/archive/compression"
+	v1 "github.com/google/go-containerregistry/pkg/v1"
 	log "github.com/sirupsen/logrus"
 	"github.com/vorteil/vorteil/pkg/elog"
 
@@ -27,6 +36,8 @@ const (
 
 	dockerRuntime     = "docker"
 	containerdRuntime = "containerd"
+
+	localIdentifier = "local."
 )
 
 // RegistryType defines if it is a image repository server or a local
@@ -42,7 +53,12 @@ var (
 
 type job struct {
 	layer  *layer
+	dir    string
 	number int
+
+	// return value
+	name string
+	err  error
 }
 
 // compat struct for layers from local runtimes and remote image repos
@@ -50,17 +66,22 @@ type layer struct {
 	layer interface{}
 	size  int64
 	hash  string
+
+	file string
 }
 
 // ContainerConverter is the base object. Create a client with NewContainerConverter.
 type ContainerConverter struct {
-	imageRef     *parser.Reference
+	imageRef *parser.Reference
+
+	imageConfig  v1.Config
 	registry     *registry.Registry
 	registryType RegistryType
 
 	layers      []*layer
 	fetchReader func(string, *layer, *registry.Registry) (io.ReadCloser, error)
-	jobsCh      chan job
+	jobsCh      chan *job
+	jobsDoneCh  chan *job
 
 	logger elog.View
 }
@@ -108,7 +129,8 @@ func NewContainerConverter(app string, log elog.View) (*ContainerConverter, erro
 	}
 
 	cc.logger = log
-	cc.jobsCh = make(chan job)
+	cc.jobsCh = make(chan *job)
+	cc.jobsDoneCh = make(chan *job, workers)
 
 	return cc, nil
 
@@ -237,107 +259,143 @@ func (cc *ContainerConverter) downloadImageInformation(config *RegistryConfig) e
 // 	return nil
 // }
 
-func (cc *ContainerConverter) downloadBlobs() {
+func (cc *ContainerConverter) downloadBlobs(dir string) error {
 
-	cc.logger.Infof("Downloading Blobs")
-	// cc.logger.
-	// if !elog.IsJSON {
-	// 	log.SetOutput(ioutil.Discard)
-	// }
-	//
-	// p := mpb.New(mpb.WithWaitGroup(&ih.wg))
-	// ih.wg.Add(len(ih.layers))
-	//
-	// go distributor(ih.layers, p, ih.jobs)
-	// for i := 0; i < workers; i++ {
-	// 	go ih.worker()
-	// }
-	//
-	// p.Wait()
-	//
-	// if !elog.IsJSON {
-	// 	log.SetOutput(os.Stdout)
-	// }
-}
+	cc.logger.Printf("downloading blobs")
 
-func (ih *ContainerConverter) untarLayers(targetDir string) error {
+	if dir == "" {
+		return fmt.Errorf("directory not provided for downloads")
+	}
 
-	// for _, layer := range ih.layers {
-	//
-	// 	filename := fmt.Sprintf(tarExpression, ih.tmpDir, layer.hash)
-	//
-	// 	log.Infof("untar layer %s into %s", filename, targetDir)
-	//
-	// 	fn, err := os.Open(filename)
-	// 	if err != nil {
-	// 		return err
-	// 	}
-	//
-	// 	r, err := compression.DecompressStream(fn)
-	// 	if err != nil {
-	// 		return err
-	// 	}
-	//
-	// 	if _, err := archive.Apply(context.TODO(), targetDir, r, archive.WithFilter(func(hdr *tar.Header) (bool, error) {
-	//
-	// 		// we set everything to 1000, not important on windows
-	// 		hdr.Uid = 1000
-	// 		hdr.Gid = 1000
-	//
-	// 		// check if in our skip list
-	// 		for _, f := range folders {
-	// 			// check 3 different variations of the folder
-	// 			// /folder folder /folder/
-	// 			fmts := []string{"/%s", "/%s/", "%s"}
-	// 			for _, f1 := range fmts {
-	// 				if strings.HasPrefix(hdr.Name, fmt.Sprintf(f1, f)) {
-	// 					log.Debugf("skipping file/dir %s", hdr.Name)
-	// 					return false, nil
-	// 				}
-	// 			}
-	// 		}
-	// 		return true, nil
-	//
-	// 	})); err != nil {
-	// 		r.Close()
-	// 		return err
-	// 	}
-	// 	r.Close()
-	// }
+	// start workers
+	for i := 0; i < workers; i++ {
+		go cc.blobDownloadWorker()
+	}
+
+	cc.logger.Printf("downloading %d layers", len(cc.layers))
+
+	for i, layer := range cc.layers {
+
+		job := &job{
+			layer:  layer,
+			number: i,
+			dir:    dir,
+		}
+		cc.jobsCh <- job
+
+	}
+
+	r := 0
+	for {
+		j := <-cc.jobsDoneCh
+		if j.err != nil {
+			cc.logger.Errorf("error downloading layer: %s", j.err.Error())
+		}
+		r++
+
+		// we have received all responses
+		if r == len(cc.layers) {
+			break
+		}
+	}
+
+	cc.logger.Printf("download done")
+	close(cc.jobsCh)
 
 	return nil
 }
 
-func (ih *ContainerConverter) createVCFG(targetDir string) error {
+func (cc *ContainerConverter) untarLayers(targetDir string) error {
 
-	// vcfgFile := new(vcfg.VCFG)
-	//
-	// ds, _ := vcfg.ParseBytes(defaultDiskSize)
-	// vcfgFile.VM.DiskSize = ds
-	//
-	// ram, _ := vcfg.ParseBytes(defaultRAMSize)
-	// vcfgFile.VM.RAM = ram
-	//
-	// vcfgFile.Programs = make([]vcfg.Program, 1)
-	// vcfgFile.Networks = make([]vcfg.NetworkInterface, 1)
-	//
-	// var finalCmd []string
-	//
-	// if len(ih.imageConfig.Entrypoint) > 0 {
-	// 	ss := []string(ih.imageConfig.Entrypoint)
-	// 	finalCmd = append(finalCmd, ss...)
-	// }
-	//
-	// if len(ih.imageConfig.Cmd) > 0 {
-	// 	finalCmd = append(finalCmd, ih.imageConfig.Cmd...)
-	// }
-	//
-	// vcfgFile.Programs[0].Cwd = ih.imageConfig.WorkingDir
-	//
-	// if len(finalCmd) == 0 {
-	// 	return fmt.Errorf("can not generate command: %s", finalCmd)
-	// }
-	//
+	err := checkDirectoriy(targetDir)
+	if err != nil {
+		return err
+	}
+
+	for _, layer := range cc.layers {
+
+		if layer.file == "" {
+			return fmt.Errorf("no file associated with layer %s", layer.hash)
+		}
+
+		cc.logger.Printf("untar layer %s into %s", layer.file, targetDir)
+
+		fn, err := os.Open(layer.file)
+		if err != nil {
+			return err
+		}
+
+		r, err := compression.DecompressStream(fn)
+		if err != nil {
+			return err
+		}
+
+		if _, err := archive.Apply(context.TODO(), targetDir, r, archive.WithFilter(func(hdr *tar.Header) (bool, error) {
+
+			// we set everything to 1000, not important on windows
+			hdr.Uid = 1000
+			hdr.Gid = 1000
+
+			// check if in our skip list
+			for _, f := range folders {
+				// check 3 different variations of the folder
+				// /folder folder /folder/
+				fmts := []string{"/%s", "/%s/", "%s"}
+				for _, f1 := range fmts {
+					if strings.HasPrefix(hdr.Name, fmt.Sprintf(f1, f)) {
+						log.Debugf("skipping file/dir %s", hdr.Name)
+						return false, nil
+					}
+				}
+			}
+			return true, nil
+
+		})); err != nil {
+			r.Close()
+			return err
+		}
+		r.Close()
+	}
+
+	cc.logger.Printf("files created into %s", targetDir)
+
+	return nil
+}
+
+func (cc *ContainerConverter) createVCFG(config v1.Config, targetDir string) error {
+
+	if _, err := os.Stat(targetDir); err != nil {
+		return fmt.Errorf("directory %s does not exist", targetDir)
+	}
+
+	vcfgFile := new(vcfg.VCFG)
+
+	ds, _ := vcfg.ParseBytes(defaultDiskSize)
+	vcfgFile.VM.DiskSize = ds
+
+	ram, _ := vcfg.ParseBytes(defaultRAMSize)
+	vcfgFile.VM.RAM = ram
+
+	vcfgFile.Programs = make([]vcfg.Program, 1)
+	vcfgFile.Networks = make([]vcfg.NetworkInterface, 1)
+
+	var finalCmd []string
+
+	if len(config.Entrypoint) > 0 {
+		ss := []string(config.Entrypoint)
+		finalCmd = append(finalCmd, ss...)
+	}
+
+	if len(config.Cmd) > 0 {
+		finalCmd = append(finalCmd, config.Cmd...)
+	}
+
+	vcfgFile.Programs[0].Cwd = config.WorkingDir
+
+	if len(finalCmd) == 0 {
+		return fmt.Errorf("can not generate command: %s", finalCmd)
+	}
+
 	// bin, err := findBinary(finalCmd[0], ih.imageConfig.Env, vcfgFile.Programs[0].Cwd, targetDir)
 	// if err != nil {
 	// 	return err
@@ -382,16 +440,23 @@ func (ih *ContainerConverter) createVCFG(targetDir string) error {
 	// vcfgFile.Networks[0].TCP = portTCP
 	// vcfgFile.Networks[0].UDP = portUDP
 	//
-	// b, err := vcfgFile.Marshal()
-	// if err != nil {
-	// 	return err
-	// }
-	//
-	// // write default.vcfg and .projectfile
-	// ioutil.WriteFile(fmt.Sprintf("%s/.vorteilproject", targetDir), []byte(defaultProjectFile), 0644)
-	// ioutil.WriteFile(fmt.Sprintf("%s/default.vcfg", targetDir), b, 0644)
-	//
-	// log.Debugf("vcfg file:\n%v\n", string(b))
+	b, err := vcfgFile.Marshal()
+	if err != nil {
+		return err
+	}
+
+	// write default.vcfg and .projectfile
+	err = ioutil.WriteFile(fmt.Sprintf("%s/.vorteilproject", targetDir), []byte(defaultProjectFile), 0644)
+	if err != nil {
+		return err
+	}
+
+	err = ioutil.WriteFile(fmt.Sprintf("%s/default.vcfg", targetDir), b, 0644)
+	if err != nil {
+		return err
+	}
+
+	cc.logger.Printf("vcfg file:\n%v\n", string(b))
 
 	return nil
 
@@ -399,23 +464,26 @@ func (ih *ContainerConverter) createVCFG(targetDir string) error {
 
 func (cc *ContainerConverter) blobDownloadWorker() {
 
+	var (
+		// filename string
+		err    error
+		reader io.ReadCloser
+	)
+
 	for {
+
 		job, opened := <-cc.jobsCh
 		if !opened {
 			break
 		}
 
-		log.Infof("JOB %v", job)
+		reader, err = cc.fetchReader(cc.imageRef.ShortName(), job.layer, cc.registry)
+		if err != nil {
+			goto cont
+		}
+		// cc.logger.Printf("THISIS2")
+		// pr := cc.logger.NewProgress("wehat", "%", 0).ProxyReader(reader)
 
-		//
-		// 	reader, err := ih.fetchReader(ih.ImageRef.ShortName(), job.layer, ih.registry)
-		// 	if err != nil {
-		// 		if !elog.IsJSON {
-		// 			log.SetOutput(os.Stdout)
-		// 		}
-		// 		log.Fatalf("can not download layer %s: %s", job.layer.hash, err.Error())
-		// 		os.Exit(1)
-		// 	}
 		//
 		// 	// if we use json we don't show bars
 		// 	var proxyReader io.ReadCloser
@@ -425,10 +493,26 @@ func (cc *ContainerConverter) blobDownloadWorker() {
 		// 		log.Infof("downloading layer %s (%s)", ih.ImageRef.ShortName(), bytefmt.ByteSize((uint64)(job.layer.size)))
 		// 		proxyReader = reader
 		// 	}
-		// 	defer proxyReader.Close()
-		//
-		// 	writeFile(fmt.Sprintf(tarExpression, ih.tmpDir, job.layer.hash), proxyReader)
-		// 	ih.wg.Done()
+		// defer proxyReader.Close()
+		defer reader.Close()
+
+		job.name = fmt.Sprintf(tarExpression, job.dir, job.layer.hash)
+
+		cc.logger.Printf("downloading file to %s", job.name)
+
+		err = writeFile(job.name, reader)
+		if err != nil {
+			goto cont
+		}
+
+	cont:
+		job.err = err
+
+		// set the file to the layer
+		cc.layers[job.number].file = job.name
+
+		cc.jobsDoneCh <- job
+
 	}
 
 }

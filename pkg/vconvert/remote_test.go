@@ -40,4 +40,7 @@ func TestDownloadInformationRemoteSuccess(t *testing.T) {
 	})
 	assert.NoError(t, err)
 
+	// image config should have some values
+	assert.NotNil(t, r.imageConfig.Cmd)
+
 }

@@ -5,12 +5,16 @@
 package vconvert
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
 
+	cmanifest "github.com/containers/image/manifest"
 	"github.com/docker/distribution"
+	"github.com/docker/distribution/manifest/schema2"
 	"github.com/heroku/docker-registry-client/registry"
 	log "github.com/sirupsen/logrus"
 )
@@ -47,6 +51,11 @@ func (cc *ContainerConverter) downloadInformationRemote(config *RegistryConfig) 
 		return err
 	}
 
+	_, err = cc.downloadManifest(manifest.Manifest)
+	if err != nil {
+		return err
+	}
+
 	var ifs = make([]*layer, len(manifest.Layers))
 	for i, d := range manifest.Layers {
 		ifs[i] = &layer{
@@ -57,96 +66,48 @@ func (cc *ContainerConverter) downloadInformationRemote(config *RegistryConfig) 
 	}
 	cc.layers = ifs
 
-	// cc.downloadBlobs()
-
-	// blob, err = cc.downloadManifest(manifest.Manifest)
-	// if err != nil {
-	// 	return err
-	// }
-
-	// var url string
-	//
-	// repos, err := fetchRepoConfig(ih.ImageRef.Registry())
-	// if err != nil {
-	// 	return err
-	// }
-	//
-	// if repos[configURL] == nil {
-	// 	return err
-	// }
-	//
-	// url = repos[configURL].(string)
-	// log.Infof("connecting to registry url: %s", url)
-	//
-	// hub, err := newRegistry(url, ih.user, ih.pwd)
-	// if err != nil {
-	// 	return err
-	// }
-	// ih.registry = hub
-	//
-	// log.Infof("fetching manifest for %s", ih.ImageRef.ShortName())
-	// manifest, err := hub.ManifestV2(ih.ImageRef.ShortName(), ih.ImageRef.Tag())
-	// if err != nil {
-	// 	return err
-	// }
-	//
-	// err = ih.downloadManifest(manifest.Manifest)
-	// if err != nil {
-	// 	return err
-	// }
-	//
-	// var ifs = make([]*layer, len(manifest.Layers))
-	// for i, d := range manifest.Layers {
-	// 	ifs[i] = &layer{
-	// 		layer: d,
-	// 		hash:  string(d.Digest[7:15]),
-	// 		size:  d.Size,
-	// 	}
-	// }
-	// ih.layers = ifs
-	//
-	// ih.downloadBlobs()
-	//
 	return nil
 
 }
 
-// func (cc *ContainerConverter) downloadManifest(manifest schema2.Manifest) (*cmanifest.Schema2V1Image, error) {
-//
-// 	// log.Infof("downloading manifest file")
-// 	reader, err := cc.registry.DownloadBlob(cc.ImageRef.ShortName(), manifest.Target().Digest)
-// 	defer reader.Close()
-// 	if err != nil {
-// 		return nil, err
-// 	}
-//
-// 	buf := new(bytes.Buffer)
-// 	n, err := buf.ReadFrom(reader)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-//
-// 	img := &cmanifest.Schema2V1Image{}
-// 	err = json.Unmarshal(buf.Bytes()[:n], img)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-//
-// 	// ih.imageConfig.Cmd = make([]string, len(img.Config.Cmd))
-// 	// ih.imageConfig.Entrypoint = make([]string, len(img.Config.Entrypoint))
-// 	// ih.imageConfig.Env = make([]string, len(img.Config.Env))
-// 	// ih.imageConfig.ExposedPorts = make(map[string]struct{})
-// 	// for k, v := range img.Config.ExposedPorts {
-// 	// 	ih.imageConfig.ExposedPorts[string(k)] = v
-// 	// }
-// 	//
-// 	// copy(ih.imageConfig.Cmd, img.Config.Cmd)
-// 	// copy(ih.imageConfig.Entrypoint, img.Config.Entrypoint)
-// 	// copy(ih.imageConfig.Env, img.Config.Env)
-// 	// ih.imageConfig.WorkingDir = img.Config.WorkingDir
-//
-// 	return img, nil
-// }
+func (cc *ContainerConverter) downloadManifest(manifest schema2.Manifest) (*cmanifest.Schema2V1Image, error) {
+
+	cc.logger.Infof("downloading manifest file")
+
+	reader, err := cc.registry.DownloadBlob(cc.imageRef.ShortName(), manifest.Target().Digest)
+	defer reader.Close()
+	if err != nil {
+		return nil, err
+	}
+
+	buf := new(bytes.Buffer)
+	n, err := buf.ReadFrom(reader)
+	if err != nil {
+		return nil, err
+	}
+
+	img := &cmanifest.Schema2V1Image{}
+	err = json.Unmarshal(buf.Bytes()[:n], img)
+	if err != nil {
+		return nil, err
+	}
+
+	cc.imageConfig.Cmd = make([]string, len(img.Config.Cmd))
+	cc.imageConfig.Entrypoint = make([]string, len(img.Config.Entrypoint))
+	cc.imageConfig.Env = make([]string, len(img.Config.Env))
+	cc.imageConfig.ExposedPorts = make(map[string]struct{})
+	for k, v := range img.Config.ExposedPorts {
+		cc.imageConfig.ExposedPorts[string(k)] = v
+	}
+
+	copy(cc.imageConfig.Cmd, img.Config.Cmd)
+	copy(cc.imageConfig.Entrypoint, img.Config.Entrypoint)
+	copy(cc.imageConfig.Env, img.Config.Env)
+	cc.imageConfig.WorkingDir = img.Config.WorkingDir
+
+	return img, nil
+}
+
 //
 // although there is a New(...) function in the registry
 // but there is no way to set the log function before

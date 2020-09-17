@@ -8,10 +8,12 @@ require (
 	github.com/cavaliercoder/grab v2.0.0+incompatible
 	github.com/cirruslabs/echelon v1.2.2
 	github.com/cloudfoundry/bytefmt v0.0.0-20200131002437-cf55d5288a48
+	github.com/containerd/cgroups v0.0.0-20200824123100-0b889c03f102 // indirect
 	github.com/containerd/console v1.0.0 // indirect
 	github.com/containerd/containerd v1.4.1
 	github.com/containerd/continuity v0.0.0-20200710164510-efbc4488d8fe // indirect
 	github.com/containerd/fifo v0.0.0-20200410184934-f15a3290365b // indirect
+	github.com/containerd/go-runc v0.0.0-20200911161753-ad1414ddd16e // indirect
 	github.com/containerd/ttrpc v1.0.1 // indirect
 	github.com/containerd/typeurl v1.0.1 // indirect
 	github.com/containers/image v3.0.2+incompatible
@@ -63,4 +65,5 @@ require (
 	golang.org/x/crypto v0.0.0-20200820211705-5c72a883971a
 	golang.org/x/sync v0.0.0-20200625203802-6e8e738ad208
 	gopkg.in/yaml.v2 v2.3.0
+	gotest.tools/v3 v3.0.2 // indirect
 )

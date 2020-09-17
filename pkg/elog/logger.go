@@ -3,10 +3,13 @@ package elog
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
 	"sync"
 
+	"github.com/fatih/color"
 	"github.com/sirupsen/logrus"
 	"github.com/vbauerster/mpb/v5"
 	"github.com/vbauerster/mpb/v5/decor"
@@ -40,6 +43,8 @@ type View interface {
 }
 
 type CLI struct {
+	DisableColors      bool
+	DisableTTY         bool
 	IsDebug            bool
 	IsVerbose          bool
 	lock               sync.Mutex
@@ -51,7 +56,7 @@ type CLI struct {
 
 func (log *CLI) Debugf(format string, x ...interface{}) {
 	if log.IsDebug {
-		logrus.Debugf(format, x...)
+		logrus.Tracef(format, x...)
 	}
 }
 
@@ -61,7 +66,7 @@ func (log *CLI) Errorf(format string, x ...interface{}) {
 
 func (log *CLI) Infof(format string, x ...interface{}) {
 	if log.IsVerbose {
-		logrus.Infof(format, x...)
+		logrus.Debugf(format, x...)
 	}
 }
 
@@ -83,6 +88,12 @@ func (log *CLI) IsDebugEnabled() bool {
 
 func (log *CLI) NewProgress(label string, units string, total int64) Progress {
 
+	if log.DisableTTY {
+		return &nilProgress{
+			total: total,
+		}
+	}
+
 	log.lock.Lock()
 	defer log.lock.Unlock()
 
@@ -92,6 +103,16 @@ func (log *CLI) NewProgress(label string, units string, total int64) Progress {
 		logrus.SetOutput(log.buffer)
 		log.progressContainer = mpb.New(mpb.WithWidth(80))
 		log.bars = make(map[*mpb.Bar]bool)
+	}
+
+	var decorators []decor.Decorator
+	switch units {
+	default:
+		fallthrough
+	case "%":
+		decorators = append(decorators, decor.Percentage())
+	case "KiB":
+		decorators = append(decorators, decor.Counters(decor.UnitKiB, "% .1f / % .1f"))
 	}
 
 	var p *mpb.Bar
@@ -112,7 +133,7 @@ func (log *CLI) NewProgress(label string, units string, total int64) Progress {
 					decor.AverageETA(decor.ET_STYLE_GO, decor.WC{W: 4}), "done",
 				),
 			),
-			mpb.AppendDecorators(decor.Percentage()),
+			mpb.AppendDecorators(decorators...),
 		)
 	}
 
@@ -124,6 +145,52 @@ func (log *CLI) NewProgress(label string, units string, total int64) Progress {
 		total: total,
 	}
 
+}
+
+type nilProgress struct {
+	cursor int64
+	total  int64
+}
+
+func (np *nilProgress) Increment(n int64) {
+
+}
+
+func (np *nilProgress) Finish(success bool) {
+
+}
+
+func (np *nilProgress) Write(p []byte) (n int, err error) {
+	n = len(p)
+	np.cursor += int64(n)
+	return
+}
+
+func (np *nilProgress) Seek(offset int64, whence int) (int64, error) {
+	var abs int64
+
+	switch whence {
+	case io.SeekCurrent:
+		abs = np.cursor + offset
+	case io.SeekStart:
+		abs = offset
+	case io.SeekEnd:
+		abs = np.total + offset
+	default:
+		return 0, errors.New("invalid whence")
+	}
+
+	np.cursor = abs
+	return abs, nil
+}
+
+func (np *nilProgress) ProxyReader(r io.Reader) io.ReadCloser {
+
+	if rc, ok := r.(io.ReadCloser); ok {
+		return rc
+	}
+
+	return ioutil.NopCloser(r)
 }
 
 type pb struct {
@@ -242,4 +309,32 @@ func (mws *mws) Seek(offset int64, whence int) (int64, error) {
 		}
 	}
 	return abs, nil
+}
+
+func (log *CLI) Format(entry *logrus.Entry) ([]byte, error) {
+
+	faint := color.New(color.Faint).SprintFunc()
+	yellow := color.New(color.FgYellow).SprintFunc()
+	red := color.New(color.FgRed).SprintFunc()
+	blue := color.New(color.FgBlue).SprintFunc()
+
+	x := entry.Message
+	if !log.DisableColors {
+		switch entry.Level {
+		case logrus.TraceLevel:
+			x = fmt.Sprintf("%s\n", faint(x))
+		case logrus.DebugLevel:
+			x = fmt.Sprintf("%s\n", blue(x))
+		case logrus.InfoLevel:
+			x = fmt.Sprintf("%s\n", x)
+		case logrus.WarnLevel:
+			x = fmt.Sprintf("%s\n", yellow(x))
+		case logrus.ErrorLevel:
+			x = fmt.Sprintf("%s\n", red(x))
+		default:
+		}
+	}
+
+	return []byte(x), nil
+
 }

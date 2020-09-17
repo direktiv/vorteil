@@ -4,9 +4,9 @@
  */
 package vconvert
 
-const (
-	localIdentifier = "local."
-)
+// const (
+// 	localIdentifier = "local."
+// )
 
 // ConvertContainer converts an application from local or remote
 // container registries into vorteil virtual machines

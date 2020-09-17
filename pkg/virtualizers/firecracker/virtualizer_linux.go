@@ -642,7 +642,8 @@ func (v *Virtualizer) lookForIP() string {
 }
 
 // Write method to handle logging from firecracker to use our logger interface
-func (v *Virtualizer) Write(d []byte) (int, error) {
+func (v *Virtualizer) Write(d []byte) (n int, err error) {
+	n = len(d)
 	v.logger.Infof(string(d))
 	return
 }

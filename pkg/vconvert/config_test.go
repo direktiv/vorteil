@@ -5,12 +5,15 @@ import (
 
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"github.com/vorteil/vorteil/pkg/elog"
 )
 
 func TestConfig(t *testing.T) {
 
+	log := &elog.CLI{}
+
 	viper.Reset()
-	initConfig("../../test/vconvert/config.yml")
+	initConfig("../../test/vconvert/config.yml", log)
 
 	v, err := fetchRepoConfig("value1")
 	assert.NoError(t, err)
@@ -22,8 +25,10 @@ func TestConfig(t *testing.T) {
 
 func TestConfigNotExist(t *testing.T) {
 
+	log := &elog.CLI{}
+
 	viper.Reset()
-	initConfig("/does/no/exist")
+	initConfig("/does/no/exist", log)
 
 	testURL := func(name string) {
 		v, err := fetchRepoConfig(name)
@@ -38,7 +43,7 @@ func TestConfigNotExist(t *testing.T) {
 
 	// go to home dir and file does not exist
 	viper.Reset()
-	initConfig("")
+	initConfig("", log)
 
 	testURL("docker.io")
 	testURL("mcr.microsoft.com")

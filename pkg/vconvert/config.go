@@ -3,8 +3,9 @@ package vconvert
 import (
 	"fmt"
 
+	"github.com/vorteil/vorteil/pkg/elog"
+
 	"github.com/mitchellh/go-homedir"
-	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 )
 
@@ -13,7 +14,7 @@ const (
 )
 
 // reads in config file, uses defaults if not found
-func initConfig(cfgFile string) {
+func initConfig(cfgFile string, log elog.View) {
 
 	if cfgFile != "" {
 		viper.SetConfigFile(cfgFile)

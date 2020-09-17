@@ -8,6 +8,7 @@ import (
 
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"github.com/vorteil/vorteil/pkg/elog"
 )
 
 func TestConfigNotInit(t *testing.T) {
@@ -38,28 +39,30 @@ func TestWriteFile(t *testing.T) {
 
 func TestFindBinary(t *testing.T) {
 
-	s, _ := findBinary("/find/bin", []string{}, "/", "../../test/vconvert")
+	log := &elog.CLI{}
+
+	s, _ := findBinary("/find/bin", []string{}, "/", "../../test/vconvert", log)
 	assert.NotNil(t, s)
 
-	_, err := findBinary("does/not/exist", []string{}, "/", "../../test/vconvert")
+	_, err := findBinary("does/not/exist", []string{}, "/", "../../test/vconvert", log)
 	assert.Error(t, err)
 
-	s, _ = findBinary("bin", []string{}, "/find", "../../test/vconvert")
+	s, _ = findBinary("bin", []string{}, "/find", "../../test/vconvert", log)
 	assert.NotNil(t, s)
 
-	_, err = findBinary("bin", []string{}, "/findDont", "../../test/vconvert")
+	_, err = findBinary("bin", []string{}, "/findDont", "../../test/vconvert", log)
 	assert.Error(t, err)
 
-	s, _ = findBinary("./bin", []string{}, "/find", "../../test/vconvert")
+	s, _ = findBinary("./bin", []string{}, "/find", "../../test/vconvert", log)
 	assert.NotNil(t, s)
 
-	_, err = findBinary("/find/bin", []string{}, "/", "../../test/vconvert")
+	_, err = findBinary("/find/bin", []string{}, "/", "../../test/vconvert", log)
 	assert.NoError(t, err)
 
-	_, err = findBinary("/notfind/bin", []string{}, "/", "../../test/vconvert")
+	_, err = findBinary("/notfind/bin", []string{}, "/", "../../test/vconvert", log)
 	assert.Error(t, err)
 
-	s, _ = findBinary("bin", []string{"PATH=/find"}, "/", "../../test/vconvert")
+	s, _ = findBinary("bin", []string{"PATH=/find"}, "/", "../../test/vconvert", log)
 	assert.NotNil(t, s)
 
 }

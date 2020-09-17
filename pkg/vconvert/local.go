@@ -18,7 +18,6 @@ import (
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
 	"github.com/heroku/docker-registry-client/registry"
-	log "github.com/sirupsen/logrus"
 )
 
 const (
@@ -27,7 +26,7 @@ const (
 
 func (cc *ContainerConverter) downloadInformationContainerd(image, tag string) error {
 
-	log.Infof("getting local containerd image %s (%s)", image, tag)
+	cc.logger.Infof("getting local containerd image %s (%s)", image, tag)
 
 	if len(image) == 0 || len(tag) == 0 {
 		return fmt.Errorf("image and tag value required")

@@ -12,7 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	log "github.com/sirupsen/logrus"
+	"github.com/vorteil/vorteil/pkg/elog"
 )
 
 var (
@@ -52,7 +52,7 @@ func writeFile(name string, r io.Reader) error {
 }
 
 // findBinary tries to find the executable in the expanded container image
-func findBinary(name string, env []string, cwd string, targetDir string) (string, error) {
+func findBinary(name string, env []string, cwd string, targetDir string, log elog.View) (string, error) {
 
 	if strings.HasPrefix(name, "./") {
 		abs, err := filepath.Abs(name)

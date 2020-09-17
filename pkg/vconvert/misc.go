@@ -12,16 +12,12 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/vorteil/vorteil/pkg/elog"
-
 	"github.com/docker/distribution"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/heroku/docker-registry-client/registry"
 	"github.com/mitchellh/go-homedir"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
-	"github.com/vbauerster/mpb"
-	"github.com/vbauerster/mpb/decor"
 )
 
 const (
@@ -163,7 +159,7 @@ func findBinary(name string, env []string, cwd string, targetDir string) (string
 	return "", fmt.Errorf("can not find binary %s", name)
 }
 
-func prepDirectories(targetDir string) (string, error) {
+func checkDirectories(targetDir string) error {
 
 	// check if it exists and empty
 	if _, err := os.Stat(targetDir); err != nil {
@@ -172,52 +168,52 @@ func prepDirectories(targetDir string) (string, error) {
 
 	fi, err := ioutil.ReadDir(targetDir)
 	if err != nil {
-		return "", err
+		return err
 	}
 	if len(fi) > 0 {
-		return "", fmt.Errorf("target directory %s not empty", targetDir)
+		return fmt.Errorf("target directory %s not empty", targetDir)
 	}
 
 	// create temporary extract folder
-	dir, err := ioutil.TempDir(os.TempDir(), "image")
-	if err != nil {
-		return "", err
-	}
+	// dir, err := ioutil.TempDir(os.TempDir(), "image")
+	// if err != nil {
+	// 	return "", err
+	// }
 
-	return dir, nil
+	return nil
 
 }
 
-func distributor(layers []*layer, p *mpb.Progress, jobs chan job) {
+// func distributor(layers []*layer, p *mpb.Progress, jobs chan job) {
+//
+// 	log.Infof("downloading %d layers", len(layers))
+// 	for i, layer := range layers {
+//
+// 		job := job{
+// 			layer:  layer,
+// 			number: i,
+// 		}
+//
+// 		if !elog.IsJSON {
+// 			job.bar = p.AddBar(int64(layer.size),
+// 				mpb.PrependDecorators(
+// 					decor.Name(fmt.Sprintf("layer %d (%s): ", i, layer.hash)),
+// 				),
+// 				mpb.AppendDecorators(
+// 					decor.OnComplete(
+// 						decor.CountersKiloByte("%.1f / %.1f"), "downloaded",
+// 					),
+// 				),
+// 			)
+// 		}
+// 		jobs <- job
+// 	}
+//
+// 	close(jobs)
+// }
 
-	log.Infof("downloading %d layers", len(layers))
-	for i, layer := range layers {
-
-		job := job{
-			layer:  layer,
-			number: i,
-		}
-
-		if !elog.IsJSON {
-			job.bar = p.AddBar(int64(layer.size),
-				mpb.PrependDecorators(
-					decor.Name(fmt.Sprintf("layer %d (%s): ", i, layer.hash)),
-				),
-				mpb.AppendDecorators(
-					decor.OnComplete(
-						decor.CountersKiloByte("%.1f / %.1f"), "downloaded",
-					),
-				),
-			)
-		}
-		jobs <- job
-	}
-
-	close(jobs)
-}
-
-func localGetReader(image string, layer *layer, registry *registry.Registry) (io.ReadCloser, error) {
-	l := layer.layer.(v1.Layer)
+func localGetReader(image string, layer *Layer, registry *registry.Registry) (io.ReadCloser, error) {
+	l := layer.Layer.(v1.Layer)
 	reader, err := l.Compressed()
 	if err != nil {
 		return nil, err
@@ -225,8 +221,8 @@ func localGetReader(image string, layer *layer, registry *registry.Registry) (io
 	return reader, nil
 }
 
-func remoteGetReader(image string, layer *layer, registry *registry.Registry) (io.ReadCloser, error) {
-	olayer := layer.layer.(distribution.Descriptor)
+func remoteGetReader(image string, layer *Layer, registry *registry.Registry) (io.ReadCloser, error) {
+	olayer := layer.Layer.(distribution.Descriptor)
 	reader, err := registry.DownloadBlob(image, olayer.Digest)
 	if err != nil {
 		return nil, err

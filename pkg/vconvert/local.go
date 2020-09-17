@@ -16,7 +16,6 @@ import (
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/platforms"
 	"github.com/docker/docker/client"
-	"github.com/google/go-containerregistry/pkg/v1/tarball"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -24,7 +23,7 @@ const (
 	containerdSock = "/run/containerd/containerd.sock"
 )
 
-func (ih *imageHandler) downloadContainerdTar(image, tag string) error {
+func (ih *ContainerConverter) downloadContainerdTar(image, tag string) error {
 
 	log.Infof("getting local containerd image %s (%s)", image, tag)
 
@@ -57,7 +56,7 @@ func (ih *imageHandler) downloadContainerdTar(image, tag string) error {
 
 }
 
-func (ih *imageHandler) downloadDockerTar(image, tag string) error {
+func (ih *ContainerConverter) downloadDockerTar(image, tag string) error {
 
 	log.Infof("getting local docker image %s (%s)", image, tag)
 
@@ -89,48 +88,48 @@ func (ih *imageHandler) downloadDockerTar(image, tag string) error {
 		return err
 	}
 
-	return ih.localHandler(o.Name())
-
+	// return ih.localHandler(o.Name())
+	return nil
 }
 
-func (ih *imageHandler) localHandler(path string) error {
+func (ih *ContainerConverter) localHandler(path string) error {
 
-	img, err := tarball.ImageFromPath(path, nil)
-	if err != nil {
-		return err
-	}
+	// img, err := tarball.ImageFromPath(path, nil)
+	// if err != nil {
+	// 	return err
+	// }
+	//
+	// layers, err := img.Layers()
+	// if err != nil {
+	// 	return err
+	// }
+	//
+	// var ifs = make([]*layer, len(layers))
+	// for i, d := range layers {
+	// 	s, err := d.Size()
+	// 	if err != nil {
+	// 		return err
+	// 	}
+	// 	digest, err := d.Digest()
+	// 	if err != nil {
+	// 		return err
+	// 	}
+	// 	ifs[i] = &layer{
+	// 		layer: d,
+	// 		size:  s,
+	// 		hash:  digest.Hex[7:15],
+	// 	}
+	//
+	// }
+	// ih.layers = ifs
+	//
+	// config, err := img.ConfigFile()
+	// if err != nil {
+	// 	return err
+	// }
+	// ih.imageConfig = config.Config
 
-	layers, err := img.Layers()
-	if err != nil {
-		return err
-	}
-
-	var ifs = make([]*layer, len(layers))
-	for i, d := range layers {
-		s, err := d.Size()
-		if err != nil {
-			return err
-		}
-		digest, err := d.Digest()
-		if err != nil {
-			return err
-		}
-		ifs[i] = &layer{
-			layer: d,
-			size:  s,
-			hash:  digest.Hex[7:15],
-		}
-
-	}
-	ih.layers = ifs
-
-	config, err := img.ConfigFile()
-	if err != nil {
-		return err
-	}
-	ih.imageConfig = config.Config
-
-	ih.downloadBlobs()
+	// ih.downloadBlobs()
 
 	return nil
 }

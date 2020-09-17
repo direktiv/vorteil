@@ -807,7 +807,7 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 		returnErr = err
 		return
 	}
-	fmt.Printf("SENDING: %s\n", string(cdm))
+	fmt.Printf("SENDING: %s\n", cdm)
 	resp, err := http.Post("http://localhost:7476/", "application/json", bytes.NewBuffer(cdm))
 	if err != nil {
 		fmt.Printf("ER2")

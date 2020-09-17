@@ -777,7 +777,7 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	}
 
 	machineOpts := []firecracker.Opt{
-		firecracker.WithLogger(log.NewEntry(o.logger)),
+		firecracker.WithLogger(log.NewEntry(logger)),
 	}
 
 	// append new fields to overarching struct

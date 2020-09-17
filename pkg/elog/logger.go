@@ -2,6 +2,8 @@ package elog
 
 import (
 	"bytes"
+	"errors"
+	"io"
 	"os"
 	"sync"
 
@@ -23,6 +25,8 @@ type Logger interface {
 type Progress interface {
 	Finish(success bool)
 	Increment(n int64)
+	Write(p []byte) (n int, err error)
+	Seek(offset int64, whence int) (int64, error)
 }
 
 type ProgressReporter interface {
@@ -35,6 +39,8 @@ type View interface {
 }
 
 type CLI struct {
+	IsDebug            bool
+	IsVerbose          bool
 	lock               sync.Mutex
 	isTrackingProgress bool
 	bars               map[*mpb.Bar]bool
@@ -43,7 +49,9 @@ type CLI struct {
 }
 
 func (log *CLI) Debugf(format string, x ...interface{}) {
-	logrus.Debugf(format, x...)
+	if log.IsDebug {
+		logrus.Debugf(format, x...)
+	}
 }
 
 func (log *CLI) Errorf(format string, x ...interface{}) {
@@ -51,7 +59,9 @@ func (log *CLI) Errorf(format string, x ...interface{}) {
 }
 
 func (log *CLI) Infof(format string, x ...interface{}) {
-	logrus.Infof(format, x...)
+	if log.IsVerbose {
+		logrus.Infof(format, x...)
+	}
 }
 
 func (log *CLI) Printf(format string, x ...interface{}) {
@@ -108,8 +118,9 @@ func (log *CLI) NewProgress(label string, units string, total int64) Progress {
 	log.bars[p] = true
 
 	return &pb{
-		log: log,
-		p:   p,
+		log:   log,
+		p:     p,
+		total: total,
 	}
 
 }
@@ -118,10 +129,14 @@ type pb struct {
 	log    *CLI
 	p      *mpb.Bar
 	closed bool
+	total  int64
+	cursor int64
+	bar    int64
 }
 
 func (pb *pb) Increment(n int64) {
 	pb.p.IncrInt64(n)
+	pb.bar += n
 }
 
 func (pb *pb) Finish(success bool) {
@@ -129,7 +144,9 @@ func (pb *pb) Finish(success bool) {
 		return
 	}
 	pb.closed = true
-	pb.p.Abort(false)
+	if pb.bar != pb.total || pb.total == 0 || !success {
+		pb.p.Abort(false)
+	}
 
 	pb.log.lock.Lock()
 	defer pb.log.lock.Unlock()
@@ -144,4 +161,80 @@ func (pb *pb) Finish(success bool) {
 		_, _ = pb.log.buffer.WriteTo(os.Stdout)
 		pb.log.buffer = nil
 	}
+}
+
+func (pb *pb) Write(p []byte) (n int, err error) {
+	n = len(p)
+	pb.cursor += int64(n)
+	if pb.bar < pb.cursor {
+		pb.Increment(pb.cursor - pb.bar)
+	}
+	return
+}
+
+func (pb *pb) Seek(offset int64, whence int) (int64, error) {
+	var abs int64
+
+	switch whence {
+	case io.SeekCurrent:
+		abs = pb.cursor + offset
+	case io.SeekStart:
+		abs = offset
+	case io.SeekEnd:
+		abs = pb.total + offset
+	default:
+		return 0, errors.New("invalid whence")
+	}
+
+	pb.cursor = abs
+	if pb.bar < pb.cursor {
+		pb.Increment(pb.cursor - pb.bar)
+	}
+
+	return abs, nil
+}
+
+type mws struct {
+	w []io.WriteSeeker
+}
+
+func MultiWriteSeeker(writeseekers ...io.WriteSeeker) io.WriteSeeker {
+	return &mws{
+		w: writeseekers,
+	}
+}
+
+func (mws *mws) Write(p []byte) (n int, err error) {
+	for _, w := range mws.w {
+		n, err = w.Write(p)
+		if err != nil {
+			return
+		}
+		if n != len(p) {
+			err = io.ErrShortWrite
+			return
+		}
+	}
+	return len(p), nil
+}
+
+func (mws *mws) Seek(offset int64, whence int) (int64, error) {
+
+	var abs int64
+	abs, err := mws.w[0].Seek(offset, whence)
+	if err != nil {
+		return 0, err
+	}
+
+	for _, w := range mws.w[1:] {
+		n, err := w.Seek(offset, whence)
+		if err != nil {
+			return 0, err
+		}
+		if n != abs {
+			err = io.ErrShortWrite
+			return 0, err
+		}
+	}
+	return abs, nil
 }

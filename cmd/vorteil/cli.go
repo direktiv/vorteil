@@ -5,7 +5,6 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"fmt"
-	"github.com/vorteil/vorteil/pkg/elog"
 	"io"
 	"io/ioutil"
 	"os"
@@ -13,9 +12,12 @@ import (
 	"strings"
 	"time"
 
-	log "github.com/sirupsen/logrus"
+	"github.com/vorteil/vorteil/pkg/elog"
+
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
+	"github.com/vorteil/vorteil/pkg/elog"
 	"github.com/vorteil/vorteil/pkg/vcfg"
 	"github.com/vorteil/vorteil/pkg/vconvert"
 	"github.com/vorteil/vorteil/pkg/vdecompiler"
@@ -25,7 +27,11 @@ import (
 	"github.com/vorteil/vorteil/pkg/vproj"
 )
 
+var log elog.View
+
 var (
+	flagVerbose          bool
+	flagDebug            bool
 	flagCompressionLevel uint
 	flagForce            bool
 	flagExcludeDefault   bool
@@ -53,25 +59,26 @@ func commandInit() {
 	addModifyFlags(runCmd.Flags())
 
 	// setup logging across all commands
-	// rootCmd.PersistentFlags().BoolVar(&elog.IsJSON, "json", false, "log output in JSON")
-	// rootCmd.PersistentFlags().BoolVarP(&elog.IsDebug, "debug", "d", false, "enable debug output")
+	rootCmd.PersistentFlags().BoolVarP(&flagVerbose, "verbose", "v", false, "enable verbose output")
+	rootCmd.PersistentFlags().BoolVarP(&flagVerbose, "debug", "d", false, "enable debug output")
 
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
 
-		log.SetFormatter(&log.TextFormatter{
+		logger := &elog.CLI{}
+		logrus.SetFormatter(&logrus.TextFormatter{
 			DisableColors:    false,
 			DisableTimestamp: true,
 		})
+		logrus.SetLevel(logrus.DebugLevel)
 
-		log.SetLevel(log.InfoLevel)
+		if flagDebug {
+			logger.IsDebug = true
+			logger.IsVerbose = true
+		} else if flagVerbose {
+			logger.IsVerbose = true
+		}
 
-		// if elog.IsJSON {
-		// 	log.SetFormatter(&log.JSONFormatter{})
-		// }
-
-		// if elog.IsDebug {
-		// 	log.SetLevel(log.DebugLevel)
-		// }
+		log = logger
 
 		return nil
 	}
@@ -182,7 +189,7 @@ Supported disk formats include:
 
 		format, err := parseImageFormat(flagFormat)
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf("%v", err)
 			os.Exit(1)
 		}
 		suffix := format.Suffix()
@@ -192,45 +199,45 @@ Supported disk formats include:
 		if flagOutput != "" {
 			outputPath = flagOutput
 			if !strings.HasSuffix(outputPath, suffix) {
-				log.Warn(fmt.Sprintf("file name does not end with '%s' file extension", suffix))
+				log.Warnf("file name does not end with '%s' file extension", suffix)
 			}
 		}
 
 		err = checkValidNewFileOutput(outputPath, flagForce, "output", "-f")
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf("%v", err)
 			os.Exit(1)
 		}
 
 		pkgBuilder, err := getPackageBuilder("BUILDABLE", buildablePath)
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf("%v", err)
 			os.Exit(1)
 		}
 		defer pkgBuilder.Close()
 
 		err = modifyPackageBuilder(pkgBuilder)
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf("%v", err)
 			os.Exit(1)
 		}
 
 		pkgReader, err := vpkg.ReaderFromBuilder(pkgBuilder)
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf("%v", err)
 			os.Exit(1)
 		}
 		defer pkgReader.Close()
 
 		err = initKernels()
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf("%v", err)
 			os.Exit(1)
 		}
 
 		f, err := os.Create(outputPath)
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf("%v", err)
 			os.Exit(1)
 		}
 		defer f.Close()
@@ -241,26 +248,27 @@ Supported disk formats include:
 			KernelOptions: vdisk.KernelOptions{
 				Shell: flagShell,
 			},
+			Logger: &elog.CLI{},
 		})
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf("%v", err)
 			os.Exit(1)
 		}
 
 		err = f.Close()
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf("%v", err)
 			os.Exit(1)
 		}
 
 		err = pkgReader.Close()
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf("%v", err)
 			os.Exit(1)
 		}
 
 		// TODO: progress tracking
-		log.Info(fmt.Sprintf("created image: %s", outputPath))
+		log.Printf("created image: %s", outputPath)
 
 	},
 }
@@ -284,14 +292,14 @@ var decompileCmd = &cobra.Command{
 
 		iio, err := vdecompiler.Open(srcPath)
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf("%v", err)
 			os.Exit(1)
 		}
 		defer iio.Close()
 
 		fi, err := os.Stat(outPath)
 		if err != nil && !os.IsNotExist(err) {
-			log.Error(err.Error())
+			log.Errorf("%v", err)
 			os.Exit(1)
 		}
 		var into bool
@@ -318,13 +326,13 @@ var decompileCmd = &cobra.Command{
 			}
 
 			if flagTouched && inode.LastAccessTime == 0 && !inode.IsDirectory() && rpath != "/" {
-				log.Info(fmt.Sprintf("skipping untouched object: %s", rpath))
+				log.Printf("skipping untouched object: %s", rpath)
 				return nil
 			}
 
 			counter++
 
-			log.Info(fmt.Sprintf("copying %s", rpath))
+			log.Printf("copying %s", rpath)
 
 			if inode.IsRegularFile() {
 				fi, err = os.Stat(dpath)
@@ -375,7 +383,7 @@ var decompileCmd = &cobra.Command{
 			}
 
 			if !inode.IsDirectory() {
-				log.Warn(fmt.Sprintf("skipping abnormal file: %s", rpath))
+				log.Warnf("skipping abnormal file: %s", rpath)
 				return nil
 			}
 
@@ -412,25 +420,25 @@ var decompileCmd = &cobra.Command{
 
 		ino, err := iio.ResolvePathToInodeNo(fpath)
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf("%v", err)
 			os.Exit(1)
 		}
 		err = recurse(ino, filepath.ToSlash(filepath.Base(fpath)), dpath)
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf("%v", err)
 			os.Exit(1)
 		}
 
 		for _, fn := range symlinkCallbacks {
 			err = fn()
 			if err != nil {
-				log.Error(err.Error())
+				log.Errorf("%v", err)
 				os.Exit(1)
 			}
 		}
 
 		if flagTouched && counter <= 1 {
-			log.Warn("No touched files detected. Are you sure this disk has been run?")
+			log.Warnf("No touched files detected. Are you sure this disk has been run?")
 		}
 
 	},
@@ -450,7 +458,7 @@ var catCmd = &cobra.Command{
 
 		iio, err := vdecompiler.Open(img)
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf("%v", err)
 			os.Exit(1)
 		}
 		defer iio.Close()
@@ -463,30 +471,30 @@ var catCmd = &cobra.Command{
 				fpath = strings.TrimPrefix(fpath, "/")
 				rdr, err = iio.KernelFile(fpath)
 				if err != nil {
-					log.Error(err.Error())
+					log.Errorf("%v", err)
 					os.Exit(1)
 				}
 			} else {
 				ino, err := iio.ResolvePathToInodeNo(fpath)
 				if err != nil {
-					log.Error(err.Error())
+					log.Errorf("%v", err)
 					os.Exit(1)
 				}
 
 				inode, err := iio.ResolveInode(ino)
 				if err != nil {
-					log.Error(err.Error())
+					log.Errorf("%v", err)
 					os.Exit(1)
 				}
 
 				if !inode.IsRegularFile() {
-					log.Error(fmt.Sprintf("\"%s\" is not a regular file", fpath))
+					log.Errorf("\"%s\" is not a regular file", fpath)
 					os.Exit(1)
 				}
 
 				rdr, err = iio.InodeReader(inode)
 				if err != nil {
-					log.Error(err.Error())
+					log.Errorf("%v", err)
 					os.Exit(1)
 				}
 
@@ -495,7 +503,7 @@ var catCmd = &cobra.Command{
 
 			_, err := io.Copy(os.Stdout, rdr)
 			if err != nil {
-				log.Error(err.Error())
+				log.Errorf("%v", err)
 				os.Exit(1)
 			}
 
@@ -518,7 +526,7 @@ var cpCmd = &cobra.Command{
 
 		iio, err := vdecompiler.Open(img)
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf("%v", err)
 			os.Exit(1)
 		}
 		defer iio.Close()
@@ -526,7 +534,7 @@ var cpCmd = &cobra.Command{
 		dest := args[2]
 		fi, err := os.Stat(dest)
 		if err != nil && !os.IsNotExist(err) {
-			log.Error(err.Error())
+			log.Errorf("%v", err)
 			os.Exit(1)
 		}
 		var into bool
@@ -549,46 +557,46 @@ var cpCmd = &cobra.Command{
 				defer f.Close()
 				_, err = io.Copy(f, r)
 				if err != nil {
-					log.Error(err.Error())
+					log.Errorf("%v", err)
 					os.Exit(1)
 				}
 			} else {
 				// entire folder
 				kfiles, err := iio.KernelFiles()
 				if err != nil {
-					log.Error(err.Error())
+					log.Errorf("%v", err)
 					os.Exit(1)
 				}
 
 				err = os.MkdirAll(dpath, 077)
 				if err != nil {
-					log.Error(err.Error())
+					log.Errorf("%v", err)
 					os.Exit(1)
 				}
 
 				for _, kf := range kfiles {
 					r, err := iio.KernelFile(kf.Name)
 					if err != nil {
-						log.Error(err.Error())
+						log.Errorf("%v", err)
 						os.Exit(1)
 					}
 
 					f, err := os.Create(filepath.Join(dpath, kf.Name))
 					if err != nil {
-						log.Error(err.Error())
+						log.Errorf("%v", err)
 						os.Exit(1)
 					}
 					defer f.Close()
 
 					_, err = io.Copy(f, r)
 					if err != nil {
-						log.Error(err.Error())
+						log.Errorf("%v", err)
 						os.Exit(1)
 					}
 
 					err = f.Close()
 					if err != nil {
-						log.Error(err.Error())
+						log.Errorf("%v", err)
 						os.Exit(1)
 					}
 				}
@@ -641,7 +649,7 @@ var cpCmd = &cobra.Command{
 			}
 
 			if !inode.IsDirectory() {
-				log.Warn(fmt.Sprintf("skipping abnormal file: %s", rpath))
+				log.Warnf("skipping abnormal file: %s", rpath)
 				return nil
 			}
 
@@ -670,12 +678,12 @@ var cpCmd = &cobra.Command{
 
 		ino, err := iio.ResolvePathToInodeNo(fpath)
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf("%v", err)
 			os.Exit(1)
 		}
 		err = recurse(ino, filepath.Base(fpath), dpath)
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf("%v", err)
 			os.Exit(1)
 		}
 	},
@@ -698,7 +706,7 @@ var duCmd = &cobra.Command{
 
 		err = SetNumbersMode(numbers)
 		if err != nil {
-			log.Error(fmt.Sprintf("couldn't parse value of --numbers: %v", err))
+			log.Errorf("couldn't parse value of --numbers: %v", err)
 			os.Exit(1)
 		}
 
@@ -706,7 +714,7 @@ var duCmd = &cobra.Command{
 
 		iio, err := vdecompiler.Open(img)
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf("%v", err)
 			os.Exit(1)
 		}
 		defer iio.Close()
@@ -785,19 +793,19 @@ var duCmd = &cobra.Command{
 
 		ino, err := iio.ResolvePathToInodeNo(fpath)
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf("%v", err)
 			os.Exit(1)
 		}
 
 		inode, err := iio.ResolveInode(ino)
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf("%v", err)
 			os.Exit(1)
 		}
 
 		size, err := recurse(inode, fpath)
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf("%v", err)
 			os.Exit(1)
 		}
 
@@ -808,12 +816,12 @@ var duCmd = &cobra.Command{
 		if free {
 			sb, err := iio.Superblock(0)
 			if err != nil {
-				log.Error(err.Error())
+				log.Errorf("%v", err)
 				os.Exit(1)
 			}
 
 			leftover := int(sb.UnallocatedBlocks) * int(1024<<sb.BlockSize)
-			log.Info(fmt.Sprintf("Free space: %s", PrintableSize(leftover)))
+			log.Printf("Free space: %s", PrintableSize(leftover))
 		}
 	},
 }
@@ -835,18 +843,18 @@ var formatCmd = &cobra.Command{
 
 		iio, err := vdecompiler.Open(img)
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf("%v", err)
 			os.Exit(1)
 		}
 		defer iio.Close()
 
 		format, err := iio.ImageFormat()
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf("%v", err)
 			os.Exit(1)
 		}
 
-		log.Info(fmt.Sprintf("Image file format: %s", format))
+		log.Printf("Image file format: %s", format)
 	},
 }
 
@@ -862,7 +870,7 @@ var fsCmd = &cobra.Command{
 
 		err = SetNumbersMode(numbers)
 		if err != nil {
-			log.Error(fmt.Sprintf("couldn't parse value of --numbers: %v", err))
+			log.Errorf("couldn't parse value of --numbers: %v", err)
 			os.Exit(1)
 		}
 
@@ -870,39 +878,39 @@ var fsCmd = &cobra.Command{
 
 		iio, err := vdecompiler.Open(img)
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf("%v", err)
 			os.Exit(1)
 		}
 		defer iio.Close()
 
 		entry, err := iio.GPTEntry(vdecompiler.FilesystemPartitionName)
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf("%v", err)
 			os.Exit(1)
 		}
 
 		sb, err := iio.Superblock(0)
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf("%v", err)
 			os.Exit(1)
 		}
 
-		log.Info(fmt.Sprintf("First LBA:        \t%s", PrintableSize(int(entry.FirstLBA))))
-		log.Info(fmt.Sprintf("Last LBA:         \t%s", PrintableSize(int(entry.LastLBA))))
-		log.Info(fmt.Sprintf("Type:             \text2"))
+		log.Printf("First LBA:        \t%s", PrintableSize(int(entry.FirstLBA)))
+		log.Printf("Last LBA:         \t%s", PrintableSize(int(entry.LastLBA)))
+		log.Printf("Type:             \text2")
 
 		blocksize := 1024 << int(sb.BlockSize)
-		log.Info(fmt.Sprintf("Block size:       \t%s", PrintableSize(blocksize)))
-		log.Info(fmt.Sprintf("Blocks allocated: \t%s / %s", PrintableSize(int(sb.TotalBlocks-sb.UnallocatedBlocks)), PrintableSize(int(sb.TotalBlocks))))
-		log.Info(fmt.Sprintf("Inodes allocated: \t%s / %s", PrintableSize(int(sb.TotalInodes-sb.UnallocatedInodes)), PrintableSize(int(sb.TotalInodes))))
+		log.Printf("Block size:       \t%s", PrintableSize(blocksize))
+		log.Printf("Blocks allocated: \t%s / %s", PrintableSize(int(sb.TotalBlocks-sb.UnallocatedBlocks)), PrintableSize(int(sb.TotalBlocks)))
+		log.Printf("Inodes allocated: \t%s / %s", PrintableSize(int(sb.TotalInodes-sb.UnallocatedInodes)), PrintableSize(int(sb.TotalInodes)))
 
-		log.Info(fmt.Sprintf("Block groups:     \t%s", PrintableSize(int((sb.TotalBlocks+sb.BlocksPerGroup-1)/sb.BlocksPerGroup))))
-		log.Info(fmt.Sprintf("  Max blocks each:\t%s", PrintableSize(int(sb.BlocksPerGroup))))
-		log.Info(fmt.Sprintf("  Max inodes each:\t%s", PrintableSize(int(sb.InodesPerGroup))))
+		log.Printf("Block groups:     \t%s", PrintableSize(int((sb.TotalBlocks+sb.BlocksPerGroup-1)/sb.BlocksPerGroup)))
+		log.Printf("  Max blocks each:\t%s", PrintableSize(int(sb.BlocksPerGroup)))
+		log.Printf("  Max inodes each:\t%s", PrintableSize(int(sb.InodesPerGroup)))
 
-		// TODO: log.Info(fmt.Sprintf("Expansion ceiling: %s")
-		log.Info(fmt.Sprintf("Last mount time:  \t%s", time.Unix(int64(sb.LastMountTime), 0)))
-		log.Info(fmt.Sprintf("Last written time:\t%s", time.Unix(int64(sb.LastWrittenTime), 0)))
+		// TODO: log.Printf("Expansion ceiling: %s")
+		log.Printf("Last mount time:  \t%s", time.Unix(int64(sb.LastMountTime), 0))
+		log.Printf("Last written time:\t%s", time.Unix(int64(sb.LastWrittenTime), 0))
 
 		// TODO: files
 		// TODO: dirs
@@ -925,7 +933,7 @@ var fsimgCmd = &cobra.Command{
 
 		f, err := os.Create(dst)
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf("%v", err)
 			os.Exit(1)
 		}
 		defer f.Close()
@@ -933,7 +941,7 @@ var fsimgCmd = &cobra.Command{
 		iio, err := vdecompiler.Open(img)
 		if err != nil {
 			_ = os.Remove(f.Name())
-			log.Error(err.Error())
+			log.Errorf("%v", err)
 			os.Exit(1)
 		}
 		defer iio.Close()
@@ -941,14 +949,14 @@ var fsimgCmd = &cobra.Command{
 		rdr, err := iio.PartitionReader(vdecompiler.FilesystemPartitionName)
 		if err != nil {
 			_ = os.Remove(f.Name())
-			log.Error(err.Error())
+			log.Errorf("%v", err)
 			os.Exit(1)
 		}
 
 		_, err = io.Copy(f, rdr)
 		if err != nil {
 			_ = os.Remove(f.Name())
-			log.Error(err.Error())
+			log.Errorf("%v", err)
 			os.Exit(1)
 		}
 	},
@@ -966,7 +974,7 @@ var gptCmd = &cobra.Command{
 
 		err = SetNumbersMode(numbers)
 		if err != nil {
-			log.Error(fmt.Sprintf("couldn't parse value of --numbers: %v", err))
+			log.Errorf("couldn't parse value of --numbers: %v", err)
 			os.Exit(1)
 		}
 
@@ -974,35 +982,35 @@ var gptCmd = &cobra.Command{
 
 		iio, err := vdecompiler.Open(img)
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf("%v", err)
 			os.Exit(1)
 		}
 		defer iio.Close()
 
 		header, err := iio.GPTHeader()
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf("%v", err)
 			os.Exit(1)
 		}
 
 		entries, err := iio.GPTEntries()
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf("%v", err)
 			os.Exit(1)
 		}
 
-		log.Info(fmt.Sprintf("GPT Header LBA:   \t%s", PrintableSize(int(header.CurrentLBA))))
-		log.Info(fmt.Sprintf("Backup LBA:       \t%s", PrintableSize(int(header.BackupLBA))))
-		log.Info(fmt.Sprintf("First usable LBA: \t%s", PrintableSize(int(header.FirstUsableLBA))))
-		log.Info(fmt.Sprintf("Last usable LBA:  \t%s", PrintableSize(int(header.LastUsableLBA))))
-		log.Info(fmt.Sprintf("First entries LBA:\t%s", PrintableSize(int(header.FirstEntriesLBA))))
-		log.Info(fmt.Sprintf("Entries:"))
+		log.Printf("GPT Header LBA:   \t%s", PrintableSize(int(header.CurrentLBA)))
+		log.Printf("Backup LBA:       \t%s", PrintableSize(int(header.BackupLBA)))
+		log.Printf("First usable LBA: \t%s", PrintableSize(int(header.FirstUsableLBA)))
+		log.Printf("Last usable LBA:  \t%s", PrintableSize(int(header.LastUsableLBA)))
+		log.Printf("First entries LBA:\t%s", PrintableSize(int(header.FirstEntriesLBA)))
+		log.Printf("Entries:")
 		for i, entry := range entries {
 			name := entry.NameString()
 			if name != "" {
-				log.Info(fmt.Sprintf("  %d: %s", i, name))
-				log.Info(fmt.Sprintf("     First LBA:\t%s", PrintableSize(int(entry.FirstLBA))))
-				log.Info(fmt.Sprintf("     Last LBA: \t%s", PrintableSize(int(entry.LastLBA))))
+				log.Printf("  %d: %s", i, name)
+				log.Printf("     First LBA:\t%s", PrintableSize(int(entry.FirstLBA)))
+				log.Printf("     Last LBA: \t%s", PrintableSize(int(entry.LastLBA)))
 			}
 		}
 	},
@@ -1025,7 +1033,7 @@ var lsCmd = &cobra.Command{
 
 		err = SetNumbersMode(numbers)
 		if err != nil {
-			log.Error(fmt.Sprintf("couldn't parse value of --numbers: %v", err))
+			log.Errorf("couldn't parse value of --numbers: %v", err)
 			return
 		}
 
@@ -1055,7 +1063,7 @@ var lsCmd = &cobra.Command{
 
 		iio, err := vdecompiler.Open(img)
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf("%v", err)
 			os.Exit(1)
 		}
 		defer iio.Close()
@@ -1075,13 +1083,13 @@ var lsCmd = &cobra.Command{
 
 		if flagOS {
 			if fpath != "/" && fpath != "" && fpath != "." {
-				log.Error(fmt.Sprintf("bad FILE_PATH for vorteil partition: %s", fpath))
+				log.Errorf("bad FILE_PATH for vorteil partition: %s", fpath)
 				os.Exit(1)
 			}
 
 			kfiles, err := iio.KernelFiles()
 			if err != nil {
-				log.Error(err.Error())
+				log.Errorf("%v", err)
 				os.Exit(1)
 			}
 
@@ -1094,7 +1102,7 @@ var lsCmd = &cobra.Command{
 				PlainTable(table)
 			} else {
 				for _, kf := range kfiles {
-					log.Info(fmt.Sprintf("%s", kf.Name))
+					log.Printf("%s", kf.Name)
 				}
 			}
 			return
@@ -1102,14 +1110,14 @@ var lsCmd = &cobra.Command{
 
 		ino, err := iio.ResolvePathToInodeNo(fpath)
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf("%v", err)
 			os.Exit(1)
 		}
 
 	inoEntry:
 		inode, err := iio.ResolveInode(ino)
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf("%v", err)
 			os.Exit(1)
 		}
 
@@ -1124,17 +1132,17 @@ var lsCmd = &cobra.Command{
 		}
 
 		if reiterating {
-			log.Info("")
+			log.Infof("")
 		}
 
 		entries, err = iio.Readdir(inode)
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf("%v", err)
 			os.Exit(1)
 		}
 
 		if recursive {
-			log.Info(fmt.Sprintf("%s:", fpath))
+			log.Printf("%s:", fpath)
 		}
 
 		if long {
@@ -1156,7 +1164,7 @@ var lsCmd = &cobra.Command{
 			if long {
 				child, err := iio.ResolveInode(entry.Inode)
 				if err != nil {
-					log.Error(err.Error())
+					log.Errorf("%v", err)
 					os.Exit(1)
 				}
 				links := "?"
@@ -1185,12 +1193,12 @@ var lsCmd = &cobra.Command{
 			} else {
 
 				if recursive {
-					log.Info(fmt.Sprintf("  %s", entry.Name))
+					log.Printf("  %s", entry.Name)
 					if !(entry.Name == "." || entry.Name == "..") {
 						inos = append(inos, entry.Inode)
 					}
 				} else {
-					log.Info(fmt.Sprintf("%s", entry.Name))
+					log.Printf("%s", entry.Name)
 				}
 			}
 
@@ -1240,7 +1248,7 @@ var md5Cmd = &cobra.Command{
 
 		iio, err := vdecompiler.Open(img)
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf("%v", err)
 			os.Exit(1)
 		}
 		defer iio.Close()
@@ -1252,30 +1260,30 @@ var md5Cmd = &cobra.Command{
 			fpath = strings.TrimPrefix(fpath, "/")
 			rdr, err = iio.KernelFile(fpath)
 			if err != nil {
-				log.Error(err.Error())
+				log.Errorf("%v", err)
 				os.Exit(1)
 			}
 		} else {
 			ino, err := iio.ResolvePathToInodeNo(fpath)
 			if err != nil {
-				log.Error(err.Error())
+				log.Errorf("%v", err)
 				os.Exit(1)
 			}
 
 			inode, err := iio.ResolveInode(ino)
 			if err != nil {
-				log.Error(err.Error())
+				log.Errorf("%v", err)
 				os.Exit(1)
 			}
 
 			if inode.IsDirectory() {
-				log.Error(fmt.Sprintf("\"%s\" is not a regular file", fpath))
+				log.Errorf("\"%s\" is not a regular file", fpath)
 				os.Exit(1)
 			}
 
 			rdr, err = iio.InodeReader(inode)
 			if err != nil {
-				log.Error(err.Error())
+				log.Errorf("%v", err)
 				os.Exit(1)
 			}
 
@@ -1285,11 +1293,11 @@ var md5Cmd = &cobra.Command{
 		hasher := md5.New()
 		_, err = io.Copy(hasher, rdr)
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf("%v", err)
 			os.Exit(1)
 		}
 
-		log.Info(fmt.Sprintf("%s", hex.EncodeToString(hasher.Sum(nil))))
+		log.Printf("%s", hex.EncodeToString(hasher.Sum(nil)))
 	},
 }
 
@@ -1311,7 +1319,7 @@ var statCmd = &cobra.Command{
 
 		err = SetNumbersMode(numbers)
 		if err != nil {
-			log.Error(fmt.Sprintf("couldn't parse value of --numbers: %v", err))
+			log.Errorf("couldn't parse value of --numbers: %v", err)
 			return
 		}
 
@@ -1319,7 +1327,7 @@ var statCmd = &cobra.Command{
 
 		iio, err := vdecompiler.Open(img)
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf("%v", err)
 			os.Exit(1)
 		}
 		defer iio.Close()
@@ -1341,7 +1349,7 @@ var statCmd = &cobra.Command{
 			} else {
 				kfiles, err := iio.KernelFiles()
 				if err != nil {
-					log.Error(err.Error())
+					log.Errorf("%v", err)
 					os.Exit(1)
 				}
 
@@ -1354,31 +1362,31 @@ var statCmd = &cobra.Command{
 				}
 
 				if s == "" {
-					log.Error(fmt.Sprintf("kernel file not found: %s", fpath))
+					log.Errorf("kernel file not found: %s", fpath)
 					os.Exit(1)
 				}
 			}
 
-			log.Info(fmt.Sprintf("File: %s\t%s", s, ftype))
-			log.Info(fmt.Sprintf("Size: %s", PrintableSize(size)))
-			log.Info(fmt.Sprintf("Inode: -"))
-			log.Info(fmt.Sprintf("Access: -"))
-			log.Info(fmt.Sprintf("Uid: -"))
-			log.Info(fmt.Sprintf("Gid: -"))
-			log.Info(fmt.Sprintf("Access: -"))
-			log.Info(fmt.Sprintf("Modify: -"))
-			log.Info(fmt.Sprintf("Create: -"))
+			log.Printf("File: %s\t%s", s, ftype)
+			log.Printf("Size: %s", PrintableSize(size))
+			log.Printf("Inode: -")
+			log.Printf("Access: -")
+			log.Printf("Uid: -")
+			log.Printf("Gid: -")
+			log.Printf("Access: -")
+			log.Printf("Modify: -")
+			log.Printf("Create: -")
 
 		} else {
 			ino, err := iio.ResolvePathToInodeNo(fpath)
 			if err != nil {
-				log.Error(err.Error())
+				log.Errorf("%v", err)
 				os.Exit(1)
 			}
 
 			inode, err := iio.ResolveInode(ino)
 			if err != nil {
-				log.Error(err.Error())
+				log.Errorf("%v", err)
 				os.Exit(1)
 			}
 
@@ -1394,18 +1402,18 @@ var statCmd = &cobra.Command{
 				group = vdecompiler.VorteilGroupName
 			}
 
-			log.Info(fmt.Sprintf("File: %s\t%s", filepath.Base(fpath), ftype))
-			log.Info(fmt.Sprintf("Size: %s", PrintableSize(inode.Fullsize())))
-			// TODO: log.Info(fmt.Sprintf("Blocks: %s", PrintableSize(int()))
-			// TODO: log.Info(fmt.Sprintf("IO Block: %s", PrintableSize())
-			log.Info(fmt.Sprintf("Inode: %d", ino))
-			// TODO: log.Info(fmt.Sprintf("Links: %s")
-			log.Info(fmt.Sprintf("Access: %#o/%s", inode.Mode&vdecompiler.InodePermissionsMask, inode.Permissions()))
-			log.Info(fmt.Sprintf("Uid: %d (%s)", inode.UID, user))
-			log.Info(fmt.Sprintf("Gid: %d (%s)", inode.GID, group))
-			log.Info(fmt.Sprintf("Access: %s", time.Unix(int64(inode.LastAccessTime), 0)))
-			log.Info(fmt.Sprintf("Modify: %s", time.Unix(int64(inode.ModificationTime), 0)))
-			log.Info(fmt.Sprintf("Create: %s", time.Unix(int64(inode.CreationTime), 0)))
+			log.Printf("File: %s\t%s", filepath.Base(fpath), ftype)
+			log.Printf("Size: %s", PrintableSize(inode.Fullsize()))
+			// TODO: log.Printf("Blocks: %s", PrintableSize(int()))
+			// TODO: log.Printf("IO Block: %s", PrintableSize())
+			log.Printf("Inode: %d", ino)
+			// TODO: log.Printf("Links: %s")
+			log.Printf("Access: %#o/%s", inode.Mode&vdecompiler.InodePermissionsMask, inode.Permissions())
+			log.Printf("Uid: %d (%s)", inode.UID, user)
+			log.Printf("Gid: %d (%s)", inode.GID, group)
+			log.Printf("Access: %s", time.Unix(int64(inode.LastAccessTime), 0))
+			log.Printf("Modify: %s", time.Unix(int64(inode.ModificationTime), 0))
+			log.Printf("Create: %s", time.Unix(int64(inode.CreationTime), 0))
 		}
 	},
 }
@@ -1425,7 +1433,7 @@ var treeCmd = &cobra.Command{
 
 		iio, err := vdecompiler.Open(img)
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf("%v", err)
 			os.Exit(1)
 		}
 		defer iio.Close()
@@ -1439,23 +1447,23 @@ var treeCmd = &cobra.Command{
 
 		if flagOS {
 			if fpath != "" && fpath != "/" && fpath != "." {
-				log.Error(fmt.Sprintf("bad FILE_PATH for vpartition: %s", fpath))
+				log.Errorf("bad FILE_PATH for vpartition: %s", fpath)
 				return
 			}
 
 			kfiles, err := iio.KernelFiles()
 			if err != nil {
-				log.Error(err.Error())
+				log.Errorf("%v", err)
 				os.Exit(1)
 			}
 
-			log.Info(fmt.Sprintf(fpath))
+			log.Printf(fpath)
 
 			for i := 0; i < len(kfiles)-1; i++ {
-				log.Info(fmt.Sprintf("├── %s", kfiles[i].Name))
+				log.Printf("├── %s", kfiles[i].Name)
 			}
 
-			log.Info(fmt.Sprintf("└── %s", kfiles[len(kfiles)-1].Name))
+			log.Printf("└── %s", kfiles[len(kfiles)-1].Name)
 			return
 		}
 
@@ -1492,7 +1500,7 @@ var treeCmd = &cobra.Command{
 				}
 			}
 
-			log.Info(fmt.Sprintf("%s%s", prefix, name))
+			log.Printf("%s%s", prefix, name)
 
 			if !inode.IsDirectory() {
 				return nil
@@ -1529,13 +1537,13 @@ var treeCmd = &cobra.Command{
 
 		ino, err := iio.ResolvePathToInodeNo(fpath)
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf("%v", err)
 			os.Exit(1)
 		}
 
 		err = recurse(ino, fpath)
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf("%v", err)
 			os.Exit(1)
 		}
 	},
@@ -1593,26 +1601,26 @@ identify it and explain its purpose and its use.`,
 		if flagOutput != "" {
 			outputPath = flagOutput
 			if !strings.HasSuffix(outputPath, suffix) {
-				log.Warn(fmt.Sprintf("file name does not end with '%s' file extension", suffix))
+				log.Warnf("file name does not end with '%s' file extension", suffix)
 			}
 		}
 
 		err := checkValidNewFileOutput(outputPath, flagForce, "output", "-f")
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf("%v", err)
 			os.Exit(1)
 		}
 
 		// TODO: other packable type & project targets
 		proj, err := vproj.LoadProject(packablePath)
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf("%v", err)
 			os.Exit(1)
 		}
 
 		tgt, err := proj.Target("")
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf("%v", err)
 			os.Exit(1)
 		}
 
@@ -1620,7 +1628,7 @@ identify it and explain its purpose and its use.`,
 
 		builder, err := tgt.NewBuilder()
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf("%v", err)
 			os.Exit(1)
 		}
 		defer builder.Close()
@@ -1629,32 +1637,32 @@ identify it and explain its purpose and its use.`,
 
 		f, err := os.Create(outputPath)
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf("%v", err)
 			os.Exit(1)
 		}
 		defer f.Close()
 
 		err = builder.Pack(f)
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf("%v", err)
 			os.Exit(1)
 		}
 
 		err = f.Close()
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf("%v", err)
 			os.Exit(1)
 		}
 
 		err = builder.Close()
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf("%v", err)
 			os.Exit(1)
 		}
 
 		// TODO: progress tracking
 
-		log.Info(fmt.Sprintf("created package: %s", outputPath))
+		log.Printf("created package: %s", outputPath)
 	},
 }
 
@@ -1688,26 +1696,26 @@ other files. If the DEST argument is omitted it will default to ".".`,
 
 		err := checkValidNewDirOutput(prjPath, flagForce, "DEST", "-f")
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf("%v", err)
 			os.Exit(1)
 		}
 
 		pkg, err := vpkg.Open(pkgPath)
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf("%v", err)
 			os.Exit(1)
 		}
 		defer pkg.Close()
 
 		err = vproj.CreateFromPackage(prjPath, pkg)
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf("%v", err)
 			os.Exit(1)
 		}
 
 		// TODO: progress tracking
 
-		log.Info(fmt.Sprintf("unpacked to: %s", prjPath))
+		log.Printf("unpacked to: %s", prjPath)
 	},
 }
 
@@ -1739,7 +1747,7 @@ var convertContainerCmd = &cobra.Command{
 
 		err := vconvert.ConvertContainer(args[0], args[1], user, pwd, config)
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf("%v", err)
 			os.Exit(1)
 		}
 
@@ -1758,7 +1766,7 @@ var importSharedObjectsCmd = &cobra.Command{
 		if len(args) != 0 {
 			projectPath, err = filepath.Abs(args[0])
 			if err != nil {
-				log.Error(err.Error())
+				log.Errorf("%v", err)
 				os.Exit(1)
 			}
 		}
@@ -1767,13 +1775,13 @@ var importSharedObjectsCmd = &cobra.Command{
 		importOperation, err := vproj.NewImportSharedObject(projectPath, flagExcludeDefault, &elog.CLI{})
 
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf("%v", err)
 			os.Exit(2)
 		}
 
 		// Start Import Operation
 		if err = importOperation.Start(); err != nil {
-			log.Error(err.Error())
+			log.Errorf("%v", err)
 			os.Exit(3)
 		}
 	},
@@ -1873,7 +1881,7 @@ var initFirecrackerCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		err := firecracker.SetupBridgeAndDHCPServer()
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf("%v", err)
 			os.Exit(1)
 		}
 	},
@@ -1897,40 +1905,40 @@ and cleaning up the instance when it's done.`,
 
 		pkgBuilder, err := getPackageBuilder("BUILDABLE", buildablePath)
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf("%v", err)
 			os.Exit(1)
 		}
 		defer pkgBuilder.Close()
 
 		err = modifyPackageBuilder(pkgBuilder)
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf("%v", err)
 			os.Exit(1)
 		}
 
 		pkgReader, err := vpkg.ReaderFromBuilder(pkgBuilder)
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf("%v", err)
 			os.Exit(1)
 		}
 		defer pkgReader.Close()
 
 		pkgReader, err = vpkg.PeekVCFG(pkgReader)
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf("%v", err)
 			os.Exit(1)
 		}
 
 		cfgf := pkgReader.VCFG()
 		cfg, err := vcfg.LoadFile(cfgf)
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf("%v", err)
 			os.Exit(1)
 		}
 
 		err = initKernels()
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf("%v", err)
 			os.Exit(1)
 		}
 
@@ -1938,29 +1946,29 @@ and cleaning up the instance when it's done.`,
 		case platformQEMU:
 			err = runQEMU(pkgReader, cfg)
 			if err != nil {
-				log.Error(err.Error())
+				log.Errorf("%v", err)
 				os.Exit(1)
 			}
 		case platformVirtualBox:
 			err = runVirtualBox(pkgReader, cfg)
 			if err != nil {
-				log.Error(err.Error())
+				log.Errorf("%v", err)
 				os.Exit(1)
 			}
 		case platformHyperV:
 			err = runHyperV(pkgReader, cfg)
 			if err != nil {
-				log.Error(err.Error())
+				log.Errorf("%v", err)
 				os.Exit(1)
 			}
 		case platformFirecracker:
 			err = runFirecracker(pkgReader, cfg)
 			if err != nil {
-				log.Error(err.Error())
+				log.Errorf("%v", err)
 				os.Exit(1)
 			}
 		default:
-			log.Error(fmt.Errorf("platform '%s' not supported", flagPlatform).Error())
+			log.Errorf("%v", fmt.Errorf("platform '%s' not supported", flagPlatform).Error())
 			os.Exit(1)
 		}
 

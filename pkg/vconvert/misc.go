@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/cloudfoundry/bytefmt"
 	"github.com/docker/distribution"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/heroku/docker-registry-client/registry"
@@ -16,8 +15,6 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 	"github.com/vbauerster/mpb"
-	"github.com/vbauerster/mpb/decor"
-	"github.com/vorteil/vorteil/pkg/elog"
 )
 
 const (
@@ -206,18 +203,18 @@ func distributor(layers []interface{}, p *mpb.Progress) {
 			number: i,
 		}
 
-		if !elog.IsJSON {
-			job.bar = p.AddBar(int64(layer.(distribution.Descriptor).Size),
-				mpb.PrependDecorators(
-					decor.Name(barName(layer, i)),
-				),
-				mpb.AppendDecorators(
-					decor.OnComplete(
-						decor.CountersKiloByte("%.1f / %.1f"), "downloaded",
-					),
-				),
-			)
-		}
+		// if !elog.IsJSON {
+		// 	job.bar = p.AddBar(int64(layer.(distribution.Descriptor).Size),
+		// 		mpb.PrependDecorators(
+		// 			decor.Name(barName(layer, i)),
+		// 		),
+		// 		mpb.AppendDecorators(
+		// 			decor.OnComplete(
+		// 				decor.CountersKiloByte("%.1f / %.1f"), "downloaded",
+		// 			),
+		// 		),
+		// 	)
+		// }
 		jobs <- job
 	}
 
@@ -226,31 +223,31 @@ func distributor(layers []interface{}, p *mpb.Progress) {
 
 func worker(dir, image string, registry *registry.Registry) {
 
-	for {
-		job, opened := <-jobs
-		if !opened {
-			break
-		}
+	// for {
+	// 	job, opened := <-jobs
+	// 	if !opened {
+	// 		break
+	// 	}
 
-		layer := job.layer.(distribution.Descriptor)
-		reader, err := registry.DownloadBlob(image, layer.Digest)
-		if err != nil {
-			log.Fatalf("can not download layer %s: %s", layer.Digest, err.Error())
-			os.Exit(1)
-		}
+	// 	layer := job.layer.(distribution.Descriptor)
+	// 	reader, err := registry.DownloadBlob(image, layer.Digest)
+	// 	if err != nil {
+	// 		log.Fatalf("can not download layer %s: %s", layer.Digest, err.Error())
+	// 		os.Exit(1)
+	// 	}
 
-		// if we use json we don't show bars
-		var proxyReader io.ReadCloser
-		if !elog.IsJSON {
-			proxyReader = job.bar.ProxyReader(reader)
-		} else {
-			log.Infof("downloading layer %s (%s)", image, bytefmt.ByteSize((uint64)(job.layer.(distribution.Descriptor).Size)))
-			proxyReader = reader
-		}
-		defer proxyReader.Close()
+	// 	// if we use json we don't show bars
+	// 	// var proxyReader io.ReadCloser
+	// 	// if !elog.IsJSON {
+	// 	// 	proxyReader = job.bar.ProxyReader(reader)
+	// 	// } else {
+	// 	// 	log.Infof("downloading layer %s (%s)", image, bytefmt.ByteSize((uint64)(job.layer.(distribution.Descriptor).Size)))
+	// 	// 	proxyReader = reader
+	// 	// }
+	// 	// defer proxyReader.Close()
 
-		writeFile(fmt.Sprintf(tarExpression, dir, layer.Digest[7:15]), proxyReader)
-		wg.Done()
-	}
+	// 	writeFile(fmt.Sprintf(tarExpression, dir, layer.Digest[7:15]), proxyReader)
+	// 	wg.Done()
+	// }
 
 }

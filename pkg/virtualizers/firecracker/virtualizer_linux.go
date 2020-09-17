@@ -597,8 +597,7 @@ func (v *Virtualizer) Close(force bool) error {
 	client := &http.Client{}
 	cdm, err := json.Marshal(v.tapDevice)
 	if err != nil {
-		returnErr = err
-		return
+		return err
 	}
 
 	req, err := http.NewRequest("DELETE", "http://localhost:7476/", bytes.NewBuffer(cdm))
@@ -809,13 +808,13 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 
 	devices = append(devices, rootDrive)
 
-	v.logger.Infof("Fetching VMLinux from cache or online")
+	o.logger.Infof("Fetching VMLinux from cache or online")
 	o.kip, err = o.fetchVMLinux(o.config.VM.Kernel)
 	if err != nil {
 		returnErr = err
 		return
 	}
-	v.logger.Infof("Finished getting VMLinux")
+	o.logger.Infof("Finished getting VMLinux")
 
 	cd := CreateDevices{
 		Id:     o.id,

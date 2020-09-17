@@ -93,8 +93,8 @@ func SetupBridgeAndDHCPServer() error {
 }
 
 type CreateDevices struct {
-	id     string                          `json:"id"`
-	routes []virtualizers.NetworkInterface `json:"routes"`
+	id     string `json:"id"`
+	routes int    `json:"count"`
 }
 
 type Devices struct {
@@ -798,7 +798,7 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 
 	cd := CreateDevices{
 		id:     o.id,
-		routes: o.routes,
+		routes: len(o.routes),
 	}
 
 	cdm, err := json.Marshal(cd)
@@ -807,6 +807,7 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 		returnErr = err
 		return
 	}
+
 	fmt.Printf("SENDING: %s\n", cdm)
 	resp, err := http.Post("http://localhost:7476/", "application/json", bytes.NewBuffer(cdm))
 	if err != nil {
@@ -820,10 +821,10 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		fmt.Printf("ER3")
-
 		returnErr = err
 		return
 	}
+
 	fmt.Printf("BODY:%s\n", string(body))
 	var ifs Devices
 	err = json.Unmarshal(body, ifs)

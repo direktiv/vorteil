@@ -542,7 +542,7 @@ func (v *Virtualizer) Stop() error {
 		// }
 		client := &http.Client{
 			Transport: &http.Transport{
-				Dial: net.Dial("unix", v.fconfig.SocketPath)
+				Dial: net.Dial("unix", v.fconfig.SocketPath),
 			},
 		}
 		reqBody := map[string]string{
@@ -565,7 +565,7 @@ func (v *Virtualizer) Stop() error {
 		if err != nil {
 			return err
 		}
-defer resp.Body.Close()
+		defer resp.Body.Close()
 		v.state = virtualizers.Ready
 
 	} else {

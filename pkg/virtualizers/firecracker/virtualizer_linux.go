@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
@@ -159,8 +160,7 @@ func OrganiseTapDevices(w http.ResponseWriter, r *http.Request) {
 			}
 			// write interfaces back
 			returnDevices := &Devices{
-				http.Error(w, err.Error(), http.StatusBadRequest)
-
+				devices: tapDevices,
 			}
 			body, err := json.Marshal(returnDevices)
 			if err != nil {
@@ -800,7 +800,7 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 		id:     o.id,
 		routes: o.routes,
 	}
-	cd, err := json.Marshal(cd)
+	cd, err = json.Marshal(cd)
 	if err != nil {
 		returnErr = err
 		return
@@ -817,21 +817,21 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 		returnErr = err
 		return
 	}
-var devices Devices
-	err := json.Unmarshal(body, Devices)
+	var ifs Devices
+	err = json.Unmarshal(body, Devices)
 	if err != nil {
-		returnErr =err
+		returnErr = err
 		return
 	}
 
 	// TODO this needs to move into where the DHCP handler is
 	var interfaces []firecracker.NetworkInterface
 
-	for i:=0; i < devices.devices.length; i++ {
+	for i := 0; i < ifs.devices.length; i++ {
 		interfaces = append(interfaces,
 			firecracker.NetworkInterface{
 				StaticConfiguration: &firecracker.StaticNetworkConfiguration{
-					HostDevName: devices.devices[i],
+					HostDevName: ifs.devices[i],
 				},
 			},
 		)

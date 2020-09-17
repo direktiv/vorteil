@@ -122,8 +122,8 @@ func OrganiseTapDevices(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// set network adapters
-		if len(cd.routes) > 0 {
-			for i := 0; i < len(cd.routes); i++ {
+		if cd.routes > 0 {
+			for i := 0; i < cd.routes; i++ {
 				ifceName := fmt.Sprintf("%s-%s", cd.id, strconv.Itoa(i))
 
 				// create tap device

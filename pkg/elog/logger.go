@@ -3,11 +3,13 @@ package elog
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
 	"sync"
 
+	"github.com/fatih/color"
 	"github.com/sirupsen/logrus"
 	"github.com/vbauerster/mpb/v5"
 	"github.com/vbauerster/mpb/v5/decor"
@@ -41,6 +43,7 @@ type View interface {
 }
 
 type CLI struct {
+	DisableColors      bool
 	DisableTTY         bool
 	IsDebug            bool
 	IsVerbose          bool
@@ -53,7 +56,7 @@ type CLI struct {
 
 func (log *CLI) Debugf(format string, x ...interface{}) {
 	if log.IsDebug {
-		logrus.Debugf(format, x...)
+		logrus.Tracef(format, x...)
 	}
 }
 
@@ -63,7 +66,7 @@ func (log *CLI) Errorf(format string, x ...interface{}) {
 
 func (log *CLI) Infof(format string, x ...interface{}) {
 	if log.IsVerbose {
-		logrus.Infof(format, x...)
+		logrus.Debugf(format, x...)
 	}
 }
 
@@ -306,4 +309,32 @@ func (mws *mws) Seek(offset int64, whence int) (int64, error) {
 		}
 	}
 	return abs, nil
+}
+
+func (log *CLI) Format(entry *logrus.Entry) ([]byte, error) {
+
+	faint := color.New(color.Faint).SprintFunc()
+	yellow := color.New(color.FgYellow).SprintFunc()
+	red := color.New(color.FgRed).SprintFunc()
+	blue := color.New(color.FgBlue).SprintFunc()
+
+	x := entry.Message
+	if !log.DisableColors {
+		switch entry.Level {
+		case logrus.TraceLevel:
+			x = fmt.Sprintf("%s\n", faint(x))
+		case logrus.DebugLevel:
+			x = fmt.Sprintf("%s\n", blue(x))
+		case logrus.InfoLevel:
+			x = fmt.Sprintf("%s\n", x)
+		case logrus.WarnLevel:
+			x = fmt.Sprintf("%s\n", yellow(x))
+		case logrus.ErrorLevel:
+			x = fmt.Sprintf("%s\n", red(x))
+		default:
+		}
+	}
+
+	return []byte(x), nil
+
 }

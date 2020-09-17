@@ -59,7 +59,7 @@ func commandInit() {
 
 	// setup logging across all commands
 	rootCmd.PersistentFlags().BoolVarP(&flagVerbose, "verbose", "v", false, "enable verbose output")
-	rootCmd.PersistentFlags().BoolVarP(&flagVerbose, "debug", "d", false, "enable debug output")
+	rootCmd.PersistentFlags().BoolVarP(&flagDebug, "debug", "d", false, "enable debug output")
 	rootCmd.PersistentFlags().BoolVarP(&flagJSON, "json", "j", false, "enable json output")
 
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
@@ -70,13 +70,10 @@ func commandInit() {
 			logger.DisableTTY = true
 			logrus.SetFormatter(&logrus.JSONFormatter{})
 		} else {
-			logrus.SetFormatter(&logrus.TextFormatter{
-				DisableColors:    false,
-				DisableTimestamp: true,
-			})
+			logrus.SetFormatter(logger)
 		}
 
-		logrus.SetLevel(logrus.DebugLevel)
+		logrus.SetLevel(logrus.TraceLevel)
 
 		if flagDebug {
 			logger.IsDebug = true

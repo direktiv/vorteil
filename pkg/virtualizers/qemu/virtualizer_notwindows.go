@@ -35,7 +35,7 @@ func (v *Virtualizer) Start() error {
 		go func() {
 			err = v.command.Start()
 			if err != nil {
-				v.logger.Errof("Error Executing Start: %s", err.Error())
+				v.logger.Errorf("Error Executing Start: %s", err.Error())
 			}
 
 			polling := true
@@ -128,7 +128,7 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	}
 	o.command.Args = append(o.command.Args, netArgs...)
 
-	v.logger.Infof("Creating QEMU VM with Args: %s", strings.Join(o.command.Args, " "))
+	o.logger.Infof("Creating QEMU VM with Args: %s", strings.Join(o.command.Args, " "))
 
 	o.state = "ready"
 

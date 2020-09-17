@@ -668,7 +668,7 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 		ForceColors:   true,
 		FullTimestamp: true,
 	})
-	logger.Out = o.virtLogger
+	logger.Out = v.logger
 
 	ctx := context.Background()
 	vmmCtx, vmmCancel := context.WithCancel(ctx)
@@ -812,7 +812,7 @@ func (v *Virtualizer) Start() error {
 			}
 
 			if err := v.machine.Start(v.vmmCtx); err != nil {
-				v.logger.Errorf("Error starting virtual machine: %s".err.Error())
+				v.logger.Errorf("Error starting virtual machine: %s", err.Error())
 			}
 			v.state = virtualizers.Alive
 

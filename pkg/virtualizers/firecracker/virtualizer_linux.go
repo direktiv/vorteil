@@ -827,7 +827,7 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 
 	fmt.Printf("BODY:%s\n", string(body))
 	var ifs Devices
-	err = json.Unmarshal(body, ifs)
+	err = json.Unmarshal(body, &ifs)
 	if err != nil {
 		fmt.Printf("ER4")
 

@@ -796,7 +796,7 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	}
 	o.log("debug", "Finished getting VMLinux")
 
-	cd := &CreateDevices{
+	cd := CreateDevices{
 		id:     o.id,
 		routes: o.routes,
 	}

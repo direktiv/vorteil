@@ -1,10 +1,14 @@
+/**
+ * SPDX-License-Identifier: Apache-2.0
+ * Copyright 2020 vorteil.io Pty Ltd
+ */
+
 package vproj
 
 import (
 	"debug/elf"
 	"errors"
 	"fmt"
-	"github.com/davecgh/go-spew/spew"
 	log "github.com/sirupsen/logrus"
 	"io"
 	"io/ioutil"
@@ -301,7 +305,6 @@ func (isoOp *importSharedObjectsOperation) listDependencies(fpath string) ([]str
 		return deps, noLocates, fmt.Errorf("errors locating libs: %s", strings.Join(msgs, "; "))
 	}
 
-	spew.Dump(deps)
 	return deps, noLocates, nil
 }
 

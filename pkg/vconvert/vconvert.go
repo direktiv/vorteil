@@ -14,13 +14,12 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/vorteil/vorteil/pkg/elog"
 	"github.com/vorteil/vorteil/pkg/vcfg"
 
 	"github.com/containerd/containerd/archive"
 	"github.com/containerd/containerd/archive/compression"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
-	log "github.com/sirupsen/logrus"
-	"github.com/vorteil/vorteil/pkg/elog"
 
 	"github.com/heroku/docker-registry-client/registry"
 	parser "github.com/novln/docker-parser"
@@ -97,7 +96,7 @@ func NewContainerConverter(app, config string, log elog.View) (*ContainerConvert
 		log = &elog.CLI{}
 	}
 
-	initConfig(config)
+	initConfig(config, log)
 
 	// get the ref first
 	ref, err := parser.Parse(app)
@@ -133,7 +132,7 @@ func NewContainerConverter(app, config string, log elog.View) (*ContainerConvert
 	}
 
 	cc.logger = log
-	cc.jobsCh = make(chan *job)
+	cc.jobsCh = make(chan *job, workers)
 	cc.jobsDoneCh = make(chan *job, workers)
 
 	return cc, nil
@@ -262,9 +261,9 @@ func (cc *ContainerConverter) downloadBlobs(dir string) error {
 			dir:    dir,
 		}
 		cc.jobsCh <- job
-
 	}
 
+	cc.logger.Debugf("all %d jobs sent", len(cc.layers))
 	r := 0
 	for {
 		j := <-cc.jobsDoneCh
@@ -272,6 +271,8 @@ func (cc *ContainerConverter) downloadBlobs(dir string) error {
 			cc.logger.Errorf("error downloading layer: %s", j.err.Error())
 		}
 		r++
+
+		cc.logger.Debugf("received %d from %d jobs finished", r, len(cc.layers))
 
 		// we have received all responses
 		if r == len(cc.layers) {
@@ -328,7 +329,7 @@ func (cc *ContainerConverter) untarLayers(targetDir string) error {
 				fmts := []string{"/%s", "/%s/", "%s"}
 				for _, f1 := range fmts {
 					if strings.HasPrefix(hdr.Name, fmt.Sprintf(f1, f)) {
-						log.Debugf("skipping file/dir %s", hdr.Name)
+						cc.logger.Debugf("skipping file/dir %s", hdr.Name)
 						return false, nil
 					}
 				}
@@ -381,7 +382,7 @@ func (cc *ContainerConverter) createVCFG(config v1.Config, targetDir string) err
 		return fmt.Errorf("can not generate command: %s", finalCmd)
 	}
 
-	bin, err := findBinary(finalCmd[0], config.Env, config.WorkingDir, targetDir)
+	bin, err := findBinary(finalCmd[0], config.Env, config.WorkingDir, targetDir, cc.logger)
 	if err != nil {
 		return err
 	}
@@ -470,7 +471,7 @@ func (cc *ContainerConverter) blobDownloadWorker() {
 
 		p = cc.logger.NewProgress(fmt.Sprintf("layer %s:", job.layer.hash), "KiB", job.layer.size)
 		pr = p.ProxyReader(reader)
-		defer pr.Close()
+
 		job.name = fmt.Sprintf(tarExpression, job.dir, job.layer.hash)
 
 		err = writeFile(job.name, pr)
@@ -486,6 +487,8 @@ func (cc *ContainerConverter) blobDownloadWorker() {
 		} else {
 			p.Finish(true)
 		}
+
+		pr.Close()
 
 		// set the file to the layer
 		cc.layers[job.number].file = job.name

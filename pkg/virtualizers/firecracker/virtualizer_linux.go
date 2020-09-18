@@ -542,7 +542,7 @@ func (v *Virtualizer) Stop() error {
 		v.state = virtualizers.Changing
 
 		// API way of shutting down vm seems bugged going to send request myself for now.
-		err := v.machine.Shutdown(v.gctx)
+		err := v.machine.Shutdown(v.vmmCtx)
 		if err != nil {
 			return err
 		}
@@ -830,7 +830,7 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	logger.Out = o
 
 	ctx := context.Background()
-	// vmmCtx, vmmCancel := context.WithCancel(ctx)
+	vmmCtx, vmmCancel := context.WithCancel(ctx)
 	devices := []models.Drive{}
 
 	rootDrive := models.Drive{
@@ -914,8 +914,8 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 
 	// append new fields to overarching struct
 	o.gctx = ctx
-	// o.vmmCtx = vmmCtx
-	// o.vmmCancel = vmmCancel
+	o.vmmCtx = vmmCtx
+	o.vmmCancel = vmmCancel
 	o.machineOpts = machineOpts
 	o.fconfig = fcCfg
 
@@ -948,24 +948,24 @@ func (v *Virtualizer) Start() error {
 			}
 
 			cmd := firecracker.VMCommandBuilder{}.WithBin(executable).WithSocketPath(v.fconfig.SocketPath).WithStdout(v.serialLogger).WithStderr(v.serialLogger).Build(v.gctx)
+
+			v.machineOpts = append(v.machineOpts, firecracker.WithProcessRunner(cmd))
 			cmd.SysProcAttr = &syscall.SysProcAttr{
 				Setpgid: true,
 			}
-			v.machineOpts = append(v.machineOpts, firecracker.WithProcessRunner(cmd))
-
-			v.machine, err = firecracker.NewMachine(v.gctx, v.fconfig, v.machineOpts...)
+			v.machine, err = firecracker.NewMachine(v.vmmCtx, v.fconfig, v.machineOpts...)
 			if err != nil {
 				v.logger.Errorf("Error creating machine: %s", err.Error())
 			}
 
-			if err := v.machine.Start(v.gctx); err != nil {
+			if err := v.machine.Start(v.vmmCtx); err != nil {
 				v.logger.Errorf("Error starting virtual machine: %s", err.Error())
 			}
 			v.state = virtualizers.Alive
 
 			go v.lookForIP()
 
-			if err := v.machine.Wait(v.gctx); err != nil {
+			if err := v.machine.Wait(v.vmmCtx); err != nil {
 				// Should end when we ctrl-c no need to print this.
 				if !strings.Contains(err.Error(), "* signal: interrupt") {
 					v.logger.Errorf("Wait returned an error: %s", err.Error())

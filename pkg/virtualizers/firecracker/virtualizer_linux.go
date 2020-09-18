@@ -530,9 +530,9 @@ func (v *Virtualizer) Serial() *logger.Logger {
 }
 
 // Dial unix
-func (v *Virtualizer) Dial(proto, addr string) (conn net.Conn, err error) {
-	return net.Dial("unix", v.fconfig.SocketPath)
-}
+// func (v *Virtualizer) Dial(proto, addr string) (conn net.Conn, err error) {
+// 	return net.Dial("unix", v.fconfig.SocketPath)
+// }
 
 // Stop stops the vm and changes it back to ready
 func (v *Virtualizer) Stop() error {
@@ -541,37 +541,37 @@ func (v *Virtualizer) Stop() error {
 		v.state = virtualizers.Changing
 
 		// API way of shutting down vm seems bugged going to send request myself for now.
-		// err := v.machine.Shutdown(v.vmmCtx)
+		err := v.machine.Shutdown(v.vmmCtx)
+		if err != nil {
+			return err
+		}
+		// client := &http.Client{
+		// 	Transport: &http.Transport{
+		// 		Dial: v.Dial,
+		// 	},
+		// }
+		// reqBody := map[string]string{
+		// 	"action_type": "SendCtrlAltDel",
+		// }
+		// data, err := json.Marshal(reqBody)
 		// if err != nil {
 		// 	return err
 		// }
-		client := &http.Client{
-			Transport: &http.Transport{
-				Dial: v.Dial,
-			},
-		}
-		reqBody := map[string]string{
-			"action_type": "SendCtrlAltDel",
-		}
-		data, err := json.Marshal(reqBody)
-		if err != nil {
-			return err
-		}
 
-		req, err := http.NewRequest("PUT", "http://localhost/actions", bytes.NewBuffer(data))
-		if err != nil {
-			return err
-		}
+		// req, err := http.NewRequest("PUT", "http://localhost/actions", bytes.NewBuffer(data))
+		// if err != nil {
+		// 	return err
+		// }
 
-		req.Header.Add("accept", "application/json")
-		req.Header.Add("Content-Type", "application/json")
+		// req.Header.Add("accept", "application/json")
+		// req.Header.Add("Content-Type", "application/json")
 
-		resp, err := client.Do(req)
-		if err != nil {
-			return err
-		}
+		// resp, err := client.Do(req)
+		// if err != nil {
+		// 	return err
+		// }
 
-		defer resp.Body.Close()
+		// defer resp.Body.Close()
 		v.state = virtualizers.Ready
 
 	} else {

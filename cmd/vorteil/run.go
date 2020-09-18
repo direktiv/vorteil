@@ -339,10 +339,7 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG) error {
 			if finished && virt.State() == virtualizers.Deleted {
 				return nil
 			}
-		case msg, more := <-s:
-			if !more {
-				return nil
-			}
+		case msg, _ := <-s:
 			fmt.Print(string(msg))
 		case <-signalChannel:
 			// Close virtual machine without forcing to handle stopping the virtual machine gracefully

@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/mattn/go-shellwords"
@@ -21,6 +22,9 @@ import (
 func (v *Virtualizer) Start() error {
 	v.logger.Debugf("Starting VM")
 	v.command = exec.Command(v.command.Args[0], v.command.Args[1:]...)
+	v.command.SysProcAttr = &syscall.SysProcAttr{
+		Setpgid: true,
+	}
 	var socketFound bool
 	switch v.State() {
 

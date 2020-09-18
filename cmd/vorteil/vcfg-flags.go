@@ -1120,7 +1120,7 @@ var filesFlag = stringSliceFlag{
 	},
 	validate: func(f stringSliceFlag) error {
 		for _, v := range f.value {
-			// value should have no more than 2 elements when split by ';'
+			// value should have no more than 2 elements when split by ':'
 			x := strings.SplitN(v, ":", 2)
 
 			var src = x[0]

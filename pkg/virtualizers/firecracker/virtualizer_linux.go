@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/firecracker-microvm/firecracker-go-sdk"
@@ -947,6 +948,9 @@ func (v *Virtualizer) Start() error {
 			}
 
 			cmd := firecracker.VMCommandBuilder{}.WithBin(executable).WithSocketPath(v.fconfig.SocketPath).WithStdout(v.serialLogger).WithStderr(v.serialLogger).Build(v.gctx)
+			cmd.SysProcAttr = &syscall.SysProcAttr{
+				Setpgid: true,
+			}
 			v.machineOpts = append(v.machineOpts, firecracker.WithProcessRunner(cmd))
 
 			v.machine, err = firecracker.NewMachine(v.vmmCtx, v.fconfig, v.machineOpts...)

@@ -329,49 +329,38 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG) error {
 	serial := virt.Serial()
 	serialSubscription := serial.Subscribe()
 	s := serialSubscription.Inbox()
-	defer serialSubscription.Close()
-	defer serial.Close()
+
 	signalChannel, chBool := listenForInterupt()
 
 	var finished bool
-
 	for {
 		select {
+		case <-time.After(time.Millisecond * 200):
+			if finished && virt.State() == "deleted" {
+				serialSubscription.Close()
+				serial.Close()
+				return nil
+			}
 		case msg, more := <-s:
 			if !more {
-				break
+				return nil
 			}
 			fmt.Print(string(msg))
 		case <-signalChannel:
-			// Close vm
-			err = virt.Stop()
+			if finished {
+				return nil
+			}
+			// Close virtual machine without forcing to handle stopping the virtual machine gracefully
+			err = virt.Close(false)
 			if err != nil {
 				log.Errorf(err.Error())
-				return err
 			}
-			for {
-				if virt.State() == virtualizers.Deleted || virt.State() == virtualizers.Ready {
-					finished = true
-					break
-				}
-				<-time.After(time.Second)
-			}
+			finished = true
 		case <-chBool:
-
-		}
-		if finished {
-			break
+			return nil
 		}
 	}
 
-	// Cleanup vm
-	err = virt.Close(false)
-	if err != nil {
-		log.Errorf(err.Error())
-		return err
-	}
-
-	return nil
 }
 
 func raw(start bool) error {

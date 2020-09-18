@@ -813,7 +813,7 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 
 	devices = append(devices, rootDrive)
 
-	progress := v.logger.NewProgress("Fetching VMLinux", "", 0)
+	progress := o.logger.NewProgress("Fetching VMLinux", "", 0)
 	defer progress.Finish(false)
 	o.kip, err = o.fetchVMLinux(o.config.VM.Kernel)
 	if err != nil {

@@ -11,6 +11,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"syscall"
 	"time"
 
@@ -160,7 +161,6 @@ func runHyperV(pkgReader vpkg.Reader, cfg *vcfg.VCFG) error {
 
 	alloc := hyperv.Allocator
 	virt := alloc.Alloc()
-	defer virt.Close(true)
 
 	config := hyperv.Config{
 		Headless:   !flagGUI,
@@ -227,7 +227,6 @@ func runVirtualBox(pkgReader vpkg.Reader, cfg *vcfg.VCFG) error {
 
 	alloc := virtualbox.Allocator
 	virt := alloc.Alloc()
-	defer virt.Close(true)
 
 	config := virtualbox.Config{
 		Headless:    !flagGUI,
@@ -331,12 +330,26 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG) error {
 	s := serialSubscription.Inbox()
 	defer serialSubscription.Close()
 	defer serial.Close()
+
 	signalChannel, chBool := listenForInterupt()
 
 	var finished bool
+	var routesChecked bool
+
 	for {
 		select {
 		case <-time.After(time.Millisecond * 200):
+			if virt.State() == virtualizers.Alive && !routesChecked {
+				routesChecked = true
+				lines := gatherNetworkDetails(virt.ConvertToVM().(*virtualizers.VirtualMachine))
+				if len(lines) > 0 {
+					log.Warnf("Network settings")
+					for _, line := range lines {
+						log.Warnf(line)
+					}
+				}
+			}
+
 			if finished && virt.State() == virtualizers.Ready {
 				err := virt.Close(true)
 				if err != nil {
@@ -367,6 +380,63 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG) error {
 		}
 	}
 
+}
+
+// Fetch network details about virtual machine
+func gatherNetworkDetails(machine *virtualizers.VirtualMachine) []string {
+	var lines []string
+	for _, network := range machine.Networks {
+		for _, portmap := range network.UDP {
+			actual := portmap.Address[strings.LastIndex(portmap.Address, ":")+1:]
+			if actual != portmap.Port && actual != "" {
+				port2 := portmap.Address
+				if port2 == "" {
+					port2 = portmap.Port
+				}
+				lines = append(lines, fmt.Sprintf(" • %s:%s → %s", "udp", portmap.Port, port2))
+			} else {
+				lines = append(lines, fmt.Sprintf(" • %s:%s", "udp", portmap.Port))
+			}
+		}
+		for _, portmap := range network.TCP {
+			actual := portmap.Address[strings.LastIndex(portmap.Address, ":")+1:]
+			if actual != portmap.Port && actual != "" {
+				port2 := portmap.Address
+				if port2 == "" {
+					port2 = portmap.Port
+				}
+				lines = append(lines, fmt.Sprintf(" • %s:%s → %s", "tcp", portmap.Port, port2))
+			} else {
+				lines = append(lines, fmt.Sprintf(" • %s:%s", "tcp", portmap.Port))
+			}
+		}
+		for _, portmap := range network.HTTP {
+			actual := portmap.Address[strings.LastIndex(portmap.Address, ":")+1:]
+			if actual != portmap.Port && actual != "" {
+				port2 := portmap.Address
+				if port2 == "" {
+					port2 = portmap.Port
+				}
+				lines = append(lines, fmt.Sprintf(" • %s:%s → %s", "http", portmap.Port, port2))
+			} else {
+				lines = append(lines, fmt.Sprintf(" • %s:%s", "http", portmap.Port))
+			}
+		}
+		for _, portmap := range network.HTTPS {
+			actual := portmap.Address[strings.LastIndex(portmap.Address, ":")+1:]
+			if actual != portmap.Port && actual != "" {
+				port2 := portmap.Address
+				if port2 == "" {
+					port2 = portmap.Port
+				}
+				lines = append(lines, fmt.Sprintf(" • %s:%s → %s", "https", portmap.Port, port2))
+			} else {
+				lines = append(lines, fmt.Sprintf(" • %s:%s", "https", portmap.Port))
+			}
+		}
+	}
+
+	return lines
 }
 
 func raw(start bool) error {

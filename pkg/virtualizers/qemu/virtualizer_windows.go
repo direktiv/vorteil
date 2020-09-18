@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"github.com/mattn/go-shellwords"
 	"github.com/natefinch/npipe"
@@ -22,6 +23,7 @@ import (
 func (v *Virtualizer) Start() error {
 	v.logger.Debugf("Starting VM")
 	v.command = exec.Command(v.command.Args[0], v.command.Args[1:]...)
+	v.command.SysProcAttr = &syscall.SysProcAttr{CreationFlags: syscall.CREATE_NEW_PROCESS_GROUP}
 	switch v.State() {
 	case "ready":
 		v.state = virtualizers.Changing

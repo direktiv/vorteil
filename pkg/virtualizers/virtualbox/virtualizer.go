@@ -270,7 +270,7 @@ func (v *Virtualizer) ConvertToVM() interface{} {
 		Networks: v.routes,
 		Kernel:   vm.Kernel,
 		Name:     info.Name,
-		Source:   v.source.(virtualizers.Source),
+		// Source:   v.source.(virtualizers.Source),
 		Summary:  info.Summary,
 		URL:      string(info.URL),
 		Version:  info.Version,
@@ -413,7 +413,7 @@ func (v *Virtualizer) Prepare(args *virtualizers.PrepareArgs) *virtualizers.Virt
 	v.name = args.Name
 	v.pname = args.PName
 	v.vmdrive = args.VMDrive
-	v.source = args.Source
+	// v.source = args.Source
 	v.config = args.Config
 	v.state = virtualizers.Changing
 	v.created = time.Now()

@@ -406,7 +406,7 @@ func (v *Virtualizer) ConvertToVM() interface{} {
 		Kernel:   vm.Kernel,
 		Name:     info.Name,
 		Summary:  info.Summary,
-		Source:   v.source.(virtualizers.Source),
+		// Source:   v.source.(virtualizers.Source),
 		URL:      string(info.URL),
 		Version:  info.Version,
 		Programs: programs,
@@ -427,7 +427,7 @@ func (v *Virtualizer) Prepare(args *virtualizers.PrepareArgs) *virtualizers.Virt
 	v.pname = args.PName
 	v.created = time.Now()
 	v.config = args.Config
-	v.source = args.Source
+	// v.source = args.Source
 	v.vmdrive = args.VMDrive
 	v.logger = args.Logger
 	v.serialLogger = logger.NewLogger(2048 * 10)

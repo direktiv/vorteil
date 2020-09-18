@@ -144,13 +144,13 @@ func Backends() ([]string, error) {
 	}
 	path = os.Getenv("PATH")
 
-	if !strings.Contains(path, vmware) {
-		err := os.Setenv("PATH", fmt.Sprintf("%s%s%s", path, separated, vmware))
-		if err != nil {
-			return nil, err
-		}
-	}
-	path = os.Getenv("PATH")
+	// if !strings.Contains(path, vmware) {
+	// 	err := os.Setenv("PATH", fmt.Sprintf("%s%s%s", path, separated, vmware))
+	// 	if err != nil {
+	// 		return nil, err
+	// 	}
+	// }
+	// path = os.Getenv("PATH")
 
 	if !strings.Contains(path, qemu) {
 		err := os.Setenv("PATH", fmt.Sprintf("%s%s%s", path, separated, qemu))

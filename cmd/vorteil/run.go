@@ -335,30 +335,33 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG) error {
 
 	var finished bool
 
-	select {
-	case msg, more := <-s:
-		if !more {
-			break
+	for {
+		select {
+		case msg, more := <-s:
+			if !more {
+				break
+			}
+			fmt.Print(string(msg))
+		case <-signalChannel:
+			// Close vm
+			err = virt.Stop()
+			if err != nil {
+				log.Errorf(err.Error())
+				return err
+			}
+			for {
+				if virt.State() == virtualizers.Deleted || virt.State() == virtualizers.Ready {
+					finished = true
+					break
+				}
+				<-time.After(time.Second)
+			}
+		case <-chBool:
+
 		}
-		fmt.Print(string(msg))
-	case <-signalChannel:
 		if finished {
 			break
 		}
-		// Close vm
-		err = virt.Stop()
-		if err != nil {
-			log.Errorf(err.Error())
-			return err
-		}
-		for {
-			if virt.State() == virtualizers.Deleted || virt.State() == virtualizers.Ready {
-				finished = true
-				break
-			}
-			<-time.After(time.Second)
-		}
-	case <-chBool:
 	}
 
 	// Cleanup vm

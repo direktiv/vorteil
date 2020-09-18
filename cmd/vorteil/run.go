@@ -361,7 +361,10 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG) error {
 	err = virt.Close(false)
 	if err != nil {
 		log.Errorf(err.Error())
+		return err
 	}
+
+	return nil
 }
 
 func raw(start bool) error {

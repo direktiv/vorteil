@@ -329,8 +329,7 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG) error {
 	serial := virt.Serial()
 	serialSubscription := serial.Subscribe()
 	s := serialSubscription.Inbox()
-	defer serialSubscription.Close()
-	defer serial.Close()
+
 	signalChannel, chBool := listenForInterupt()
 
 	var finished bool
@@ -343,6 +342,8 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG) error {
 					log.Errorf(err.Error())
 					return err
 				}
+				serialSubscription.Close()
+				serial.Close()
 				return nil
 			}
 		case msg, more := <-s:

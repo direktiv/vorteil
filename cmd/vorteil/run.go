@@ -345,13 +345,11 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG) error {
 			}
 			fmt.Print(string(msg))
 		case <-signalChannel:
-			if finished {
-				return nil
-			}
 			// Close virtual machine without forcing to handle stopping the virtual machine gracefully
 			err = virt.Close(false)
 			if err != nil {
 				log.Errorf(err.Error())
+				return err
 			}
 			finished = true
 		case <-chBool:

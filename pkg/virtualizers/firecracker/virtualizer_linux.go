@@ -599,7 +599,6 @@ func (v *Virtualizer) Close(force bool) error {
 		return err
 	}
 
-	/
 	client := &http.Client{}
 	cdm, err := json.Marshal(v.tapDevice)
 	if err != nil {

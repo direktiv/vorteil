@@ -327,7 +327,6 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG) error {
 	})
 
 	serial := virt.Serial()
-	defer serial.Close()
 	serialSubscription := serial.Subscribe()
 	s := serialSubscription.Inbox()
 
@@ -337,8 +336,9 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG) error {
 	for {
 		select {
 		case <-time.After(time.Millisecond * 200):
-			if finished && virt.State() == "deleted" {
+			if finished && virt.State() == "ready" {
 				serialSubscription.Close()
+				serial.Close()
 				return nil
 			}
 		case msg, more := <-s:

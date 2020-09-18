@@ -1687,7 +1687,8 @@ func handleFileInjections(builder vpkg.Builder) error {
 					return err
 				}
 
-				err = builder.AddSubTreeToFS(dst, tree)
+				x := strings.Split(strings.TrimSuffix(filepath.ToSlash(src), "/"), "/")
+				err = builder.AddSubTreeToFS(filepath.Join(dst, x[len(x)-1]), tree)
 				if err != nil {
 					return err
 				}
@@ -1698,9 +1699,9 @@ func handleFileInjections(builder vpkg.Builder) error {
 				if err != nil {
 					return err
 				}
-				defer f.Close()
+				// defer f.Close()
 
-				err = builder.AddToFS(dst, f)
+				err = builder.AddToFS(filepath.Join(dst, filepath.Base(f.Name())), f)
 				if err != nil {
 					return err
 				}

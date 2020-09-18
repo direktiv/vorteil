@@ -1115,7 +1115,7 @@ var filesMap = make(map[string][]string)
 var filesFlag = stringSliceFlag{
 	flagPart: flagPart{
 		key:    "files",
-		usage:  "<src>[:<dst>]   add files from the host filesystem to an existing folder in the virtual machine filesystem",
+		usage:  "<src>[:<dst>]   add files from the host filesystem to an existing folder in the virtual machine filesystem (dst defaults to '/')",
 		hidden: hideFlags,
 	},
 	validate: func(f stringSliceFlag) error {

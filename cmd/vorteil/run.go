@@ -329,7 +329,8 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG) error {
 	serial := virt.Serial()
 	serialSubscription := serial.Subscribe()
 	s := serialSubscription.Inbox()
-
+	defer serialSubscription.Close()
+	defer serial.Close()
 	signalChannel, chBool := listenForInterupt()
 
 	var finished bool
@@ -342,8 +343,6 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG) error {
 					log.Errorf(err.Error())
 					return err
 				}
-				serialSubscription.Close()
-				serial.Close()
 				return nil
 			}
 		case msg, more := <-s:
@@ -356,11 +355,12 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG) error {
 				return nil
 			}
 			// Close virtual machine without forcing to handle stopping the virtual machine gracefully
-			err = virt.Stop()
-			if err != nil {
-				log.Errorf(err.Error())
-				return err
-			}
+			go func() {
+				err = virt.Stop()
+				if err != nil {
+					log.Errorf(err.Error())
+				}
+			}()
 			finished = true
 		case <-chBool:
 			return nil

@@ -20,6 +20,7 @@ import (
 	"github.com/vorteil/vorteil/pkg/vconvert"
 	"github.com/vorteil/vorteil/pkg/vdecompiler"
 	"github.com/vorteil/vorteil/pkg/vdisk"
+	"github.com/vorteil/vorteil/pkg/vio"
 	"github.com/vorteil/vorteil/pkg/virtualizers/firecracker"
 	"github.com/vorteil/vorteil/pkg/vpkg"
 	"github.com/vorteil/vorteil/pkg/vproj"
@@ -1668,6 +1669,46 @@ identify it and explain its purpose and its use.`,
 
 		log.Printf("created package: %s", outputPath)
 	},
+}
+
+func handleFileInjections(builder vpkg.Builder) error {
+	for src, v := range filesMap {
+		for _, dst := range v {
+
+			stat, err := os.Stat(src)
+			if err != nil {
+				return err
+			}
+
+			if stat.IsDir() {
+				// create subtree
+				tree, err := vio.FileTreeFromDirectory(src)
+				if err != nil {
+					return err
+				}
+
+				err = builder.AddSubTreeToFS(dst, tree)
+				if err != nil {
+					return err
+				}
+
+			} else {
+				// create file object
+				f, err := vio.LazyOpen(src)
+				if err != nil {
+					return err
+				}
+				defer f.Close()
+
+				err = builder.AddToFS(dst, f)
+				if err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	return nil
 }
 
 func init() {

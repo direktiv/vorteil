@@ -9,7 +9,7 @@
 
 Turn your applications and containers into micro virtual machines with Vorteil.
 
-## What is Vorteil?
+### What is Vorteil?
 
 Vorteil is an operating system for running cloud applications on micro virtual machines. It takes only the files you need and runs them on a custom Linux kernel without any unnecessary background services: there's no ssh, no shell, and no login; just a toml file that Vorteil's init process (vinitd) uses to configure the system and launch your apps.
 
@@ -17,26 +17,26 @@ Vorteil's lightweight design enhances security, reduces capital and operating co
 
 The tools that build Vorteil images have been optimized for speed, and can take your project from loose files to a running virtual machine in as little as one second.
 
-# Installation 
+## Installation 
 
 The Vorteil binary runs anywhere, just download the archive for your system, extract it, and put the executable on your `PATH`. 
 
-## Linux
+### Linux
 ```
 wget https://github.com/vorteil/vorteil/releases/latest/download/vorteil_linux-x86.tar.gz
 tar -xzf vorteil_linux-x86.tar.gz
 ./vorteil --help
 ```
 
-## Dependencies
+### Dependencies
 
 To use the `vorteil run` command you'll need VirtualBox, QEMU, or Hyper-V installed on your system and reachable on the `PATH`. 
 
 If you're using Windows, it's recommended that you enable developer mode as well, so that the tools can use Unix-style symlinks.
 
-# Using Vorteil
+## Using Vorteil
 
-## Hello World
+### Hello World
 
 ```
 vorteil run https://apps.vorteil.io/file/vorteil/helloworld
@@ -46,11 +46,11 @@ This command downloads our Hello World package from apps.vorteil.io and runs it 
 
 Our Hello World app is a simple web server that should be reachable via NAT on power 8888 (http://localhost:8888/). If that port was unavailable you should notice a yellow warning message in the logs telling you which port it bound instead.
 
-## Convert a Docker Container
+### Convert a Docker Container
 
 TODO: quick example
 
-## Modify an Existing Package
+### Modify an Existing Package
 
 ```
 wget -o cockroachdb.vorteil https://apps.vorteil.io/file/vorteil/cockroachdb
@@ -76,15 +76,15 @@ vorteil run cockroachdb-modified.vorteil
 
 Try out your modified package by using the `vorteil run` command on it.
 
-## Making Your Own Package
+### Making Your Own Package
 
 TODO: link to a superior article / docs
 
-# Need Help?
+## Need Help?
 
 TODO: link to our support portal and/or chat rooms?
 
-# Building From Source
+## Building From Source
 
 These tools are 100% written in Go, which means compiling them is the same as compiling most simple Go programs.
 
@@ -92,15 +92,15 @@ These tools are 100% written in Go, which means compiling them is the same as co
 go build github.com/vorteil/vorteil/cmd/vorteil
 ```
 
-## Contributing
+### Contributing
 
 TODO: flesh this out
 
-# License
+## License
 
 Distributed under the Apache 2.0 License. See `LICENSE` for more information.
 
-# See Also
+## See Also
 
 * The [Vorteil.io](https://vorteil.io/) website.
 * The Vorteil [documentation](https://support.vorteil.io/).

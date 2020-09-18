@@ -329,16 +329,16 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG) error {
 	serial := virt.Serial()
 	serialSubscription := serial.Subscribe()
 	s := serialSubscription.Inbox()
-
+	defer serialSubscription.Close()
+	defer serial.Close()
 	signalChannel, chBool := listenForInterupt()
 
 	var finished bool
 	for {
 		select {
 		case <-time.After(time.Millisecond * 200):
-			if finished && virt.State() == "deleted" {
-				serialSubscription.Close()
-				serial.Close()
+			if finished && virt.State() == virtualizers.Deleted {
+
 				return nil
 			}
 		case msg, more := <-s:

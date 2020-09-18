@@ -5,12 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/mitchellh/go-homedir"
-	log "github.com/sirupsen/logrus"
 	"github.com/sisatech/tablewriter"
 	"github.com/sisatech/toml"
 	"github.com/spf13/pflag"
@@ -28,8 +29,8 @@ func main() {
 	commandInit()
 
 	err := rootCmd.Execute()
+
 	if err != nil {
-		log.Error(err.Error())
 		os.Exit(1)
 	}
 }
@@ -178,9 +179,40 @@ func initKernels() error {
 }
 
 func getPackageBuilder(argName, src string) (vpkg.Builder, error) {
+	var isURL bool
 
 	var pkgr vpkg.Reader
 	var pkgb vpkg.Builder
+
+	// check if src is a url
+	if _, err := url.ParseRequestURI(src); err == nil {
+		if u, uErr := url.Parse(src); uErr == nil && u.Scheme != "" && u.Host != "" && u.Path != ""{
+			isURL = true
+		}
+	}
+
+	// If src is a url, stream build package from remote src
+	if isURL {
+		resp, err := http.Get(src)
+		if err != nil {
+			resp.Body.Close()
+			return nil, err
+		}
+
+		pkgr, err = vpkg.Load(resp.Body)
+		if err != nil {
+			resp.Body.Close()
+			return nil, err
+		}
+
+		pkgb, err = vpkg.NewBuilderFromReader(pkgr)
+		if err != nil {
+			resp.Body.Close()
+			pkgr.Close()
+			return nil, err
+		}
+		return pkgb, nil
+	}
 
 	// check for a package file
 	fi, err := os.Stat(src)

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/vorteil/vorteil/pkg/elog"
 	"github.com/vorteil/vorteil/pkg/ext"
 	"github.com/vorteil/vorteil/pkg/gcparchive"
 	"github.com/vorteil/vorteil/pkg/vcfg"
@@ -24,6 +25,7 @@ type BuildArgs struct {
 	Format        Format
 	SizeAlign     int64
 	KernelOptions KernelOptions
+	Logger        elog.View
 }
 
 func Build(ctx context.Context, w io.WriteSeeker, args *BuildArgs) error {
@@ -45,6 +47,8 @@ func Build(ctx context.Context, w io.WriteSeeker, args *BuildArgs) error {
 		return fmt.Errorf("build function does not support this disk format: '%s'", args.Format)
 	}
 
+	log := args.Logger
+
 	vf := args.PackageReader.VCFG()
 	defer vf.Close()
 	cfg, err := vcfg.LoadFile(vf)
@@ -60,7 +64,8 @@ func Build(ctx context.Context, w io.WriteSeeker, args *BuildArgs) error {
 		FSCompiler: ext.NewCompiler(&ext.CompilerArgs{
 			FileTree: args.PackageReader.FS(),
 		}),
-		VCFG: cfg,
+		VCFG:   cfg,
+		Logger: log,
 	})
 	if err != nil {
 		return err

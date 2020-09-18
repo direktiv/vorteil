@@ -203,7 +203,7 @@ type Virtualizer struct {
 	disk         *os.File       // disk of the machine
 	source       interface{}    // details about how the vm was made
 	kip          string         // vmlinux full path
-	logger       elog.Logger    // logger
+	logger       elog.View      // logger
 	serialLogger *logger.Logger // logs for the serial of the vm
 
 	routes []virtualizers.NetworkInterface // api network interface that displays ports
@@ -230,7 +230,6 @@ func (v *Virtualizer) Detach(source string) error {
 	if v.state != virtualizers.Ready {
 		return errors.New("virtual machine must be in ready state to detach")
 	}
-
 	name := filepath.Base(v.folder)
 
 	err := os.MkdirAll(filepath.Join(source), 0777)

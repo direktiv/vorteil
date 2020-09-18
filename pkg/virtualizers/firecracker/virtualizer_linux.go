@@ -947,7 +947,7 @@ func (v *Virtualizer) Start() error {
 				v.logger.Errorf("Error Fetching executable: %s", err.Error())
 			}
 
-			cmd := firecracker.VMCommandBuilder{}.WithBin(executable).WithSocketPath(v.fconfig.SocketPath).WithStdout(v.serialLogger).WithStderr(v.serialLogger).Build(v.gctx)
+			cmd := firecracker.VMCommandBuilder{}.WithBin(executable).WithSocketPath(v.fconfig.SocketPath).WithStdout(v.serialLogger).WithStderr(v.serialLogger).Build(v.vmmCtx)
 			cmd.SysProcAttr = &syscall.SysProcAttr{
 				Setpgid: true,
 			}

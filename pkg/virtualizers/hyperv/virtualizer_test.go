@@ -1,16 +1,12 @@
 package hyperv
 
 import (
-	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strings"
 	"testing"
 
-	"github.com/vorteil/vorteil/pkg/virtualizers"
-	logger "github.com/vorteil/vorteil/pkg/virtualizers/logging"
 	"github.com/vorteil/vorteil/pkg/vcfg"
+	logger "github.com/vorteil/vorteil/pkg/virtualizers/logging"
 )
 
 var codeBlockToLookIP = `
@@ -89,14 +85,14 @@ func TestInitialize(t *testing.T) {
 }
 
 func TestDownload(t *testing.T) {
-	f, err := os.Create(filepath.Join(os.TempDir(), "disk.vmdk"))
+	f, err := os.Create(filepath.Join(os.TempDir(), "disk.vhd"))
 	if err != nil {
 		t.Errorf("unable to create temp file")
 	}
 	defer f.Close()
 	v := &Virtualizer{
-		disk:       f,
-		state:      "ready",
+		disk:  f,
+		state: "ready",
 	}
 
 	file, err := v.Download()
@@ -119,7 +115,7 @@ func TestRoutes(t *testing.T) {
 		Networks: vcfgI,
 	}
 	v := &Virtualizer{
-		config:     vcfg,
+		config: vcfg,
 	}
 
 	ni := v.Routes()

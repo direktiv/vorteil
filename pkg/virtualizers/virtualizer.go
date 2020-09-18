@@ -61,7 +61,7 @@ func Register(vtype string, allocator VirtualizerAllocator) {
 type PrepareArgs struct {
 	Name      string // name of the vm
 	PName     string // name of virtualizer spawned from
-	Logger    elog.Logger
+	Logger    elog.View
 	FCPath    string // used for firecracker to find vmlinux binaries
 	Context   context.Context
 	Start     bool       // to control whether its to start automatically

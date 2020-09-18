@@ -566,7 +566,6 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	}
 	if len(output) != 0 {
 		o.logger.Errorf("%s", output)
-
 	}
 
 	// set vm memory

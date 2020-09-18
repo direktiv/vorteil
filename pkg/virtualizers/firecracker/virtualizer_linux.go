@@ -546,33 +546,10 @@ func (v *Virtualizer) Stop() error {
 		if err != nil {
 			return err
 		}
-		// client := &http.Client{
-		// 	Transport: &http.Transport{
-		// 		Dial: v.Dial,
-		// 	},
-		// }
-		// reqBody := map[string]string{
-		// 	"action_type": "SendCtrlAltDel",
-		// }
-		// data, err := json.Marshal(reqBody)
-		// if err != nil {
-		// 	return err
-		// }
 
-		// req, err := http.NewRequest("PUT", "http://localhost/actions", bytes.NewBuffer(data))
-		// if err != nil {
-		// 	return err
-		// }
+		// Sleep to handle shutdown logs doesn't affect anything makes the output nicer
+		time.Sleep(time.Second * 2)
 
-		// req.Header.Add("accept", "application/json")
-		// req.Header.Add("Content-Type", "application/json")
-
-		// resp, err := client.Do(req)
-		// if err != nil {
-		// 	return err
-		// }
-
-		// defer resp.Body.Close()
 		v.state = virtualizers.Ready
 
 	} else {
@@ -622,13 +599,7 @@ func (v *Virtualizer) Close(force bool) error {
 		return err
 	}
 
-	// sleep for shutdown signal
-	// time.Sleep(time.Second * 4)
-	// delete tap device as vmm has been stopped don't worry about catching error as its not found
-	// for _, device := range v.tapDevice {
-	// 	device.DeleteLink()
-	// }
-	// v.tapDevice.DeleteLink()
+	/
 	client := &http.Client{}
 	cdm, err := json.Marshal(v.tapDevice)
 	if err != nil {
@@ -798,7 +769,7 @@ func (v *Virtualizer) lookForIP() string {
 // Cant use logger interface as it duplicates
 func (v *Virtualizer) Write(d []byte) (n int, err error) {
 	n = len(d)
-	fmt.Print(string(d))
+	v.logger.Infof(string(d))
 	return
 }
 
@@ -843,13 +814,13 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 
 	devices = append(devices, rootDrive)
 
-	o.logger.Infof("Fetching VMLinux from cache or online")
+	progress := v.logger.NewProgress("Fetching VMLinux", "", 0)
+	defer progress.Finish(false)
 	o.kip, err = o.fetchVMLinux(o.config.VM.Kernel)
 	if err != nil {
 		returnErr = err
 		return
 	}
-	o.logger.Infof("Finished getting VMLinux")
 
 	cd := CreateDevices{
 		Id:     o.id,

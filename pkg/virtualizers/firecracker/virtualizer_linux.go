@@ -906,7 +906,7 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 			MemSizeMib: firecracker.Int64(int64(o.config.VM.RAM.Units(vcfg.MiB))),
 		},
 		NetworkInterfaces: interfaces,
-		ForwardedSignals:  []os.Signal{},
+		ForwardSignals:    []os.Signal{},
 	}
 
 	machineOpts := []firecracker.Opt{

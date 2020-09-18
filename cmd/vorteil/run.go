@@ -87,7 +87,6 @@ func runFirecracker(pkgReader vpkg.Reader, cfg *vcfg.VCFG) error {
 
 	alloc := firecracker.Allocator
 	virt := alloc.Alloc()
-	defer virt.Close(true)
 
 	if flagGUI {
 		log.Warnf("firecracker does not support displaying a gui")
@@ -338,7 +337,6 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG) error {
 		select {
 		case <-time.After(time.Millisecond * 200):
 			if finished && virt.State() == virtualizers.Deleted {
-
 				return nil
 			}
 		case msg, more := <-s:

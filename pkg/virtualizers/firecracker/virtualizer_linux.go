@@ -898,7 +898,7 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	fcCfg := firecracker.Config{
 		SocketPath:      filepath.Join(o.folder, fmt.Sprintf("%s.%s", o.name, "socket")),
 		KernelImagePath: o.kip,
-		KernelArgs:      fmt.Sprintf("loglevel=9 init=/vorteil/vinitd root=PARTUUID=%s reboot=k panic=1 pci=off   vt.color=0x00", vimg.Part2UUIDString),
+		KernelArgs:      fmt.Sprintf("loglevel=9 init=/vorteil/vinitd root=PARTUUID=%s reboot=k panic=1 pci=off vt.color=0x00", vimg.Part2UUIDString),
 		Drives:          devices,
 		MachineCfg: models.MachineConfiguration{
 			VcpuCount:  firecracker.Int64(int64(o.config.VM.CPUs)),
@@ -948,11 +948,13 @@ func (v *Virtualizer) Start() error {
 			}
 
 			cmd := firecracker.VMCommandBuilder{}.WithBin(executable).WithSocketPath(v.fconfig.SocketPath).WithStdout(v.serialLogger).WithStderr(v.serialLogger).Build(v.gctx)
-
-			v.machineOpts = append(v.machineOpts, firecracker.WithProcessRunner(cmd))
 			cmd.SysProcAttr = &syscall.SysProcAttr{
 				Setpgid: true,
+				Pgid:    0,
 			}
+
+			v.machineOpts = append(v.machineOpts, firecracker.WithProcessRunner(cmd))
+
 			v.machine, err = firecracker.NewMachine(v.vmmCtx, v.fconfig, v.machineOpts...)
 			if err != nil {
 				v.logger.Errorf("Error creating machine: %s", err.Error())

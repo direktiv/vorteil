@@ -1699,7 +1699,6 @@ func handleFileInjections(builder vpkg.Builder) error {
 				if err != nil {
 					return err
 				}
-				// defer f.Close()
 
 				err = builder.AddToFS(filepath.Join(dst, filepath.Base(f.Name())), f)
 				if err != nil {

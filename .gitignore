@@ -9,3 +9,7 @@
 
 # Unignore all dirs
 !*/
+
+# Unignore specific files
+!assets/images/vlogo.png
+!.travis.yml

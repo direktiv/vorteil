@@ -1740,8 +1740,30 @@ func init() {
 }
 
 var convertContainerCmd = &cobra.Command{
-	Use:  "convert-container REPO:APP DESTFOLDER",
-	Args: cobra.ExactValidArgs(2),
+	Use:   "convert-container REPO:APP DESTFOLDER",
+	Args:  cobra.ExactValidArgs(2),
+	Short: "Convert containers into vorteil.io virtual machines",
+	Long: `Convert containers into vorteil.io project folders. This command can convert
+containers from a remote repository as well as from local container runtimes.
+At the moment docker and containerd are supported.
+
+Local conversion examples:
+
+vorteil projects convert-container local.docker/nginx /target/directory
+vorteil projects convert-container local.containerd/docker.io/library/tomcat:latest /target/directory
+
+Remote conversion examples:
+
+./vorteil projects convert-container --config=/vconvert.yaml nginx /tmp/nginx
+
+The config file provided maps remote repository names to urls. If no file is provided
+docker.io, mcr.microsoft.com and gcr.io are automatically added. The following is an example
+config yaml:
+
+repositories:
+  myrepo:
+   url: https://myurl
+`,
 	Run: func(cmd *cobra.Command, args []string) {
 
 		// in case of an error we pass empty user/pwd/config in
@@ -1749,12 +1771,17 @@ var convertContainerCmd = &cobra.Command{
 		pwd, _ := cmd.Flags().GetString("password")
 		config, _ := cmd.Flags().GetString("config")
 
-		err := vconvert.ConvertContainer(args[0], args[1], user, pwd, config)
+		cc, err := vconvert.NewContainerConverter(args[0], config, log)
 		if err != nil {
 			log.Errorf("%v", err)
 			os.Exit(1)
 		}
 
+		err = cc.ConvertToProject(args[1], user, pwd)
+		if err != nil {
+			log.Errorf("%v", err)
+			os.Exit(1)
+		}
 	},
 }
 
@@ -1981,7 +2008,7 @@ and cleaning up the instance when it's done.`,
 
 func init() {
 	f := runCmd.Flags()
-	f.StringVar(&flagPlatform, "platform", "qemu", "run a virtual machine with appropriate hypervisor (QEMU, Firecracker, Virtualbox, Hyper-V)")
+	f.StringVar(&flagPlatform, "platform", "qemu", "run a virtual machine with appropriate hypervisor (qemu, firecracker, virtualbox, hyper-v)")
 	f.BoolVar(&flagGUI, "gui", false, "when running virtual machine show gui of hypervisor")
 	f.BoolVar(&flagShell, "shell", false, "add a busybox shell environment to the image")
 }

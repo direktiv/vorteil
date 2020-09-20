@@ -66,6 +66,7 @@ func runFirecracker(pkgReader vpkg.Reader, cfg *vcfg.VCFG) error {
 		KernelOptions: vdisk.KernelOptions{
 			Shell: flagShell,
 		},
+		Logger: log,
 	})
 	if err != nil {
 		log.Errorf("%v", err)
@@ -138,6 +139,7 @@ func runHyperV(pkgReader vpkg.Reader, cfg *vcfg.VCFG) error {
 		KernelOptions: vdisk.KernelOptions{
 			Shell: flagShell,
 		},
+		Logger: log,
 	})
 	if err != nil {
 		log.Errorf("%v", err)
@@ -204,6 +206,7 @@ func runVirtualBox(pkgReader vpkg.Reader, cfg *vcfg.VCFG) error {
 		KernelOptions: vdisk.KernelOptions{
 			Shell: flagShell,
 		},
+		Logger: log,
 	})
 	if err != nil {
 		log.Errorf("%v", err)
@@ -270,6 +273,7 @@ func runQEMU(pkgReader vpkg.Reader, cfg *vcfg.VCFG) error {
 		KernelOptions: vdisk.KernelOptions{
 			Shell: flagShell,
 		},
+		Logger: log,
 	})
 	if err != nil {
 		log.Errorf("%v", err)

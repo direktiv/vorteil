@@ -129,7 +129,6 @@ func ParseFormat(s string) (Format, error) {
 	}
 
 	return f, nil
-
 }
 
 func (x *Format) Suffix() string {

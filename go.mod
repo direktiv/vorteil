@@ -3,8 +3,14 @@ module github.com/vorteil/vorteil
 go 1.14
 
 require (
+	cloud.google.com/go/storage v1.8.0
+	github.com/Azure/azure-sdk-for-go v42.3.0+incompatible
+	github.com/Azure/azure-storage-blob-go v0.8.0
+	github.com/Azure/go-autorest/autorest v0.10.2
+	github.com/Azure/go-autorest/autorest/azure/auth v0.4.2
 	github.com/alessio/shellescape v1.2.2
 	github.com/armon/circbuf v0.0.0-20190214190532-5111143e8da2
+	github.com/aws/aws-sdk-go v1.31.6
 	github.com/cavaliercoder/grab v2.0.0+incompatible
 	github.com/cirruslabs/echelon v1.2.2
 	github.com/cloudfoundry/bytefmt v0.0.0-20200131002437-cf55d5288a48
@@ -29,7 +35,8 @@ require (
 	github.com/gobwas/glob v0.2.3
 	github.com/gogo/googleapis v1.4.0 // indirect
 	github.com/google/go-containerregistry v0.1.2
-	github.com/gosuri/uilive v0.0.4
+	github.com/google/uuid v1.1.1
+	github.com/gosuri/uilive v0.0.4 // indirect
 	github.com/gosuri/uiprogress v0.0.1
 	github.com/heroku/docker-registry-client v0.0.0-20190909225348-afc9e1acc3d5
 	github.com/imdario/mergo v0.3.11
@@ -40,6 +47,7 @@ require (
 	github.com/mattn/go-isatty v0.0.12
 	github.com/mattn/go-runewidth v0.0.9 // indirect
 	github.com/mattn/go-shellwords v1.0.10
+	github.com/mattn/go-sqlite3 v1.9.0
 	github.com/milosgajdos/tenus v0.0.3
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/natefinch/npipe v0.0.0-20160621034901-c1b8fa8bdcce
@@ -63,7 +71,9 @@ require (
 	github.com/vbauerster/mpb v3.4.0+incompatible
 	github.com/vbauerster/mpb/v5 v5.3.0
 	golang.org/x/crypto v0.0.0-20200820211705-5c72a883971a
+	golang.org/x/oauth2 v0.0.0-20200107190931-bf48bf16ab8d
 	golang.org/x/sync v0.0.0-20200625203802-6e8e738ad208
+	google.golang.org/api v0.25.0
 	gopkg.in/yaml.v2 v2.3.0
 	gotest.tools/v3 v3.0.2 // indirect
 )

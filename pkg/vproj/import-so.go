@@ -1,3 +1,8 @@
+/**
+ * SPDX-License-Identifier: Apache-2.0
+ * Copyright 2020 vorteil.io Pty Ltd
+ */
+
 package vproj
 
 import (
@@ -12,40 +17,29 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+
+	"github.com/vorteil/vorteil/pkg/elog"
 )
 
-type ImportSharedObjectsOptions struct {
-	ExcludeDefaultLibs bool
+const (
+	DynamicLinkerConfig = "/etc/ld.so.conf"
+	WindowsWSLPrefix    = "\\\\wsl$\\Ubuntu-18.04"
+)
 
-	LoggerWarn func(format string, a ...interface{})
-	LoggerInfo func(format string, a ...interface{})
-	LoggerDebug func(format string, a ...interface{})
-}
+var DefaultLibs = []string{"libnss_dns.so.2", "libnss_files.so.2", "libresolv.so.2"}
 
-func NewImportSharedObject(projectPath string, options ImportSharedObjectsOptions) (*importSharedObjectsOperation, error) {
+// NewImportSharedObject: This function is used to create and initialize a importSharedObjectsOperation.
+// 	This function requires two args:
+//			projectPath: The target project you wish to scan, and import shared objects to.
+//			excludeDefaultLibs: Whether or not to exclude default libraries.
+// 	Once initialized a importSharedObjectsOperation object will be returned.
+// 	Running importSharedObjectsOperation.Start() will then begin the operation.
+func NewImportSharedObject(projectPath string, excludeDefaultLibs bool, logger elog.View) (*importSharedObjectsOperation, error) {
 	var isoOperation importSharedObjectsOperation
 
 	isoOperation.projectDir = projectPath
-	isoOperation.excludeDefaultLibs = options.ExcludeDefaultLibs
-
-	// Set Loggers
-	if options.LoggerInfo != nil {
-		isoOperation.loggerInfo = options.LoggerInfo
-	} else {
-		isoOperation.loggerInfo = func(format string, a ...interface{}) {}
-	}
-
-	if options.LoggerWarn != nil {
-		isoOperation.loggerWarn = options.LoggerWarn
-	} else {
-		isoOperation.loggerWarn = func(format string, a ...interface{}) {}
-	}
-
-	if options.LoggerDebug != nil {
-		isoOperation.loggerDebug = options.LoggerDebug
-	} else {
-		isoOperation.loggerDebug = func(format string, a ...interface{}) {}
-	}
+	isoOperation.excludeDefaultLibs = excludeDefaultLibs
+	isoOperation.logger = logger
 
 	if err := isoOperation.initialize(); err != nil {
 		return nil, err
@@ -58,19 +52,19 @@ type importSharedObjectsOperation struct {
 	projectDir string
 	w          io.Writer
 
+	count float64
+
 	progressPaths map[string]bool
 
 	excludeDefaultLibs bool
 	imported32bit      bool
 	imported64bit      bool
 
-	loggerWarn func(format string, a ...interface{})
-	loggerInfo func(format string, a ...interface{})
-	loggerDebug func(format string, a ...interface{})
+	logger elog.View
 }
 
+// initialize: Locate shared objects and save them to a map in the importSharedObjectsOperation object
 func (isoOp *importSharedObjectsOperation) initialize() error {
-
 	isoOp.progressPaths = make(map[string]bool)
 
 	var recurseCount func(string) error
@@ -93,6 +87,7 @@ func (isoOp *importSharedObjectsOperation) initialize() error {
 		return err
 	}
 
+	isoOp.count = float64(len(isoOp.progressPaths))
 	return nil
 }
 
@@ -106,6 +101,8 @@ func ReadLink(path string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
+//listDependencies: Given a file path 'fpath' locate the files dependencies.
+//	Return a list of paths to dependencies found on system, and a list names of dependencies who are missing from system.
 func (isoOp *importSharedObjectsOperation) listDependencies(fpath string) ([]string, []string, error) {
 	prefix := ""
 	e, err := elf.Open(fpath)
@@ -137,6 +134,7 @@ func (isoOp *importSharedObjectsOperation) listDependencies(fpath string) ([]str
 			return nil, nil, fmt.Errorf("unable to scan file : %w", err)
 		}
 	}
+
 	defer e.Close()
 
 	if e.FileHeader.Class == elf.ELFCLASS32 {
@@ -197,7 +195,7 @@ func (isoOp *importSharedObjectsOperation) listDependencies(fpath string) ([]str
 			}
 			if strings.TrimSpace(line) != "" {
 				if !strings.HasPrefix(line, "#") {
-					return fmt.Errorf("unexpected line in '/etc/ld.so.conf' file: %s", line)
+					return fmt.Errorf("unexpected line in '%s' file: %s", DynamicLinkerConfig, line)
 				}
 			}
 		}
@@ -205,7 +203,7 @@ func (isoOp *importSharedObjectsOperation) listDependencies(fpath string) ([]str
 		return nil
 	}
 
-	err = loadPathsFromFile(filepath.Join(prefix, "/etc/ld.so.conf"))
+	err = loadPathsFromFile(filepath.Join(prefix, DynamicLinkerConfig))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -318,6 +316,7 @@ func (isoOp *importSharedObjectsOperation) listDependencies(fpath string) ([]str
 	return deps, noLocates, nil
 }
 
+//findLib: Given a library name and class, locate that libraries path on the system and return the path.
 func findLib(name string, class elf.Class) (string, error) {
 	prefix := ""
 	var paths []string
@@ -367,14 +366,14 @@ func findLib(name string, class elf.Class) (string, error) {
 				if strings.HasPrefix(line, "#") || strings.Contains(line, "*") {
 					continue
 				}
-				return fmt.Errorf("unexpected line in '/etc/ld.so.conf' file: %s", line)
+				return fmt.Errorf("unexpected line in '%s' file: %s", DynamicLinkerConfig, line)
 			}
 		}
 
 		return nil
 	}
 
-	err := loadPathsFromFile(filepath.Join(prefix, "/etc/ld.so.conf"))
+	err := loadPathsFromFile(filepath.Join(prefix, DynamicLinkerConfig))
 	if err != nil {
 		return "", err
 	}
@@ -431,16 +430,21 @@ func findLib(name string, class elf.Class) (string, error) {
 	return fn(name)
 }
 
+// Start: Start the process of scanning for shared objects and copying them into you project path.
+//	If excludeDefaultLibs was set to false in builder, also copy default libs.
 func (isoOp *importSharedObjectsOperation) Start() error {
-	prefix := ""
+	var prefix string
 	if runtime.GOOS == "windows" {
-		prefix = "\\\\wsl$\\Ubuntu-18.04"
+		prefix = WindowsWSLPrefix
 	}
 	mapLock := sync.Mutex{}
 	filesDone := make(map[string]interface{})
 
 	unfoundDependencies := make(map[string]interface{})
 	var foundAtLeast1File bool
+
+	Progress := isoOp.logger.NewProgress("Importing Shared Objects ", "", 0)
+	defer Progress.Finish(true)
 
 	var recurseFile func(string) error
 	recurseFile = func(path string) error {
@@ -457,10 +461,9 @@ func (isoOp *importSharedObjectsOperation) Start() error {
 			return nil
 		}
 
-		// } else {
 		if !strings.HasPrefix(path, isoOp.projectDir) {
 			// file is outside of project projectDir -- copy it in and then check for lib dependencies
-			isoOp.loggerInfo("copying '%s'", path)
+			isoOp.logger.Infof("copying '%s'", path)
 
 			ls, err := os.Lstat(path)
 			if err != nil {
@@ -469,9 +472,9 @@ func (isoOp *importSharedObjectsOperation) Start() error {
 			adjustedPath := path
 			if strings.HasPrefix(adjustedPath, "/usr/lib") {
 				if _, err = os.Stat(filepath.Join(isoOp.projectDir, adjustedPath)); err == nil {
-					isoOp.loggerWarn(fmt.Sprintf("Skipping '%s' -- file from higher priority source already exists within the project directory.", adjustedPath))
+					isoOp.logger.Warnf(fmt.Sprintf("Skipping '%s' -- file from higher priority source already exists within the project directory.", adjustedPath))
 				}
-				isoOp.loggerWarn(fmt.Sprintf("Adjusted lib name (/usr/lib -> /lib) for: %s", path))
+				isoOp.logger.Warnf(fmt.Sprintf("Adjusted lib name (/usr/lib -> /lib) for: %s", path))
 				adjustedPath = strings.TrimPrefix(adjustedPath, "/usr")
 			}
 
@@ -484,7 +487,7 @@ func (isoOp *importSharedObjectsOperation) Start() error {
 
 				adjustedTarget := target
 				if strings.HasPrefix(target, "/usr/lib") {
-					isoOp.loggerWarn(fmt.Sprintf("Adjusted symlink target (/usr/lib -> /lib) for: %s", target))
+					isoOp.logger.Warnf(fmt.Sprintf("Adjusted symlink target (/usr/lib -> /lib) for: %s", target))
 					adjustedTarget = strings.TrimPrefix(adjustedTarget, "/usr")
 				}
 
@@ -492,7 +495,7 @@ func (isoOp *importSharedObjectsOperation) Start() error {
 					target = filepath.Join(filepath.Dir(path), target)
 				}
 
-				isoOp.loggerDebug(fmt.Sprintf("found symlink: %s -> %s", path, target))
+				isoOp.logger.Debugf(fmt.Sprintf("found symlink: %s -> %s", path, target))
 
 				err = recurseFile(target)
 				if err != nil {
@@ -557,7 +560,6 @@ func (isoOp *importSharedObjectsOperation) Start() error {
 				}
 			}
 		}
-		// }
 
 		if strings.HasPrefix(path, "/lib") || strings.HasPrefix(path, "\\lib") {
 			// append win prefix to find actual dependencies
@@ -633,31 +635,32 @@ func (isoOp *importSharedObjectsOperation) Start() error {
 		case p := <-paths:
 			if p == endPathScan {
 				if !isoOp.excludeDefaultLibs && !foundAtLeast1File {
-					isoOp.loggerWarn("Omitting default libs --- no libs were required by the project.")
+					isoOp.logger.Warnf("omitting default libs --- no libs were required by the project.")
 				}
 
 				if !isoOp.excludeDefaultLibs && foundAtLeast1File {
-					defaultLibs := []string{"libnss_dns.so.2", "libnss_files.so.2", "libresolv.so.2"}
+					isoOp.logger.Infof("copying default libs")
+
 					defaultLibPaths := make([]string, 0)
 					classes := []elf.Class{}
 
 					if isoOp.imported32bit {
 						classes = append(classes, elf.ELFCLASS32)
 					} else {
-						isoOp.loggerInfo("Omitting 32-bit default libs --- no 32-bit binaries detected.")
+						isoOp.logger.Infof("omitting 32-bit default libs --- no 32-bit binaries detected.")
 					}
 
 					if isoOp.imported64bit {
 						classes = append(classes, elf.ELFCLASS64)
 					} else {
-						isoOp.loggerInfo("Omitting 64-bit default libs --- no 64-bit binaries detected.")
+						isoOp.logger.Infof("omitting 64-bit default libs --- no 64-bit binaries detected.")
 					}
 
-					for _, l := range defaultLibs {
+					for _, l := range DefaultLibs {
 						for _, c := range classes {
 							path, err := findLib(l, c)
 							if err != nil {
-								isoOp.loggerWarn(err.Error())
+								isoOp.logger.Warnf(err.Error())
 								continue
 							}
 
@@ -672,8 +675,8 @@ func (isoOp *importSharedObjectsOperation) Start() error {
 					}
 				}
 
-				for l, _ := range unfoundDependencies {
-					isoOp.loggerWarn(fmt.Sprintf("unable to locate dependency: %s", l))
+				for l := range unfoundDependencies {
+					isoOp.logger.Warnf(fmt.Sprintf("unable to locate dependency: %s", l))
 				}
 
 				goto END
@@ -687,10 +690,9 @@ func (isoOp *importSharedObjectsOperation) Start() error {
 
 END:
 	if len(unfoundDependencies) != 0 {
-		isoOp.loggerInfo("Completed with warnings.")
+		isoOp.logger.Printf("Completed with warnings.")
 	} else {
-		isoOp.loggerInfo("Completed.")
+		isoOp.logger.Printf("Completed.")
 	}
-
 	return nil
 }

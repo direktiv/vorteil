@@ -461,7 +461,7 @@ func listenForInterupt() (chan os.Signal, chan bool) {
 	signal.Notify(signalChannel, os.Interrupt, syscall.SIGTERM)
 	chBool := make(chan bool, 1)
 
-	// check if this is running in a sygwin terminal, interupt signals are difficult to capture
+	// check if this is running in a sygwin terminal, interrupt signals are difficult to capture
 	if isatty.IsCygwinTerminal(os.Stdout.Fd()) {
 
 		go func() {

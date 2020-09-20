@@ -11,6 +11,7 @@ import (
 	"crypto/md5"
 	"crypto/rand"
 	"encoding/hex"
+	"github.com/vorteil/vorteil/pkg/elog"
 	"io"
 
 	"github.com/vorteil/vorteil/pkg/vcfg"
@@ -33,8 +34,8 @@ type Provisioner interface {
 }
 
 type ProvisionArgs struct {
-	Name string
-	// Logger // TODO
+	Name            string
+	Logger          elog.View
 	Description     string
 	Force           bool
 	Context         context.Context

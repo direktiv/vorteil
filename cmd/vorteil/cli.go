@@ -1573,32 +1573,32 @@ var provisionCmd = &cobra.Command{
 
 		// Load the provided provisioner file
 		if _, err := os.Stat(provisionProvisionerFile); err != nil {
-			log.Error(err.Error())
+			log.Errorf(err.Error())
 			os.Exit(1)
 		}
 
 		b, err := ioutil.ReadFile(provisionProvisionerFile)
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf(err.Error())
 			os.Exit(2)
 		}
 
 		data, err := provisioners.Decrypt(b, provisionPassPhrase)
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf(err.Error())
 			os.Exit(3)
 		}
 
 		m := make(map[string]interface{})
 		err = json.Unmarshal(data, &m)
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf(err.Error())
 			os.Exit(4)
 		}
 
 		ptype, ok := m[provisioners.MapKey]
 		if !ok {
-			log.Error(err.Error())
+			log.Errorf(err.Error())
 			os.Exit(5)
 		}
 
@@ -1610,7 +1610,7 @@ var provisionCmd = &cobra.Command{
 			p := &google.Provisioner{}
 			err = p.Initialize(data)
 			if err != nil {
-				log.Error(err.Error())
+				log.Errorf(err.Error())
 				os.Exit(6)
 			}
 
@@ -1621,7 +1621,7 @@ var provisionCmd = &cobra.Command{
 			p := &amazon.Provisioner{}
 			err = p.Initialize(data)
 			if err != nil {
-				log.Error(err.Error())
+				log.Errorf(err.Error())
 				os.Exit(6)
 			}
 
@@ -1632,7 +1632,7 @@ var provisionCmd = &cobra.Command{
 			p := &azure.Provisioner{}
 			err = p.Initialize(data)
 			if err != nil {
-				log.Error(err.Error())
+				log.Errorf(err.Error())
 				os.Exit(6)
 			}
 
@@ -1646,38 +1646,38 @@ var provisionCmd = &cobra.Command{
 
 		pkgBuilder, err := getPackageBuilder("BUILDABLE", buildablePath)
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf(err.Error())
 			os.Exit(9)
 		}
 
 		err = modifyPackageBuilder(pkgBuilder)
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf(err.Error())
 			os.Exit(10)
 		}
 
 		pkgReader, err := vpkg.ReaderFromBuilder(pkgBuilder)
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf(err.Error())
 			os.Exit(11)
 		}
 		defer pkgReader.Close()
 
 		pkgReader, err = vpkg.PeekVCFG(pkgReader)
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf(err.Error())
 			os.Exit(12)
 		}
 
 		err = initKernels()
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf(err.Error())
 			os.Exit(13)
 		}
 
 		f, err := ioutil.TempFile(os.TempDir(), "vorteil.disk")
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf(err.Error())
 			os.Exit(14)
 		}
 		defer os.Remove(f.Name())
@@ -1690,27 +1690,28 @@ var provisionCmd = &cobra.Command{
 			KernelOptions: vdisk.KernelOptions{
 				Shell: flagShell,
 			},
+			Logger: log,
 		})
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf(err.Error())
 			os.Exit(15)
 		}
 
 		err = f.Close()
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf(err.Error())
 			os.Exit(16)
 		}
 
 		err = pkgReader.Close()
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf(err.Error())
 			os.Exit(17)
 		}
 
 		image, err := vio.LazyOpen(f.Name())
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf(err.Error())
 			os.Exit(18)
 		}
 
@@ -1725,11 +1726,11 @@ var provisionCmd = &cobra.Command{
 			Name:        provisionName,
 			Description: provisionDescription,
 			Force:       provisionForce,
-			// Logger: TODO,
+			Logger: log,
 			ReadyWhenUsable: provisionReadyWhenUsable,
 		})
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf(err.Error())
 			os.Exit(19)
 		}
 
@@ -2075,7 +2076,7 @@ var provisionersNewAmazonEC2Cmd = &cobra.Command{
 
 		f, err := os.OpenFile(args[0], os.O_RDWR|os.O_CREATE, 0644)
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf(err.Error())
 			os.Exit(1)
 		}
 		defer f.Close()
@@ -2086,20 +2087,20 @@ var provisionersNewAmazonEC2Cmd = &cobra.Command{
 			Region: provisionersNewAmazonRegion,
 		})
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf(err.Error())
 			os.Exit(2)
 		}
 
 		data, err := p.Marshal()
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf(err.Error())
 			os.Exit(3)
 		}
 
 		out := provisioners.Encrypt(data, provisionersNewPassphrase)
 		_, err = io.Copy(f, bytes.NewReader(out))
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf(err.Error())
 			os.Exit(4)
 		}
 
@@ -2121,7 +2122,7 @@ var provisionersNewAzureCmd = &cobra.Command{
 
 		f, err := os.OpenFile(args[0], os.O_RDWR|os.O_CREATE, 0644)
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf(err.Error())
 			os.Exit(1)
 		}
 		defer f.Close()
@@ -2129,13 +2130,13 @@ var provisionersNewAzureCmd = &cobra.Command{
 		path := provisionersNewAzureKeyFile
 		_, err = os.Stat(path)
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf(err.Error())
 			os.Exit(2)
 		}
 
 		b, err := ioutil.ReadFile(path)
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf(err.Error())
 			os.Exit(3)
 		}
 
@@ -2148,20 +2149,20 @@ var provisionersNewAzureCmd = &cobra.Command{
 			StorageAccountName: provisionersNewAzureStorageAccountName,
 		})
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf(err.Error())
 			os.Exit(4)
 		}
 
 		data, err := p.Marshal()
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf(err.Error())
 			os.Exit(5)
 		}
 
 		out := provisioners.Encrypt(data, provisionersNewPassphrase)
 		_, err = io.Copy(f, bytes.NewReader(out))
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf(err.Error())
 			os.Exit(6)
 		}
 
@@ -2186,7 +2187,7 @@ var provisionersNewGoogleCmd = &cobra.Command{
 
 		f, err := os.OpenFile(args[0], os.O_RDWR|os.O_CREATE, 0644)
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf(err.Error())
 			os.Exit(1)
 		}
 		defer f.Close()
@@ -2194,13 +2195,13 @@ var provisionersNewGoogleCmd = &cobra.Command{
 		path := provisionersNewGoogleKeyFile
 		_, err = os.Stat(path)
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf(err.Error())
 			os.Exit(2)
 		}
 
 		b, err := ioutil.ReadFile(path)
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf(err.Error())
 			os.Exit(3)
 		}
 
@@ -2209,20 +2210,20 @@ var provisionersNewGoogleCmd = &cobra.Command{
 			Key:    base64.StdEncoding.EncodeToString(b),
 		})
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf(err.Error())
 			os.Exit(4)
 		}
 
 		data, err := p.Marshal()
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf(err.Error())
 			os.Exit(5)
 		}
 
 		out := provisioners.Encrypt(data, provisionersNewPassphrase)
 		_, err = io.Copy(f, bytes.NewReader(out))
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf(err.Error())
 			os.Exit(6)
 		}
 	},

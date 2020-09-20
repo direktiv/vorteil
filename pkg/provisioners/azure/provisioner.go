@@ -220,7 +220,7 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 			return fmt.Errorf("Image already exists; aborting. To replace conflicting image, include the 'force' directive.")
 		}
 
-		fmt.Println("Deleting existing image.")
+		args.Logger.Infof("Deleting existing image.")
 		delFuture, err := imagesClient.Delete(args.Context, p.cfg.ResourceGroup, args.Name)
 		if err != nil {
 			return err
@@ -292,7 +292,7 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 				return err
 			}
 		}
-		fmt.Printf("Uploading: %.1f%s\n", (float64(i)+float64(len(data)))/float64(length)*100, "%")
+		args.Logger.Infof("Uploading: %.1f%s\n", (float64(i)+float64(len(data)))/float64(length)*100, "%")
 	}
 
 	rem := length - int64(i)
@@ -308,7 +308,7 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 		return err
 	}
 
-	fmt.Println("Uploading: 100%")
+	args.Logger.Infof("Uploading: 100%")
 
 	g := int32(1024 * 1024 * 1024)
 	gigs := int32(length) / g
@@ -333,19 +333,19 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 	img.StorageProfile.OsDisk.BlobURI = &u
 	img.HyperVGeneration = compute.HyperVGenerationTypesV1
 
-	fmt.Println("Sent request to create image from storage object.")
+	args.Logger.Infof("Sent request to create image from storage object.")
 	future, err := imagesClient.CreateOrUpdate(args.Context, p.cfg.ResourceGroup, args.Name, *img)
 	if err != nil {
 		return err
 	}
 
-	fmt.Println("Waiting for completion.")
+	args.Logger.Infof("Waiting for completion.")
 	err = future.WaitForCompletionRef(args.Context, imagesClient.Client)
 	if err != nil {
 		return err
 	}
 
-	fmt.Println("Done!")
+	args.Logger.Printf("Done!")
 
 	return nil
 }

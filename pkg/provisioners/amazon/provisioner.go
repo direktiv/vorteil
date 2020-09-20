@@ -118,10 +118,11 @@ func (p *Provisioner) Initialize(data []byte) error {
 }
 
 func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
-
 	var err error
+	pendingSpinner := args.Logger.NewProgress("Preparing Instance...", "", 0)
+	defer pendingSpinner.Finish(true)
 
-	fmt.Println("Creating new session...")
+	args.Logger.Infof("Creating new session...")
 	sess, err := session.NewSession(&aws.Config{
 		Region:      aws.String(p.cfg.Region),
 		Credentials: credentials.NewStaticCredentials(p.cfg.Key, p.cfg.Secret, ""),
@@ -129,15 +130,15 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 	if err != nil {
 		return err
 	}
-	fmt.Println("Session created.")
+	args.Logger.Infof("Session created.")
 
-	fmt.Println("Creating new client...")
+	args.Logger.Infof("Creating new client...")
 	client := ec2.New(sess, aws.NewConfig().WithRegion(p.cfg.Region))
-	fmt.Println("Client created.")
+	args.Logger.Infof("Client created.")
 
-	fmt.Println("Generating instance metadata...")
+	args.Logger.Infof("Generating instance metadata...")
 	cert, key := generateCertificate()
-	fmt.Println("Single-use certificates created.")
+	args.Logger.Infof("Single-use certificates created.")
 
 	data, err := json.Marshal(&userData{
 		Reboot: "false",
@@ -168,7 +169,7 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 			return errors.New("ami exists: try using the --force flag")
 		}
 	}
-	fmt.Println("Looking up security group ID...")
+	args.Logger.Infof("Looking up security group ID...")
 
 	secgrps, err := client.DescribeSecurityGroups(&ec2.DescribeSecurityGroupsInput{
 		GroupNames: []*string{aws.String(securityGroupName)},
@@ -191,7 +192,7 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 	}
 
 	securityGroupID := *secgrps.SecurityGroups[0].GroupId
-	fmt.Printf("Security group: %s\n", securityGroupID)
+	args.Logger.Infof("Security group: %s\n", securityGroupID)
 	filter := &ec2.Filter{
 		Name:   aws.String("name"),
 		Values: []*string{aws.String("vorteil-compiler")},
@@ -207,7 +208,7 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 	gigs := vcfg.Bytes(args.Image.Size())
 	gigs.Align(vcfg.GiB)
 
-	fmt.Printf("Disk size: %d GiB\n", gigs.Units(vcfg.GiB))
+	args.Logger.Infof("Disk size: %d GiB\n", gigs.Units(vcfg.GiB))
 	AMI = *images.Images[0].ImageId
 	reservation, err := client.RunInstancesWithContext(args.Context, &ec2.RunInstancesInput{
 		MaxCount:         aws.Int64(1),
@@ -232,34 +233,33 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 	}
 	instanceID := *reservation.Instances[0].InstanceId
 
-	fmt.Printf("Created empty instance: %s.\n", instanceID)
+	args.Logger.Infof("Created empty instance: %s.\n", instanceID)
 
 	var successful bool
 	var amiID string
 
 	defer func() {
 		if successful {
-			fmt.Printf("Provisioned AMI: %s\n", amiID)
+			args.Logger.Infof("Provisioned AMI: %s\n", amiID)
 		}
 	}()
 
 	defer func() {
 		var err error
-		fmt.Println("Attempting to terminate instance...\n")
+		args.Logger.Infof("Instance status: Attempting to terminate instance...")
 		_, err = client.TerminateInstances(&ec2.TerminateInstancesInput{
 			InstanceIds: []*string{
 				&instanceID,
 			},
 		})
 		if err != nil {
-			fmt.Printf("An error occurred trying to clean up instance %s: %v.\n", instanceID, err)
+			args.Logger.Infof("An error occurred trying to clean up instance %s: %v.\n", instanceID, err)
 		}
-		fmt.Println("Instance terminated.")
+		args.Logger.Infof("Instance status: terminated.")
 	}()
 
 	var ip string
 	for {
-
 		time.Sleep(pollrate)
 		description, err := client.DescribeInstancesWithContext(args.Context, &ec2.DescribeInstancesInput{
 			InstanceIds: []*string{
@@ -277,10 +277,11 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 		}
 		switch *description.Reservations[0].Instances[0].State.Code & 0xFF {
 		case 0:
-			fmt.Println("Instance status: pending.")
+			args.Logger.Infof("Instance status: pending.")
 			continue
 		case 16:
-			fmt.Println("Instance status: running.")
+			pendingSpinner.Finish(true)
+			args.Logger.Infof("Instance status: running.")
 			if description == nil || len(description.Reservations) == 0 ||
 				len(description.Reservations[0].Instances) == 0 ||
 				len(description.Reservations[0].Instances[0].NetworkInterfaces) == 0 ||
@@ -294,26 +295,25 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 				continue
 			}
 		case 32:
-			fmt.Println("Instance status: shutting-down.")
+			args.Logger.Infof("Instance status: shutting-down.")
 			return errors.New("instance is shutting down for an unknown reason")
 		case 48:
-			fmt.Println("Instance status: terminated.")
+			args.Logger.Infof("Instance status: terminated.")
 			return errors.New("instance has been terminated for an unknown reason")
 		case 64:
-			fmt.Println("Instance status: stopping.")
+			args.Logger.Infof("Instance status: stopping.")
 			return errors.New("instance is stopping for an unknown reason")
 		case 80:
-			fmt.Println("Instance status: stopped.")
+			args.Logger.Infof("Instance status: stopped.")
 			return errors.New("instance stopped for an unknown reason")
 		default:
-			fmt.Println("Instance status: unknown.")
+			args.Logger.Infof("Instance status: unknown.")
 			continue
 		}
 
 		break
 	}
-
-	fmt.Printf("Instance public IP address: %s\n", ip)
+	args.Logger.Infof("Instance public IP address: %s\n", ip)
 
 	tlsCert, err := tls.X509KeyPair(cert, key)
 	if err != nil {
@@ -343,14 +343,14 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 	gap := time.Second
 	for {
 		tries++
-		fmt.Printf("Polling instance for connectivity (%d/%d)...\n", tries, max)
+		args.Logger.Infof("Polling instance for connectivity (%d/%d)...\n", tries, max)
 		ctx, cancel := context.WithTimeout(args.Context, time.Second*10)
 		req = req.WithContext(ctx)
 		resp, err := httpclient.Do(req)
 		cancel()
 		if err != nil {
-			fmt.Printf("Trying %v out of %v\n", tries, max)
-			fmt.Printf("Error on POST: %v\n", err)
+			args.Logger.Infof("Trying %v out of %v\n", tries, max)
+			args.Logger.Infof("Error on POST: %v\n", err)
 			if tries == max {
 				return errors.New("instance failed to respond")
 			}
@@ -369,7 +369,9 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 		gap *= 2
 	}
 
-	fmt.Println("Instance is live and ready for payload.")
+	args.Logger.Infof("Instance is live and ready for payload.")
+	dispatchSpinner := args.Logger.NewProgress("Uploading Image... ", "", 0)
+	defer dispatchSpinner.Finish(true)
 
 	pr, pw := io.Pipe()
 	defer pr.Close()
@@ -399,9 +401,10 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 	}
 	defer resp.Body.Close()
 
-	fmt.Println("Payload dispatched.")
+	dispatchSpinner.Finish(true)
+	args.Logger.Infof("Payload dispatched.")
 	checksum := hex.EncodeToString(hasher.Sum(nil))
-	fmt.Printf("Our checksum: %s\n", checksum)
+	args.Logger.Infof("Our checksum: %s\n", checksum)
 
 	data, err = ioutil.ReadAll(resp.Body)
 	if err != nil {
@@ -412,7 +415,10 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 		return fmt.Errorf("server error [%d]: %s", resp.StatusCode, data)
 	}
 
-	fmt.Printf("Server checksum: %s\n", data)
+	args.Logger.Infof("Server checksum: %s\n", data)
+
+	stoppingSpinner := args.Logger.NewProgress("Stopping Instance...", "", 0)
+	defer stoppingSpinner.Finish(true)
 
 	for {
 		time.Sleep(pollrate)
@@ -432,31 +438,32 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 		}
 		switch *description.Reservations[0].Instances[0].State.Code & 0xFF {
 		case 0:
-			fmt.Println("Instance status: pending.")
+			args.Logger.Infof("Instance status: pending.")
 			return errors.New("instance is restarting for an unknown reason")
 		case 16:
-			fmt.Println("Instance status: running.")
+			args.Logger.Infof("Instance status: running.")
 			continue
 		case 32:
-			fmt.Println("Instance status: shutting-down.")
+			args.Logger.Infof("Instance status: shutting-down.")
 			continue
 		case 48:
-			fmt.Println("Instance status: terminated.")
+			args.Logger.Infof("Instance status: terminated.")
 			return errors.New("instance has been terminated for an unknown reason")
 		case 64:
-			fmt.Println("Instance status: stopping.")
+			args.Logger.Infof("Instance status: stopping.")
 			continue
 		case 80:
-			fmt.Println("Instance status: stopped.")
+			args.Logger.Infof("Instance status: stopped.")
 		default:
-			fmt.Println("Instance status: unknown.")
+			args.Logger.Infof("Instance status: unknown.")
 			continue
 		}
 
 		break
 	}
 
-	fmt.Println("Instance has stopped.")
+	stoppingSpinner.Finish(true)
+	args.Logger.Infof("Instance has stopped.")
 
 	// make AMI
 	// if args.Force, check if ami exists with same name
@@ -473,7 +480,7 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 		}
 		if len(imagesForce.Images) > 0 {
 			// deregister current live version as were force pushing
-			fmt.Printf("deregistering old ami: %v\n", imagesForce.Images[0].ImageId)
+			args.Logger.Infof("deregistering old ami: %v\n", imagesForce.Images[0].ImageId)
 			_, err := client.DeregisterImageWithContext(args.Context, &ec2.DeregisterImageInput{
 				ImageId: imagesForce.Images[0].ImageId,
 			})
@@ -493,7 +500,7 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 		return err
 	}
 
-	fmt.Printf("AMI ID: %s\n", *img.ImageId)
+	args.Logger.Infof("AMI ID: %s\n", *img.ImageId)
 
 	if args.ReadyWhenUsable {
 		for {
@@ -510,14 +517,14 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 			if description == nil || len(description.Images) == 0 {
 				continue
 			}
-			fmt.Printf("Image status: %s.\n", *description.Images[0].State)
+			args.Logger.Infof("Image status: %s.\n", *description.Images[0].State)
 			if *description.Images[0].State == "available" {
 				break
 			}
 		}
 	}
 
-	fmt.Printf("Provisioned AMI: %s\n", *img.ImageId)
+	args.Logger.Printf("Provisioned AMI: %s\n", *img.ImageId)
 	successful = true
 	amiID = *img.ImageId
 

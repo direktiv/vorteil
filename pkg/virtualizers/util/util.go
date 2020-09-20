@@ -9,6 +9,45 @@ import (
 	logger "github.com/vorteil/vorteil/pkg/virtualizers/logging"
 )
 
+// ConvertToVM converts a virtualizer into a machine struct mainly used for api returning.
+func ConvertToVM(name string, pname string, state string, routes []virtualizers.NetworkInterface, created time.Time, cfg *vcfg.VCFG, source interface{}) interface{} {
+	info := cfg.Info
+	vm := cfg.VM
+	system := cfg.System
+	programs := make([]virtualizers.ProgramSummaries, 0)
+
+	for _, p := range cfg.Programs {
+		programs = append(programs, virtualizers.ProgramSummaries{
+			Binary: p.Binary,
+			Args:   string(p.Args),
+			Env:    p.Env,
+		})
+	}
+
+	machine := &virtualizers.VirtualMachine{
+		ID:       name,
+		Author:   info.Author,
+		CPUs:     int(vm.CPUs),
+		RAM:      vm.RAM,
+		Disk:     vm.DiskSize,
+		Created:  created,
+		Date:     info.Date.Time(),
+		Networks: routes,
+		Kernel:   vm.Kernel,
+		Name:     info.Name,
+		Summary:  info.Summary,
+		Source:   source.(virtualizers.Source),
+		URL:      string(info.URL),
+		Version:  info.Version,
+		Programs: programs,
+		Hostname: system.Hostname,
+		Platform: pname,
+		Status:   state,
+	}
+
+	return machine
+}
+
 // LookForIP screen scrapes the IP from a virtual machine output mainly used for bridge/hosted machines
 func LookForIP(l *logger.Logger) []string {
 

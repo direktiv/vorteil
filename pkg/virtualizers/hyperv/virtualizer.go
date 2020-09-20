@@ -185,45 +185,6 @@ func (v *Virtualizer) Download() (vio.File, error) {
 	return f, nil
 }
 
-// ConvertToVM is a wrapper function that provides us to use the old APIs
-func (v *Virtualizer) ConvertToVM() interface{} {
-	info := v.config.Info
-	vm := v.config.VM
-	system := v.config.System
-	programs := make([]virtualizers.ProgramSummaries, 0)
-
-	for _, p := range v.config.Programs {
-		programs = append(programs, virtualizers.ProgramSummaries{
-			Binary: p.Binary,
-			Args:   string(p.Args),
-			Env:    p.Env,
-		})
-	}
-
-	machine := &virtualizers.VirtualMachine{
-		ID:       v.name,
-		Author:   info.Author,
-		CPUs:     int(vm.CPUs),
-		RAM:      vm.RAM,
-		Disk:     vm.DiskSize,
-		Created:  v.created,
-		Date:     info.Date.Time(),
-		Networks: v.routes,
-		Kernel:   vm.Kernel,
-		Name:     info.Name,
-		Summary:  info.Summary,
-		URL:      string(info.URL),
-		Version:  info.Version,
-		Programs: programs,
-		// Source:   v.source.(virtualizers.Source),
-		Hostname: system.Hostname,
-		Platform: v.pname,
-		Status:   v.state,
-	}
-
-	return machine
-}
-
 // Close shuts down the virtual machine and cleans up the disk and folders
 func (v *Virtualizer) Close(force bool) error {
 	v.logger.Debugf("Deleting VM")

@@ -202,45 +202,6 @@ func (v *Virtualizer) Download() (vio.File, error) {
 	return f, nil
 }
 
-// ConvertToVM is a wrapper function that provides us to use the old APIs
-func (v *Virtualizer) ConvertToVM() interface{} {
-	info := v.config.Info
-	vm := v.config.VM
-	system := v.config.System
-	programs := make([]virtualizers.ProgramSummaries, 0)
-
-	for _, p := range v.config.Programs {
-		programs = append(programs, virtualizers.ProgramSummaries{
-			Binary: p.Binary,
-			Args:   string(p.Args),
-			Env:    p.Env,
-		})
-	}
-
-	machine := &virtualizers.VirtualMachine{
-		ID:       v.name,
-		Author:   info.Author,
-		CPUs:     int(vm.CPUs),
-		RAM:      vm.RAM,
-		Disk:     vm.DiskSize,
-		Created:  v.created,
-		Date:     info.Date.Time(),
-		Networks: v.routes,
-		Kernel:   vm.Kernel,
-		Name:     info.Name,
-		// Source:   v.source.(virtualizers.Source),
-		Summary:  info.Summary,
-		URL:      string(info.URL),
-		Version:  info.Version,
-		Programs: programs,
-		Hostname: system.Hostname,
-		Platform: v.pname,
-		Status:   v.state,
-	}
-
-	return machine
-}
-
 // ForceStop is only used when ctrl-cing the daemon as its the quickers way to unlock the machine to delete.
 func (v *Virtualizer) ForceStop() error {
 	err := v.execute(exec.Command("VBoxManage", "controlvm", v.name, "poweroff"))

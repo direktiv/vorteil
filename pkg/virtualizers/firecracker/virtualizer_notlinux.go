@@ -124,11 +124,7 @@ func (v *Virtualizer) Start() error {
 	return nil
 }
 
-// Routes converts the VCFG.routes to the apiNetworkInterface which allows
-// us to easiler return to currently written graphql APIs
-func (v *Virtualizer) Routes() []virtualizers.NetworkInterface {
-	return nil
-}
+
 
 // Detach ...
 func (v *Virtualizer) Detach(source string) error {

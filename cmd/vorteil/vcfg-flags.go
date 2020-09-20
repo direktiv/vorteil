@@ -1107,6 +1107,39 @@ var systemUserFlag = stringFlag{
 	},
 }
 
+// a key can have multiple destinations
+// key = src, vals = dst
+var filesMap = make(map[string][]string)
+
+// --files
+var filesFlag = stringSliceFlag{
+	flagPart: flagPart{
+		key:    "files",
+		usage:  "<src>[:<dst>]   add files from the host filesystem to an existing folder in the virtual machine filesystem (dst defaults to '/')",
+		hidden: hideFlags,
+	},
+	validate: func(f stringSliceFlag) error {
+		for _, v := range f.value {
+			// value should have no more than 2 elements when split by ':'
+			x := strings.SplitN(v, ":", 2)
+
+			var src = x[0]
+			var dst = "/"
+
+			if len(x) > 1 {
+				dst = x[1]
+			}
+
+			if _, ok := filesMap[src]; !ok {
+				filesMap[src] = make([]string, 0)
+			}
+
+			filesMap[src] = append(filesMap[src], dst)
+		}
+		return nil
+	},
+}
+
 // --vm.cpus
 var vmCPUsFlag = uintFlag{
 	flagPart: flagPart{
@@ -1447,6 +1480,7 @@ var vcfgFlags = flagsList{
 	&vmInodesFlag,
 	&vmKernelFlag,
 	&vmRAMFlag,
+	&filesFlag,
 	&infoAuthorFlag,
 	&infoDateFlag,
 	&infoDescriptionFlag,

@@ -324,6 +324,11 @@ func modifyPackageBuilder(b vpkg.Builder) error {
 		return err
 	}
 
+	err = handleFileInjections(b)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 

@@ -10,8 +10,7 @@
 [![Build Status](https://travis-ci.org/vorteil/vorteil.svg?branch=master)](https://travis-ci.org/vorteil/vorteil) <a href="https://codeclimate.com/github/vorteil/vorteil/maintainability"><img src="https://api.codeclimate.com/v1/badges/bb819f04d7550b91f24d/maintainability" /></a> <a href="https://codeclimate.com/github/vorteil/vorteil/test_coverage"><img src="https://api.codeclimate.com/v1/badges/bb819f04d7550b91f24d/test_coverage" /></a> [![Go Report Card](https://goreportcard.com/badge/github.com/vorteil/vorteil)](https://goreportcard.com/report/github.com/vorteil/vorteil)
 
 Turn your applications and containers into micro virtual machines with Vorteil.
-
-### What is Vorteil?
+<hr/>
 
 Vorteil is an operating system for running cloud applications on micro virtual machines. It takes only the files you need and runs them on a custom Linux kernel without any unnecessary background services: there's no ssh, no shell, and no login; just a toml file that Vorteil's init process (vinitd) uses to configure the system and launch your apps.
 
@@ -46,7 +45,7 @@ vorteil run https://apps.vorteil.io/file/vorteil/helloworld
 
 This command downloads our Hello World package from apps.vorteil.io and runs it using one of your local hypervisors.
 
-Our Hello World app is a simple web server that should be reachable via NAT on power 8888 (http://localhost:8888/). If that port was unavailable you should notice a yellow warning message in the logs telling you which port it bound instead.
+Our Hello World app is a simple web server that should be reachable via NAT on port 8888 (http://localhost:8888/). If that port was unavailable you should notice a yellow warning message in the logs telling you which port it bound instead.
 
 ### Convert a Docker Container
 

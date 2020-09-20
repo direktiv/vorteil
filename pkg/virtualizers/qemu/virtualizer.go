@@ -419,6 +419,11 @@ func (v *Virtualizer) ConvertToVM() interface{} {
 	return machine
 }
 
+// Networks returns network interfaces of a virtualizer
+func (v *Virtualizer) Networks() []*virtualizers.NetworkInterface {
+	return &v.routes
+}
+
 // Prepare prepares the virtualizer with the appropriate fields to run the virtual machine
 func (v *Virtualizer) Prepare(args *virtualizers.PrepareArgs) *virtualizers.VirtualizeOperation {
 

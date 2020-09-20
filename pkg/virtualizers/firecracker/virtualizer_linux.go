@@ -34,6 +34,7 @@ import (
 	"github.com/vorteil/vorteil/pkg/virtualizers"
 	dhcpHandler "github.com/vorteil/vorteil/pkg/virtualizers/dhcp"
 	logger "github.com/vorteil/vorteil/pkg/virtualizers/logging"
+	"github.com/vorteil/vorteil/pkg/virtualizers/util"
 )
 
 func FetchBridgeDev() error {
@@ -701,69 +702,6 @@ func (v *Virtualizer) Prepare(args *virtualizers.PrepareArgs) *virtualizers.Virt
 	return o
 }
 
-// lookForIp looks for IP via the screen output as firecracker spawns on different IPs
-func (v *Virtualizer) lookForIP() string {
-	sub := v.serialLogger.Subscribe()
-	inbox := sub.Inbox()
-	var msg string
-	timer := false
-	msgWrote := false
-	ticker := time.NewTicker(time.Second)
-	defer ticker.Stop()
-	for {
-		select {
-		case logdata, _ := <-inbox:
-			msg += string(logdata)
-			if strings.TrimSpace(msg) != "" && strings.Contains(msg, "ip") {
-				msgWrote = true
-			}
-		case <-ticker.C:
-			if msgWrote {
-				// sleep slightly so we get all the IPS
-				time.Sleep(time.Second * 1)
-				timer = true
-			}
-		// after 30 seconds break out of for loop for memory resolving
-		case <-time.After(time.Second * 30):
-			timer = true
-		}
-		if timer {
-			break
-		}
-	}
-	var ips []string
-	lines := strings.Split(msg, "\r\n")
-	for _, line := range lines {
-		if virtualizers.IPRegex.MatchString(line) {
-			if strings.Contains(line, "ip") {
-				split := strings.Split(line, ":")
-				if len(split) > 1 {
-					ips = append(ips, strings.TrimSpace(split[1]))
-				}
-			}
-		}
-	}
-
-	if len(ips) > 0 {
-		for i, route := range v.routes {
-			for j, port := range route.HTTP {
-				v.routes[i].HTTP[j].Address = fmt.Sprintf("%s:%s", ips[i], port.Port)
-			}
-			for j, port := range route.HTTPS {
-				v.routes[i].HTTPS[j].Address = fmt.Sprintf("%s:%s", ips[i], port.Port)
-			}
-			for j, port := range route.TCP {
-				v.routes[i].TCP[j].Address = fmt.Sprintf("%s:%s", ips[i], port.Port)
-			}
-			for j, port := range route.UDP {
-				v.routes[i].UDP[j].Address = fmt.Sprintf("%s:%s", ips[i], port.Port)
-			}
-		}
-		return ips[0]
-	}
-	return ""
-}
-
 // Write method to handle logging from firecracker to use our logger interface
 // Cant use logger interface as it duplicates
 func (v *Virtualizer) Write(d []byte) (n int, err error) {
@@ -936,7 +874,25 @@ func (v *Virtualizer) Start() error {
 			}
 			v.state = virtualizers.Alive
 
-			go v.lookForIP()
+			go func() {
+				ips := util.LookForIP(v.serialLogger)
+				if len(ips) > 0 {
+					for i, route := range v.routes {
+						for j, port := range route.HTTP {
+							v.routes[i].HTTP[j].Address = fmt.Sprintf("%s:%s", ips[i], port.Port)
+						}
+						for j, port := range route.HTTPS {
+							v.routes[i].HTTPS[j].Address = fmt.Sprintf("%s:%s", ips[i], port.Port)
+						}
+						for j, port := range route.TCP {
+							v.routes[i].TCP[j].Address = fmt.Sprintf("%s:%s", ips[i], port.Port)
+						}
+						for j, port := range route.UDP {
+							v.routes[i].UDP[j].Address = fmt.Sprintf("%s:%s", ips[i], port.Port)
+						}
+					}
+				}
+			}()
 
 			if err := v.machine.Wait(v.vmmCtx); err != nil {
 				// Should end when we ctrl-c no need to print this.
@@ -948,4 +904,3 @@ func (v *Virtualizer) Start() error {
 	}
 	return nil
 }
-

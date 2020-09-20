@@ -58,68 +58,6 @@ type Virtualizer struct {
 
 }
 
-// lookForIp looks for IP via the screen output as vmware spawns on different IPs
-func (v *Virtualizer) lookForIP() {
-	sub := v.serialLogger.Subscribe()
-	inbox := sub.Inbox()
-	var msg string
-	timer := false
-	msgWrote := false
-	ticker := time.NewTicker(time.Second)
-	defer ticker.Stop()
-	for {
-		select {
-		case logdata, _ := <-inbox:
-			msg += string(logdata)
-			if strings.TrimSpace(msg) != "" && strings.Contains(msg, "ip") {
-				msgWrote = true
-			}
-		case <-ticker.C:
-			if msgWrote {
-				// sleep slightly so we get all the IPS
-				time.Sleep(time.Second * 1)
-				timer = true
-			}
-		// after 30 seconds break out of for loop for memory resolving
-		case <-time.After(time.Second * 30):
-			timer = true
-		}
-		if timer {
-			break
-		}
-	}
-	var ips []string
-	lines := strings.Split(msg, "\r\n")
-	for _, line := range lines {
-		if virtualizers.IPRegex.MatchString(line) {
-			if strings.Contains(line, "ip") {
-				split := strings.Split(line, ":")
-				if len(split) > 1 {
-					ips = append(ips, strings.TrimSpace(split[1]))
-				}
-			}
-
-		}
-	}
-
-	if len(ips) > 0 {
-		for i, route := range v.routes {
-			for j, port := range route.HTTP {
-				v.routes[i].HTTP[j].Address = fmt.Sprintf("%s:%s", ips[i], port.Port)
-			}
-			for j, port := range route.HTTPS {
-				v.routes[i].HTTPS[j].Address = fmt.Sprintf("%s:%s", ips[i], port.Port)
-			}
-			for j, port := range route.TCP {
-				v.routes[i].TCP[j].Address = fmt.Sprintf("%s:%s", ips[i], port.Port)
-			}
-			for j, port := range route.UDP {
-				v.routes[i].UDP[j].Address = fmt.Sprintf("%s:%s", ips[i], port.Port)
-			}
-		}
-	}
-}
-
 // RemoveEntry from vmware inventory
 func (v *Virtualizer) RemoveEntry() error {
 	env, err := os.UserHomeDir()
@@ -388,7 +326,25 @@ func (v *Virtualizer) Start() error {
 		}
 		v.state = virtualizers.Alive
 
-		go v.lookForIP()
+		go func() {
+			ips := util.LookForIP(v.serialLogger)
+			if len(ips) > 0 {
+				for i, route := range v.routes {
+					for j, port := range route.HTTP {
+						v.routes[i].HTTP[j].Address = fmt.Sprintf("%s:%s", ips[i], port.Port)
+					}
+					for j, port := range route.HTTPS {
+						v.routes[i].HTTPS[j].Address = fmt.Sprintf("%s:%s", ips[i], port.Port)
+					}
+					for j, port := range route.TCP {
+						v.routes[i].TCP[j].Address = fmt.Sprintf("%s:%s", ips[i], port.Port)
+					}
+					for j, port := range route.UDP {
+						v.routes[i].UDP[j].Address = fmt.Sprintf("%s:%s", ips[i], port.Port)
+					}
+				}
+			}
+		}()
 		go v.checkRunning()
 
 	default:

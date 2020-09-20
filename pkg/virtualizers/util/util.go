@@ -1,11 +1,61 @@
 package util
 
 import (
+	"strings"
+	"time"
+
 	"github.com/vorteil/vorteil/pkg/vcfg"
 	"github.com/vorteil/vorteil/pkg/virtualizers"
+	logger "github.com/vorteil/vorteil/pkg/virtualizers/logging"
 )
 
-// Routes converts the VCFG.routes to the apiNetworkInterface which allows
+// LookForIP screen scrapes the IP from a virtual machine output mainly used for bridge/hosted machines
+func LookForIP(l *logger.Logger) []string {
+
+	sub := l.Subscribe()
+	inbox := sub.Inbox()
+	var msg string
+	timer := false
+	msgWrote := false
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case logdata, _ := <-inbox:
+			msg += string(logdata)
+			if strings.TrimSpace(msg) != "" && strings.Contains(msg, "ip") {
+				msgWrote = true
+			}
+		case <-ticker.C:
+			if msgWrote {
+				// sleep slightly so we get all the IPS
+				time.Sleep(time.Second * 1)
+				timer = true
+			}
+		// after 30 seconds break out of for loop for memory resolving
+		case <-time.After(time.Second * 30):
+			timer = true
+		}
+		if timer {
+			break
+		}
+	}
+	var ips []string
+	lines := strings.Split(msg, "\r\n")
+	for _, line := range lines {
+		if virtualizers.IPRegex.MatchString(line) {
+			if strings.Contains(line, "ip") {
+				split := strings.Split(line, ":")
+				if len(split) > 1 {
+					ips = append(ips, strings.TrimSpace(split[1]))
+				}
+			}
+		}
+	}
+	return ips
+}
+
+// Routes converts networks from the config to readable virtualizers.NetworkInterface fields.
 func Routes(cfg *vcfg.VCFG) []virtualizers.NetworkInterface {
 
 	routes := virtualizers.Routes{}

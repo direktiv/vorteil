@@ -12,15 +12,10 @@ require (
 	github.com/cloudfoundry/bytefmt v0.0.0-20200131002437-cf55d5288a48
 	github.com/containerd/cgroups v0.0.0-20200824123100-0b889c03f102 // indirect
 	github.com/containerd/console v1.0.0 // indirect
-<<<<<<< HEAD
-	github.com/containerd/containerd v1.3.2
-	github.com/containerd/continuity v0.0.0-20200710164510-efbc4488d8fe // indirect
-=======
 	github.com/containerd/containerd v1.4.1
 	github.com/containerd/continuity v0.0.0-20200710164510-efbc4488d8fe // indirect
 	github.com/containerd/fifo v0.0.0-20200410184934-f15a3290365b // indirect
 	github.com/containerd/go-runc v0.0.0-20200911161753-ad1414ddd16e // indirect
->>>>>>> master
 	github.com/containerd/ttrpc v1.0.1 // indirect
 	github.com/containerd/typeurl v1.0.1 // indirect
 	github.com/containers/image v3.0.2+incompatible
@@ -52,13 +47,9 @@ require (
 	github.com/natefinch/npipe v0.0.0-20160621034901-c1b8fa8bdcce
 	github.com/novln/docker-parser v1.0.0
 	github.com/opencontainers/runc v0.1.1 // indirect
-<<<<<<< HEAD
-	github.com/pkg/errors v0.9.1 // indirect
-=======
 	github.com/opencontainers/runtime-spec v1.0.2 // indirect
 	github.com/opencontainers/selinux v1.6.0 // indirect
 	github.com/pkg/errors v0.9.1
->>>>>>> master
 	github.com/sirupsen/logrus v1.6.0
 	github.com/sisatech/goapi v0.0.0-20200218003521-8dcdab8c7a5e
 	github.com/sisatech/tablewriter v0.0.0-20161130023222-815eceb01ee6
@@ -69,10 +60,7 @@ require (
 	github.com/spf13/pflag v1.0.5
 	github.com/spf13/viper v1.7.0
 	github.com/stretchr/testify v1.6.1
-<<<<<<< HEAD
-=======
 	github.com/syndtr/gocapability v0.0.0-20200815063812-42c35b437635 // indirect
->>>>>>> master
 	github.com/thanhpk/randstr v1.0.4
 	github.com/vbauerster/mpb v3.4.0+incompatible
 	github.com/vbauerster/mpb/v5 v5.3.0

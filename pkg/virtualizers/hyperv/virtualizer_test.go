@@ -1,15 +1,11 @@
 package hyperv
 
 import (
-	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/vorteil/vorteil/pkg/vcfg"
-	"github.com/vorteil/vorteil/pkg/virtualizers"
 	logger "github.com/vorteil/vorteil/pkg/virtualizers/logging"
 )
 
@@ -26,28 +22,13 @@ Windows Hypervisor Platform accelerator is operational
 
 func TestLoggerAndSerial(t *testing.T) {
 	v := &Virtualizer{
-		virtLogger:   logger.NewLogger(2048),
 		serialLogger: logger.NewLogger(2048),
 	}
 
-	virtl := v.Logs()
 	seriall := v.Serial()
 
-	if virtl == nil || seriall == nil {
+	if seriall == nil {
 		t.Errorf("unable to get loggers from virtualizer")
-	}
-}
-func TestPowershell(t *testing.T) {
-	v := &Virtualizer{
-		virtLogger: logger.NewLogger(2048),
-	}
-	cmd := exec.Command(virtualizers.Powershell, "Write-Host", "hello")
-	output, err := v.execute(cmd)
-	if err != nil {
-		t.Errorf("executing command failed due to err: %v", err)
-	}
-	if strings.TrimSpace(output) != "hello" {
-		t.Errorf("executing command failed expected \"hello\" but got \"%s\"", strings.TrimSpace(output))
 	}
 }
 
@@ -69,34 +50,7 @@ func TestState(t *testing.T) {
 		t.Errorf("unable to get state properly, expected 'ready' but got %s", state)
 	}
 }
-func TestLogWrite(t *testing.T) {
-	v := &Virtualizer{
-		virtLogger: logger.NewLogger(2048),
-	}
-	exactText := []byte(fmt.Sprintf("%s%s%s\n", "\033[31m", "hello", "\033[0m"))
-	v.log("error", "%s", "hello")
 
-	sub := v.virtLogger.Subscribe()
-
-	var logs []byte
-	var done bool
-	for !done {
-		select {
-		case logdata, more := <-sub.Inbox():
-			if !more {
-				break
-			}
-			logs = append(logs, logdata...)
-		default:
-			done = true
-		}
-	}
-
-	if strings.TrimSpace(string(logs)) != strings.TrimSpace(string(exactText)) {
-		t.Errorf("logging \"hello\" failed, expected \"%v\" but got \"%v\"", strings.TrimSpace(string(exactText)), strings.TrimSpace(string(logs)))
-	}
-
-}
 func TestInitialize(t *testing.T) {
 	var c = &Config{
 		Headless:   true,
@@ -119,15 +73,14 @@ func TestInitialize(t *testing.T) {
 }
 
 func TestDownload(t *testing.T) {
-	f, err := os.Create(filepath.Join(os.TempDir(), "disk.vmdk"))
+	f, err := os.Create(filepath.Join(os.TempDir(), "disk.vhd"))
 	if err != nil {
 		t.Errorf("unable to create temp file")
 	}
 	defer f.Close()
 	v := &Virtualizer{
-		virtLogger: logger.NewLogger(2048),
-		disk:       f,
-		state:      "ready",
+		disk:  f,
+		state: "ready",
 	}
 
 	file, err := v.Download()
@@ -150,8 +103,7 @@ func TestRoutes(t *testing.T) {
 		Networks: vcfgI,
 	}
 	v := &Virtualizer{
-		virtLogger: logger.NewLogger(2048),
-		config:     vcfg,
+		config: vcfg,
 	}
 
 	ni := v.Routes()

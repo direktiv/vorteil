@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"time"
 
+	"github.com/vorteil/vorteil/pkg/elog"
 	"github.com/vorteil/vorteil/pkg/vcfg"
 	"github.com/vorteil/vorteil/pkg/vdisk"
 	"github.com/vorteil/vorteil/pkg/vio"
@@ -33,7 +34,6 @@ type Virtualizer interface {
 	Detach(string) error                            // removes the vm from the active vms section and moves vm contents to different location
 	Start() error                                   // Start the vm
 	Stop() error                                    // Stop the vm
-	Logs() *logger.Logger                           // Return the virtualizer logs which is what the virtualizer executes
 	Serial() *logger.Logger                         // Return the serial output of the vm
 	Close(bool) error                               // Close the vm is deleting the vm and removing its contents as its not needed anymore.
 }
@@ -59,15 +59,14 @@ func Register(vtype string, allocator VirtualizerAllocator) {
 
 // PrepareArgs is a struct that contains what the VM needs to be able to act accordingly.
 type PrepareArgs struct {
-	Name   string // name of the vm
-	PName  string // name of virtualizer spawned from
-	FCPath string // used for firecracker to find vmlinux binaries
-	// Subserver *graph.Graph
+	Name      string // name of the vm
+	PName     string // name of virtualizer spawned from
+	Logger    elog.View
+	FCPath    string // used for firecracker to find vmlinux binaries
 	Context   context.Context
 	Start     bool       // to control whether its to start automatically
 	Config    *vcfg.VCFG // the vcfg attached to the VM
 	Source    interface{}
-	Image     vio.File // TODO: Change to GERM BUILD
 	ImagePath string
 	VMDrive   string // path to store disks for vms
 }
@@ -167,11 +166,6 @@ type VirtualMachine struct {
 	CPUs   int        `json:"cpus"`
 	RAM    vcfg.Bytes `json:"ram"`
 	Disk   vcfg.Bytes `json:"disk"`
-
-	// summary
-	// Binary    string     `json:"binary"`
-	// Args      string     `json:"args"`
-	// Env       []string   `json:"env"`
 
 	Programs []ProgramSummaries `json:"programs"`
 

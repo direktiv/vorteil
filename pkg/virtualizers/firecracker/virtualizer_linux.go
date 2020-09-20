@@ -1,12 +1,15 @@
 // +build linux
+
 package firecracker
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
@@ -14,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/firecracker-microvm/firecracker-go-sdk"
@@ -23,6 +27,7 @@ import (
 	"github.com/milosgajdos/tenus"
 	log "github.com/sirupsen/logrus"
 	"github.com/songgao/water"
+	"github.com/vorteil/vorteil/pkg/elog"
 	"github.com/vorteil/vorteil/pkg/vcfg"
 	"github.com/vorteil/vorteil/pkg/vimg"
 	"github.com/vorteil/vorteil/pkg/vio"
@@ -77,10 +82,110 @@ func SetupBridgeAndDHCPServer() error {
 		return err
 	}
 
+	// create server handler to create tap devices under sudo
+	http.HandleFunc("/", OrganiseTapDevices)
+	go func() {
+		http.ListenAndServe(":7476", nil)
+	}()
 	// Start dhcp server to listen
 	dhcp.Serve(pc, server)
 
 	return nil
+}
+
+type CreateDevices struct {
+	Id     string `json:"id"`
+	Routes int    `json:"count"`
+}
+
+type Devices struct {
+	Devices []string `json:"devices"`
+}
+
+func OrganiseTapDevices(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodPost:
+		var cd CreateDevices
+		var tapDevices []string
+
+		err := json.NewDecoder(r.Body).Decode(&cd)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		}
+
+		// get bridge device
+		bridgeDev, err := tenus.BridgeFromName("vorteil-bridge")
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+
+		}
+
+		// set network adapters
+		if cd.Routes > 0 {
+			for i := 0; i < cd.Routes; i++ {
+				ifceName := fmt.Sprintf("%s-%s", cd.Id, strconv.Itoa(i))
+
+				// create tap device
+				config := water.Config{
+					DeviceType: water.TAP,
+				}
+				config.Name = ifceName
+				config.Persist = true
+				ifce, err := water.New(config)
+				if err != nil {
+					http.Error(w, err.Error(), http.StatusBadRequest)
+				}
+				// close interface so firecracker can read it
+				err = ifce.Close()
+				if err != nil {
+					http.Error(w, err.Error(), http.StatusBadRequest)
+				}
+
+				// get tap device
+				linkDev, err := tenus.NewLinkFrom(ifceName)
+				if err != nil {
+					http.Error(w, err.Error(), http.StatusBadRequest)
+				}
+				//set tap device up
+				err = linkDev.SetLinkUp()
+				if err != nil {
+					http.Error(w, err.Error(), http.StatusBadRequest)
+				}
+				// add network interface to bridge
+				err = bridgeDev.AddSlaveIfc(linkDev.NetInterface())
+				if err != nil {
+					http.Error(w, err.Error(), http.StatusBadRequest)
+				}
+				tapDevices = append(tapDevices, ifceName)
+			}
+			// write interfaces back
+			returnDevices := &Devices{
+				Devices: tapDevices,
+			}
+			body, err := json.Marshal(returnDevices)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+
+			}
+			io.Copy(w, bytes.NewBuffer(body))
+		}
+	case http.MethodDelete:
+		var dd Devices
+		err := json.NewDecoder(r.Body).Decode(&dd)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		}
+
+		for i := 0; i < len(dd.Devices); i++ {
+			err := tenus.DeleteLink(dd.Devices[i])
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+			}
+		}
+		w.WriteHeader(http.StatusOK)
+	default:
+		http.Error(w, "method not available", http.StatusBadRequest)
+	}
 }
 
 // DownloadPath is the path where we pull firecracker-vmlinux's from
@@ -99,7 +204,7 @@ type Virtualizer struct {
 	disk         *os.File       // disk of the machine
 	source       interface{}    // details about how the vm was made
 	kip          string         // vmlinux full path
-	virtLogger   *logger.Logger // logs about the provisioning process
+	logger       elog.View      // logger
 	serialLogger *logger.Logger // logs for the serial of the vm
 
 	routes []virtualizers.NetworkInterface // api network interface that displays ports
@@ -115,8 +220,8 @@ type Virtualizer struct {
 	machine     *firecracker.Machine // machine firecracker spawned
 	machineOpts []firecracker.Opt    // options provided to spawn machine
 
-	bridgeDevice tenus.Bridger  // bridge device e.g vorteil-bridge
-	tapDevice    []tenus.Linker // tap device for the machine
+	bridgeDevice tenus.Bridger // bridge device e.g vorteil-bridge
+	tapDevice    Devices       // tap device for the machine
 
 	vmdrive string // store disks in this directory
 }
@@ -126,7 +231,6 @@ func (v *Virtualizer) Detach(source string) error {
 	if v.state != virtualizers.Ready {
 		return errors.New("virtual machine must be in ready state to detach")
 	}
-
 	name := filepath.Base(v.folder)
 
 	err := os.MkdirAll(filepath.Join(source), 0777)
@@ -150,9 +254,9 @@ func (v *Virtualizer) Detach(source string) error {
 	// sleep for shutdown signal
 	time.Sleep(time.Second * 4)
 	// delete tap device as vmm has been stopped don't worry about catching error as its not found
-	for _, device := range v.tapDevice {
-		device.DeleteLink()
-	}
+	// for _, device := range v.tapDevice {
+	// device.DeleteLink()
+	// }
 
 	v.state = virtualizers.Deleted
 
@@ -387,21 +491,6 @@ func ByteCountDecimal(b int64) string {
 	return fmt.Sprintf("%.1f %cB", float64(b)/float64(div), "kMGTPE"[exp])
 }
 
-// log writes a log line to the logger and adds prefix and suffix depending on what type of log was sent.
-func (v *Virtualizer) log(logType string, text string, args ...interface{}) {
-	switch logType {
-	case "error":
-		text = fmt.Sprintf("%s%s%s\n", "\033[31m", text, "\033[0m")
-	case "warning":
-		text = fmt.Sprintf("%s%s%s\n", "\033[33m", text, "\033[0m")
-	case "info":
-		text = fmt.Sprintf("%s%s%s\n", "\u001b[37;1m", text, "\u001b[0m")
-	default:
-		text = fmt.Sprintf("%s\n", text)
-	}
-	v.virtLogger.Write([]byte(fmt.Sprintf(text, args...)))
-}
-
 // log writes a log to the channel for the job
 func (o *operation) log(text string, v ...interface{}) {
 	o.Logs <- fmt.Sprintf(text, v...)
@@ -421,6 +510,9 @@ func (o *operation) finished(err error) {
 		o.Status <- fmt.Sprintf("Failed: %v", err)
 		o.Error <- err
 	}
+	if err != nil {
+		o.logger.Errorf("Error: %v", err)
+	}
 
 	close(o.Logs)
 	close(o.Status)
@@ -433,28 +525,30 @@ func (o *operation) updateStatus(text string) {
 	o.Logs <- text
 }
 
-// Logs returns virtualizer logs. Shows what to execute
-func (v *Virtualizer) Logs() *logger.Logger {
-	return v.virtLogger
-}
-
 // Serial returns the serial logger which contains the serial output of the application
 func (v *Virtualizer) Serial() *logger.Logger {
 	return v.serialLogger
 }
 
+// Dial unix
+// func (v *Virtualizer) Dial(proto, addr string) (conn net.Conn, err error) {
+// 	return net.Dial("unix", v.fconfig.SocketPath)
+// }
+
 // Stop stops the vm and changes it back to ready
 func (v *Virtualizer) Stop() error {
-	v.log("debug", "Stopping VM")
+	v.logger.Debugf("Stopping VM")
 	if v.state != virtualizers.Ready {
 		v.state = virtualizers.Changing
 
+		// API way of shutting down vm seems bugged going to send request myself for now.
 		err := v.machine.Shutdown(v.vmmCtx)
 		if err != nil {
 			return err
 		}
-		// wait for shutdown don't think theres a better way other than a sleep
-		// time.Sleep(time.Second * 4)
+
+		// Sleep to handle shutdown logs doesn't affect anything makes the output nicer
+		time.Sleep(time.Second * 2)
 
 		v.state = virtualizers.Ready
 
@@ -471,7 +565,7 @@ func (v *Virtualizer) State() string {
 
 // Download returns the disk
 func (v *Virtualizer) Download() (vio.File, error) {
-	v.log("debug", "Downloading Disk")
+	v.logger.Debugf("Downloading Disk")
 	if !(v.state == virtualizers.Ready) {
 		return nil, fmt.Errorf("the machine must be in a stopped or ready state")
 	}
@@ -484,9 +578,9 @@ func (v *Virtualizer) Download() (vio.File, error) {
 	return f, nil
 }
 
-// Close shuts down the virutal machien and cleans up the disk and folders
+// Close shuts down the virtual machine and cleans up the disk and folders
 func (v *Virtualizer) Close(force bool) error {
-	v.log("debug", "Deleting VM")
+	v.logger.Debugf("Deleting VM")
 
 	if !force {
 		// if state not ready stop it so it is
@@ -505,13 +599,22 @@ func (v *Virtualizer) Close(force bool) error {
 		return err
 	}
 
-	// sleep for shutdown signal
-	// time.Sleep(time.Second * 4)
-	// delete tap device as vmm has been stopped don't worry about catching error as its not found
-	for _, device := range v.tapDevice {
-		device.DeleteLink()
+	client := &http.Client{}
+	cdm, err := json.Marshal(v.tapDevice)
+	if err != nil {
+		return err
 	}
-	// v.tapDevice.DeleteLink()
+
+	req, err := http.NewRequest("DELETE", "http://localhost:7476/", bytes.NewBuffer(cdm))
+	if err != nil {
+		return err
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
 
 	v.state = virtualizers.Deleted
 
@@ -578,9 +681,9 @@ func (v *Virtualizer) Prepare(args *virtualizers.PrepareArgs) *virtualizers.Virt
 	v.created = time.Now()
 	v.config = args.Config
 	v.source = args.Source
-	v.virtLogger = logger.NewLogger(2048)
+	v.logger = args.Logger
 	v.serialLogger = logger.NewLogger(2048 * 10)
-	v.log("debug", "Preparing VM")
+	v.logger.Debugf("Preparing VM")
 	v.routes = v.Routes()
 
 	op.Logs = make(chan string, 128)
@@ -661,6 +764,14 @@ func (v *Virtualizer) lookForIP() string {
 	return ""
 }
 
+// Write method to handle logging from firecracker to use our logger interface
+// Cant use logger interface as it duplicates
+func (v *Virtualizer) Write(d []byte) (n int, err error) {
+	n = len(d)
+	v.logger.Infof(string(d))
+	return
+}
+
 // prepare sets the fields and arguments to spawn the virtual machine
 func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	var returnErr error
@@ -672,7 +783,6 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 
 	o.state = "initializing"
 	o.name = args.Name
-	// o.id = randstr.Hex(5)
 	err := os.MkdirAll(args.FCPath, os.ModePerm)
 	if err != nil {
 		returnErr = err
@@ -686,9 +796,8 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	logger.SetFormatter(&log.TextFormatter{
 		DisableColors: false,
 		ForceColors:   true,
-		FullTimestamp: true,
 	})
-	logger.Out = o.virtLogger
+	logger.Out = o
 
 	ctx := context.Background()
 	vmmCtx, vmmCancel := context.WithCancel(ctx)
@@ -704,77 +813,62 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 
 	devices = append(devices, rootDrive)
 
-	o.log("debug", "Fetching VMLinux from cache or online")
+	progress := o.logger.NewProgress("Fetching VMLinux", "", 0)
+	defer progress.Finish(false)
 	o.kip, err = o.fetchVMLinux(o.config.VM.Kernel)
 	if err != nil {
 		returnErr = err
 		return
 	}
-	o.log("debug", "Finished getting VMLinux")
-	// get bridge device
-	bridgeDev, err := tenus.BridgeFromName("vorteil-bridge")
+
+	cd := CreateDevices{
+		Id:     o.id,
+		Routes: len(o.routes),
+	}
+
+	cdm, err := json.Marshal(cd)
 	if err != nil {
 		returnErr = err
 		return
 	}
-	o.bridgeDevice = bridgeDev
+
+	resp, err := http.Post("http://localhost:7476/", "application/json", bytes.NewBuffer(cdm))
+	if err != nil {
+		returnErr = errors.New("Run ./sudo firecracker-setup for the listener")
+		return
+	}
+
+	defer resp.Body.Close()
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		returnErr = err
+		return
+	}
+
+	var ifs Devices
+	err = json.Unmarshal(body, &ifs)
+	if err != nil {
+		returnErr = err
+		return
+	}
+
+	o.tapDevice = ifs
 	var interfaces []firecracker.NetworkInterface
-	// set network adapters
-	if len(o.routes) > 0 {
-		for i := 0; i < len(o.routes); i++ {
-			ifceName := fmt.Sprintf("%s-%s", o.id, strconv.Itoa(i))
-			interfaces = append(interfaces,
-				firecracker.NetworkInterface{
-					StaticConfiguration: &firecracker.StaticNetworkConfiguration{
-						HostDevName: ifceName,
-					},
+
+	for i := 0; i < len(ifs.Devices); i++ {
+		interfaces = append(interfaces,
+			firecracker.NetworkInterface{
+				StaticConfiguration: &firecracker.StaticNetworkConfiguration{
+					HostDevName: ifs.Devices[i],
 				},
-			)
-			// create tap device
-			config := water.Config{
-				DeviceType: water.TAP,
-			}
-			config.Name = ifceName
-			config.Persist = true
-			ifce, err := water.New(config)
-			if err != nil {
-				returnErr = err
-				return
-			}
-			// close interface so firecracker can read it
-			err = ifce.Close()
-			if err != nil {
-				returnErr = err
-				return
-			}
-
-			// get tap device
-			linkDev, err := tenus.NewLinkFrom(ifceName)
-			if err != nil {
-				returnErr = err
-				return
-			}
-			//set tap device up
-			err = linkDev.SetLinkUp()
-			if err != nil {
-				returnErr = err
-				return
-			}
-
-			// add network interface to bridge
-			err = bridgeDev.AddSlaveIfc(linkDev.NetInterface())
-			if err != nil {
-				returnErr = err
-				return
-			}
-			o.tapDevice = append(o.tapDevice, linkDev)
-		}
+			},
+		)
 	}
 
 	fcCfg := firecracker.Config{
 		SocketPath:      filepath.Join(o.folder, fmt.Sprintf("%s.%s", o.name, "socket")),
 		KernelImagePath: o.kip,
-		KernelArgs:      fmt.Sprintf("init=/vorteil/vinitd root=PARTUUID=%s loglevel=9 reboot=k panic=1 pci=off i8042.noaux i8042.nomux i8042.nopnp i8042.dumbkbd  vt.color=0x00", vimg.Part2UUIDString),
+		KernelArgs:      fmt.Sprintf("loglevel=9 init=/vorteil/vinitd root=PARTUUID=%s reboot=k panic=1 pci=off vt.color=0x00", vimg.Part2UUIDString),
 		Drives:          devices,
 		MachineCfg: models.MachineConfiguration{
 			VcpuCount:  firecracker.Int64(int64(o.config.VM.CPUs)),
@@ -782,6 +876,7 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 			MemSizeMib: firecracker.Int64(int64(o.config.VM.RAM.Units(vcfg.MiB))),
 		},
 		NetworkInterfaces: interfaces,
+		ForwardSignals:    []os.Signal{},
 	}
 
 	machineOpts := []firecracker.Opt{
@@ -812,8 +907,7 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 
 // Start create the virtualmachine and runs it
 func (v *Virtualizer) Start() error {
-	v.log("debug", "Starting VM")
-
+	v.logger.Debugf("Starting VM")
 	switch v.State() {
 	case "ready":
 		v.state = virtualizers.Changing
@@ -821,33 +915,35 @@ func (v *Virtualizer) Start() error {
 		go func() {
 			executable, err := virtualizers.GetExecutable(VirtualizerID)
 			if err != nil {
-				v.log("error", "Error Fetching executable: %v", err)
+				v.logger.Errorf("Error Fetching executable: %s", err.Error())
 			}
 
 			cmd := firecracker.VMCommandBuilder{}.WithBin(executable).WithSocketPath(v.fconfig.SocketPath).WithStdout(v.serialLogger).WithStderr(v.serialLogger).Build(v.gctx)
+			cmd.SysProcAttr = &syscall.SysProcAttr{
+				Setpgid: true,
+				Pgid:    0,
+			}
+
 			v.machineOpts = append(v.machineOpts, firecracker.WithProcessRunner(cmd))
 
 			v.machine, err = firecracker.NewMachine(v.vmmCtx, v.fconfig, v.machineOpts...)
 			if err != nil {
-				v.log("error", "Error creating machine: %v", err)
+				v.logger.Errorf("Error creating machine: %s", err.Error())
 			}
 
 			if err := v.machine.Start(v.vmmCtx); err != nil {
-				v.log("error", "Error starting virtual machine: %v", err)
+				v.logger.Errorf("Error starting virtual machine: %s", err.Error())
 			}
 			v.state = virtualizers.Alive
 
 			go v.lookForIP()
 
 			if err := v.machine.Wait(v.vmmCtx); err != nil {
-				v.log("error", "Wait returned an error %s", err)
+				// Should end when we ctrl-c no need to print this.
+				if !strings.Contains(err.Error(), "* signal: interrupt") {
+					v.logger.Errorf("Wait returned an error: %s", err.Error())
+				}
 			}
-			// sleep for shutdown signal
-			// time.Sleep(time.Second * 3)
-			// err = v.machine.StopVMM()
-			// if err != nil {
-			// 	v.log("error", "Stopping VMM manager %s", err)
-			// }
 		}()
 	}
 	return nil

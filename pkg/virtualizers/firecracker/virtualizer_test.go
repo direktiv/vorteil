@@ -1,8 +1,6 @@
 package firecracker
 
 import (
-	"fmt"
-	"strings"
 	"testing"
 
 	logger "github.com/vorteil/vorteil/pkg/virtualizers/logging"
@@ -18,35 +16,6 @@ var codeBlockToLookIP = `
 2020/06/22 03:13:46 No background color set in BACKGROUND environment variable
 2020/06/22 03:13:46 Binding port: 8888
  `
-
-func TestLogWrite(t *testing.T) {
-	v := &Virtualizer{
-		virtLogger: logger.NewLogger(2048),
-	}
-	exactText := []byte(fmt.Sprintf("%s%s%s\n", "\033[31m", "hello", "\033[0m"))
-	v.log("error", "%s", "hello")
-
-	sub := v.virtLogger.Subscribe()
-
-	var logs []byte
-	var done bool
-	for !done {
-		select {
-		case logdata, more := <-sub.Inbox():
-			if !more {
-				break
-			}
-			logs = append(logs, logdata...)
-		default:
-			done = true
-		}
-	}
-
-	if strings.TrimSpace(string(logs)) != strings.TrimSpace(string(exactText)) {
-		t.Errorf("logging \"hello\" failed, expected \"%v\" but got \"%v\"", strings.TrimSpace(string(exactText)), strings.TrimSpace(string(logs)))
-	}
-
-}
 
 func TestInitialize(t *testing.T) {
 	var c = &Config{}
@@ -69,14 +38,12 @@ func TestType(t *testing.T) {
 }
 func TestLoggerAndSerial(t *testing.T) {
 	v := &Virtualizer{
-		virtLogger:   logger.NewLogger(2048),
 		serialLogger: logger.NewLogger(2048),
 	}
 
-	virtl := v.Logs()
 	seriall := v.Serial()
 
-	if virtl == nil || seriall == nil {
+	if seriall == nil {
 		t.Errorf("unable to get loggers from virtualizer")
 	}
 }

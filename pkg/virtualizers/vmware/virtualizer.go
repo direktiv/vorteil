@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"net"
 	"os"
@@ -558,7 +557,7 @@ func (v *Virtualizer) ConvertToVM() interface{} {
 		Created:  v.created,
 		Date:     info.Date.Time(),
 		Networks: v.routes,
-		Kernel:   vm.Kernel.String(),
+		Kernel:   vm.Kernel,
 		Name:     info.Name,
 		Summary:  info.Summary,
 		Source:   v.source.(virtualizers.Source),
@@ -592,35 +591,34 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	o.folder = filepath.Join(o.vmdrive, fmt.Sprintf("%s-%s", o.id, o.Type()))
 
 	// create vm folder
-	err = os.MkdirAll(o.folder, os.ModePerm)
-	if err != nil {
-		returnErr = err
-		return
-	}
+	// err = os.MkdirAll(o.folder, os.ModePerm)
+	// if err != nil {
+	// 	returnErr = err
+	// 	return
+	// }
 
 	// copy disk to folder
-	f, err := os.Create(filepath.Join(o.folder, o.name+".vmdk"))
-	if err != nil {
-		returnErr = err
-		return
-	}
+	// f, err := os.Create(filepath.Join(o.folder, o.name+".vmdk"))
+	// if err != nil {
+	// 	returnErr = err
+	// 	return
+	// }
 
-	_, err = io.Copy(f, args.Image)
-	if err != nil {
-		returnErr = err
-		return
-	}
+	// _, err = io.Copy(f, args.ImagePath)
+	// if err != nil {
+	// 	returnErr = err
+	// 	return
+	// }
 
-	defer f.Close()
-	o.disk = f
+	// defer f.Close()
+	// o.disk = f
 
 	// generate vmx'
 
 	// align size to 4 MiB
 	o.config.VM.RAM.Align(vcfg.MiB * 4)
 
-	vmxString := GenerateVMX(strconv.Itoa(int(o.config.VM.CPUs)), strconv.Itoa(o.config.VM.RAM.Units(vcfg.MiB)), o.disk.Name(), o.name, o.folder, len(o.routes), o.networkType, o.id)
-	// o.Virtualizer.log("info", "VMX Start:\n%s\nVMX End", vmxString)
+	vmxString := GenerateVMX(strconv.Itoa(int(o.config.VM.CPUs)), strconv.Itoa(o.config.VM.RAM.Units(vcfg.MiB)), args.ImagePath, o.name, o.folder, len(o.routes), o.networkType, o.id)
 
 	vmxPath := filepath.Join(o.folder, o.name+".vmx")
 	o.vmxPath = vmxPath
@@ -648,7 +646,8 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	if args.Start {
 		err = o.Start()
 		if err != nil {
-			o.Virtualizer.log("error", "Error starting vm: %v", err)
+			returnErr = fmt.Errorf("Error starting vm: %v", err)
+			return
 		}
 	}
 }

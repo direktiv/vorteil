@@ -12,14 +12,12 @@ import (
 
 func TestLoggerAndSerial(t *testing.T) {
 	v := &Virtualizer{
-		virtLogger:   logger.NewLogger(2048),
 		serialLogger: logger.NewLogger(2048),
 	}
 
-	virtl := v.Logs()
 	seriall := v.Serial()
 
-	if virtl == nil || seriall == nil {
+	if seriall == nil {
 		t.Errorf("unable to get loggers from virtualizer")
 	}
 }
@@ -71,8 +69,7 @@ func TestNetworkArgs(t *testing.T) {
 		Networks: vcfgI,
 	}
 	v := &Virtualizer{
-		virtLogger: logger.NewLogger(2048),
-		config:     vcfg,
+		config: vcfg,
 	}
 
 	ni := v.Routes()

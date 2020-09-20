@@ -32,6 +32,7 @@ import (
 	"github.com/vorteil/vorteil/pkg/vconvert"
 	"github.com/vorteil/vorteil/pkg/vdecompiler"
 	"github.com/vorteil/vorteil/pkg/vdisk"
+	"github.com/vorteil/vorteil/pkg/virtualizers"
 	"github.com/vorteil/vorteil/pkg/vio"
 	"github.com/vorteil/vorteil/pkg/virtualizers/firecracker"
 	"github.com/vorteil/vorteil/pkg/vpkg"
@@ -2372,7 +2373,11 @@ and cleaning up the instance when it's done.`,
 				os.Exit(1)
 			}
 		default:
-			log.Errorf("%v", fmt.Errorf("platform '%s' not supported", flagPlatform).Error())
+			if flagPlatform == "not installed" {
+				log.Errorf("no virtualizers are currently installed")
+			} else {
+				log.Errorf("%v", fmt.Errorf("platform '%s' not supported", flagPlatform).Error())
+			}
 			os.Exit(1)
 		}
 
@@ -2381,7 +2386,26 @@ and cleaning up the instance when it's done.`,
 
 func init() {
 	f := runCmd.Flags()
-	f.StringVar(&flagPlatform, "platform", "qemu", "run a virtual machine with appropriate hypervisor (qemu, firecracker, virtualbox, hyper-v)")
+	f.StringVar(&flagPlatform, "platform", defaultVirtualizer(), "run a virtual machine with appropriate hypervisor (qemu, firecracker, virtualbox, hyper-v)")
 	f.BoolVar(&flagGUI, "gui", false, "when running virtual machine show gui of hypervisor")
 	f.BoolVar(&flagShell, "shell", false, "add a busybox shell environment to the image")
+}
+
+func defaultVirtualizer() string {
+	backends, _ := virtualizers.Backends()
+	for _, installed := range backends {
+		if installed == "vmware" {
+			continue
+		}
+		if installed == "qemu" {
+			return "qemu"
+		} else if installed == "hyperv" {
+			return "hyper-v"
+		} else if installed == "virtualbox" {
+			return "virtualbox"
+		} else if installed == "firecracker" {
+			return "firecracker"
+		}
+	}
+	return "not installed"
 }

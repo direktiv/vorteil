@@ -5,18 +5,22 @@
   </a>
   <h3 align="center">vorteil.io</h3>
 </p>
+<hr/>
+
+[![Build Status](https://travis-ci.org/vorteil/vorteil.svg?branch=master)](https://travis-ci.org/vorteil/vorteil) <a href="https://codeclimate.com/github/vorteil/vorteil/maintainability"><img src="https://api.codeclimate.com/v1/badges/bb819f04d7550b91f24d/maintainability" /></a> <a href="https://codeclimate.com/github/vorteil/vorteil/test_coverage"><img src="https://api.codeclimate.com/v1/badges/bb819f04d7550b91f24d/test_coverage" /></a> [![Go Report Card](https://goreportcard.com/badge/github.com/vorteil/vorteil)](https://goreportcard.com/report/github.com/vorteil/vorteil)
+
 Turn your applications and containers into micro virtual machines with Vorteil.
 <hr/>
 
 Vorteil is an operating system for running cloud applications on micro virtual machines. It takes only the files you need and runs them on a custom Linux kernel without any unnecessary background services: there's no ssh, no shell, and no login; just a toml file that Vorteil's init process (vinitd) uses to configure the system and launch your apps.
 
-Vorteil's lightweight design enhances security, reduces capital and operating costs, and reduces performance overhead compared to containers and other server operating systems. 
+Vorteil's lightweight design enhances security, reduces capital and operating costs, and reduces performance overhead compared to containers and other server operating systems.
 
 The tools that build Vorteil images have been optimized for speed, and can take your project from loose files to a running virtual machine in as little as one second.
 
-## Installation 
+## Installation
 
-The Vorteil binary runs anywhere, just download the archive for your system, extract it, and put the executable on your `PATH`. 
+The Vorteil binary runs anywhere, just download the archive for your system, extract it, and put the executable on your `PATH`.
 
 ### Linux
 ```
@@ -27,7 +31,7 @@ tar -xzf vorteil_linux-x86.tar.gz
 
 ### Dependencies
 
-To use the `vorteil run` command you'll need VirtualBox, QEMU, or Hyper-V installed on your system and reachable on the `PATH`. 
+To use the `vorteil run` command you'll need VirtualBox, QEMU, or Hyper-V installed on your system and reachable on the `PATH`.
 
 If you're using Windows, it's recommended that you enable developer mode as well, so that the tools can use Unix-style symlinks.
 
@@ -57,7 +61,7 @@ ls cockroachdb
 
 These commands download a Vorteil package and use the `vorteil unpack` command to extract its contents into a structured Vorteil project directory. Think of this directory like it will become the root directory on your app's virtual machine. You can modify the app's file-system contents by changing the files in this directory.
 
-There are two types of special files in the project directory: `.vorteilproject` and files that end with the `.vcfg` file extension. These are used by Vorteil to understand how to build the virtual machine and what it should do when it's running. 
+There are two types of special files in the project directory: `.vorteilproject` and files that end with the `.vcfg` file extension. These are used by Vorteil to understand how to build the virtual machine and what it should do when it's running.
 
 Make whatever changes you need to make, then repackage them.
 
@@ -65,7 +69,7 @@ Make whatever changes you need to make, then repackage them.
 vorteil pack cockroachdb -o cockroachdb-modified.vorteil
 ```
 
-This `vorteil pack` command packs up your project directory into a package file again. 
+This `vorteil pack` command packs up your project directory into a package file again.
 
 ```
 vorteil run cockroachdb-modified.vorteil
@@ -104,4 +108,3 @@ Distributed under the Apache 2.0 License. See `LICENSE` for more information.
 * The free Vorteil [apps repository](http://apps.vorteil.io/).
 * The Vorteil [blog](https://blog.vorteil.io/).
 * The [Godoc](https://godoc.org/github.com/vorteil/vorteil) library documentation.
-

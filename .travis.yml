@@ -1,0 +1,22 @@
+dist: bionic
+
+language: go
+
+go:
+  - 1.15
+
+before_install:
+  - sudo apt-get -y install libseccomp-dev
+  - go get -t -v ./...
+
+before_script:
+  - curl -L https://codeclimate.com/downloads/test-reporter/test-reporter-latest-linux-amd64 > ./cc-test-reporter
+  - chmod +x ./cc-test-reporter
+  - ./cc-test-reporter before-build
+
+script:
+  - go build github.com/vorteil/vorteil/cmd/vorteil
+  - go test -coverprofile c.out ./...
+
+after_success:
+  - ./cc-test-reporter after-build --exit-code $TRAVIS_TEST_RESULT

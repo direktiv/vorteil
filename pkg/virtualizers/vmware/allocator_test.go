@@ -76,7 +76,7 @@ func TestDiskAlignment(t *testing.T) {
 
 func TestDiskFormat(t *testing.T) {
 	format := Allocator.DiskFormat()
-	exactFormat := vdisk.ImageFormatVMDK
+	exactFormat := vdisk.VMDKFormat
 	if format != exactFormat {
 		t.Errorf("disk format does not match %v got %v instead", exactFormat, format)
 	}

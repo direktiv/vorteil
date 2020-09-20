@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	logger "github.com/vorteil/vorteil/pkg/virtualizers/logging"
 	"github.com/vorteil/vorteil/pkg/vcfg"
+	logger "github.com/vorteil/vorteil/pkg/virtualizers/logging"
 )
 
 var codeBlockToLookIP = `
@@ -213,18 +213,6 @@ func TestLoggerAndSerial(t *testing.T) {
 
 	if virtl == nil || seriall == nil {
 		t.Errorf("unable to get loggers from virtualizer")
-	}
-}
-func TestLookForIp(t *testing.T) {
-	v := &Virtualizer{
-		serialLogger: logger.NewLogger(2048),
-	}
-
-	v.serialLogger.Write([]byte(codeBlockToLookIP))
-
-	address := v.lookForIP()
-	if address != "10.0.2.15" {
-		t.Errorf("unable to retrieve correct IP was expecting %s but got %s", "10.0.2.15", address)
 	}
 }
 

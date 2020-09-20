@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/vorteil/vorteil/pkg/vcfg"
 	"github.com/vorteil/vorteil/pkg/virtualizers"
 	logger "github.com/vorteil/vorteil/pkg/virtualizers/logging"
-	"github.com/vorteil/vorteil/pkg/vcfg"
 )
 
 var codeBlockToLookIP = `
@@ -24,18 +24,6 @@ Windows Hypervisor Platform accelerator is operational
 2020/05/27 21:17:53 Binding port: 8888
 `
 
-func TestLookForIp(t *testing.T) {
-	v := &Virtualizer{
-		serialLogger: logger.NewLogger(2048),
-	}
-
-	v.serialLogger.Write([]byte(codeBlockToLookIP))
-
-	address := v.lookForIP()
-	if address != "10.0.2.15" {
-		t.Errorf("unable to retrieve correct IP was expecting %s but got %s", "10.0.2.15", address)
-	}
-}
 func TestLoggerAndSerial(t *testing.T) {
 	v := &Virtualizer{
 		virtLogger:   logger.NewLogger(2048),

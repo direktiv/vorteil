@@ -69,8 +69,7 @@ func TestNetworkArgs(t *testing.T) {
 		Networks: vcfgI,
 	}
 	v := &Virtualizer{
-		virtLogger: logger.NewLogger(2048),
-		config:     vcfg,
+		config: vcfg,
 	}
 
 	ni := v.Routes()

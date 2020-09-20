@@ -1,3 +1,7 @@
+/**
+ * SPDX-License-Identifier: Apache-2.0
+ * Copyright 2020 vorteil.io Pty Ltd
+ */
 package vconvert
 
 import (
@@ -8,17 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/docker/distribution"
-	v1 "github.com/google/go-containerregistry/pkg/v1"
-	"github.com/heroku/docker-registry-client/registry"
-	"github.com/mitchellh/go-homedir"
-	log "github.com/sirupsen/logrus"
-	"github.com/spf13/viper"
-	"github.com/vbauerster/mpb"
-)
-
-const (
-	configFileName = "vconvert.yaml"
+	"github.com/vorteil/vorteil/pkg/elog"
 )
 
 var (
@@ -28,39 +22,8 @@ var (
   vcfgs = ["default.vcfg"]`
 
 	// ignore folders
-	folders = []string{"dev", "proc", "sys", "boot", "media", "mnt"}
+	folders = []string{"dev", "proc", "sys", "boot", "media", "mnt", "tmp"}
 )
-
-// reads in config file, uses defaults if not found
-func initConfig(cfgFile string) {
-
-	if cfgFile != "" {
-		viper.SetConfigFile(cfgFile)
-	} else {
-		home, err := homedir.Dir()
-		if err != nil {
-			goto loadDefaults
-		}
-		viper.AddConfigPath(home)
-		viper.SetConfigName(configFileName)
-	}
-
-loadDefaults:
-	if err := viper.ReadInConfig(); err == nil {
-		log.Debugf("using config file: %s", viper.ConfigFileUsed())
-	} else {
-		if err != nil {
-			log.Debugf("%s\n", err.Error())
-		}
-		log.Debugf("using default repositories")
-		viper.SetDefault("repositories",
-			map[string]interface{}{
-				"docker.io":         map[string]interface{}{"url": "https://registry-1.docker.io"},
-				"mcr.microsoft.com": map[string]interface{}{"url": "https://mcr.microsoft.com"},
-				"gcr.io":            map[string]interface{}{"url": "https://gcr.io"},
-			})
-	}
-}
 
 // write function to write out tar layers
 func writeFile(name string, r io.Reader) error {
@@ -88,40 +51,8 @@ func writeFile(name string, r io.Reader) error {
 	return nil
 }
 
-// if bars are used, this generates the name of the bar displayed
-func barName(layer interface{}, nr int) string {
-	digest := ""
-	switch layer.(type) {
-	case v1.Layer:
-		d, err := layer.(v1.Layer).Digest()
-		if err == nil {
-			digest = d.Hex[7:15]
-		}
-		return fmt.Sprintf("layer %d (%s): ", nr, digest)
-	default:
-		digest = fmt.Sprintf("%s", layer.(distribution.Descriptor).Digest[7:15])
-	}
-	return fmt.Sprintf("layer %d (%s): ", nr, digest)
-}
-
-func fetchRepoConfig(repo string) (map[string]interface{}, error) {
-
-	repositoriesMap := viper.Get(configRepo)
-	if repositoriesMap == nil {
-		return nil, fmt.Errorf("No repositories specified")
-	}
-
-	repositoryMap := repositoriesMap.(map[string]interface{})[repo]
-
-	if repositoryMap == nil {
-		return nil, fmt.Errorf("No repository with name %s specified", repo)
-	}
-
-	return repositoryMap.(map[string]interface{}), nil
-}
-
 // findBinary tries to find the executable in the expanded container image
-func findBinary(name string, env []string, cwd string, targetDir string) (string, error) {
+func findBinary(name string, env []string, cwd string, targetDir string, log elog.View) (string, error) {
 
 	if strings.HasPrefix(name, "./") {
 		abs, err := filepath.Abs(name)
@@ -144,7 +75,11 @@ func findBinary(name string, env []string, cwd string, targetDir string) (string
 
 	// absolute
 	if strings.HasPrefix(name, "/") {
-		return name, nil
+		fp := filepath.Join(targetDir, name)
+		if _, err := os.Stat(fp); err == nil {
+			return name, nil
+		}
+		return "", fmt.Errorf("can not find binary %s", name)
 	}
 
 	for _, e := range env {
@@ -168,7 +103,7 @@ func findBinary(name string, env []string, cwd string, targetDir string) (string
 	return "", fmt.Errorf("can not find binary %s", name)
 }
 
-func prepDirectories(targetDir string) (string, error) {
+func checkDirectory(targetDir string) error {
 
 	// check if it exists and empty
 	if _, err := os.Stat(targetDir); err != nil {
@@ -177,77 +112,12 @@ func prepDirectories(targetDir string) (string, error) {
 
 	fi, err := ioutil.ReadDir(targetDir)
 	if err != nil {
-		return "", err
+		return err
 	}
 	if len(fi) > 0 {
-		return "", fmt.Errorf("target directory %s not empty", targetDir)
+		return fmt.Errorf("target directory %s not empty", targetDir)
 	}
 
-	// create temporary extract folder
-	dir, err := ioutil.TempDir(os.TempDir(), "image")
-	if err != nil {
-		return "", err
-	}
-
-	return dir, nil
-
-}
-
-func distributor(layers []interface{}, p *mpb.Progress) {
-
-	log.Infof("downloading %d layers", len(layers))
-	for i, layer := range layers {
-
-		job := job{
-			layer:  layer,
-			number: i,
-		}
-
-		// if !elog.IsJSON {
-		// 	job.bar = p.AddBar(int64(layer.(distribution.Descriptor).Size),
-		// 		mpb.PrependDecorators(
-		// 			decor.Name(barName(layer, i)),
-		// 		),
-		// 		mpb.AppendDecorators(
-		// 			decor.OnComplete(
-		// 				decor.CountersKiloByte("%.1f / %.1f"), "downloaded",
-		// 			),
-		// 		),
-		// 	)
-		// }
-		jobs <- job
-	}
-
-	close(jobs)
-}
-
-func worker(dir, image string, registry *registry.Registry) {
-
-	// for {
-	// 	job, opened := <-jobs
-	// 	if !opened {
-	// 		break
-	// 	}
-
-	// 	layer := job.layer.(distribution.Descriptor)
-	// 	reader, err := registry.DownloadBlob(image, layer.Digest)
-	// 	if err != nil {
-	// 		log.Fatalf("can not download layer %s: %s", layer.Digest, err.Error())
-	// 		os.Exit(1)
-	// 	}
-
-	// 	// if we use json we don't show bars
-	// 	// var proxyReader io.ReadCloser
-	// 	// if !elog.IsJSON {
-	// 	// 	proxyReader = job.bar.ProxyReader(reader)
-	// 	// } else {
-	// 	// 	log.Infof("downloading layer %s (%s)", image, bytefmt.ByteSize((uint64)(job.layer.(distribution.Descriptor).Size)))
-	// 	// 	proxyReader = reader
-	// 	// }
-	// 	// defer proxyReader.Close()
-
-	// 	writeFile(fmt.Sprintf(tarExpression, dir, layer.Digest[7:15]), proxyReader)
-	// 	wg.Done()
-	// }
+	return nil
 
 }

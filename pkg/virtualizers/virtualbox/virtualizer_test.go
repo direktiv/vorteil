@@ -60,18 +60,6 @@ func TestType(t *testing.T) {
 	}
 }
 
-func TestLookForIp(t *testing.T) {
-	v := &Virtualizer{
-		serialLogger: logger.NewLogger(2048),
-	}
-
-	v.serialLogger.Write([]byte(codeBlockToLookIP))
-
-	address := v.lookForIP()
-	if address != "10.0.2.15" {
-		t.Errorf("unable to retrieve correct IP was expecting %s but got %s", "10.0.2.15", address)
-	}
-}
 func TestLoggerAndSerial(t *testing.T) {
 	v := &Virtualizer{
 		serialLogger: logger.NewLogger(2048),
@@ -79,7 +67,7 @@ func TestLoggerAndSerial(t *testing.T) {
 
 	seriall := v.Serial()
 
-	if virtl == nil || seriall == nil {
+	if seriall == nil {
 		t.Errorf("unable to get loggers from virtualizer")
 	}
 }

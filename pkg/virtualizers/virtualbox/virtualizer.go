@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/thanhpk/randstr"
+	"github.com/vorteil/vorteil/pkg/elog"
 	"github.com/vorteil/vorteil/pkg/vcfg"
 	"github.com/vorteil/vorteil/pkg/vio"
 	"github.com/vorteil/vorteil/pkg/virtualizers"
@@ -35,9 +36,8 @@ type Virtualizer struct {
 	networkDevice string         // type of network device to use
 	folder        string         // folder to store vm details
 	disk          *os.File       // disk of the machine
-	virtLogger    *logger.Logger // logs for the virtualizing process
 	serialLogger  *logger.Logger // serial logger for serial output of app
-
+	logger        elog.Logger    // logger for the CLI
 	// subServer *graph.Graph
 	routes []virtualizers.NetworkInterface // api network interface that displays ports
 	config *vcfg.VCFG                      // config for the vm
@@ -45,21 +45,6 @@ type Virtualizer struct {
 
 	vmdrive string // store disks in this directory
 
-}
-
-// log writes a log line to the logger and adds prefix and suffix depending on what type of log was sent.
-func (v *Virtualizer) log(logType string, text string, args ...interface{}) {
-	switch logType {
-	case "error":
-		text = fmt.Sprintf("%s%s%s\n", "\033[31m", text, "\033[0m")
-	case "warning":
-		text = fmt.Sprintf("%s%s%s\n", "\033[33m", text, "\033[0m")
-	case "info":
-		text = fmt.Sprintf("%s%s%s\n", "\u001b[37;1m", text, "\u001b[0m")
-	default:
-		text = fmt.Sprintf("%s\n", text)
-	}
-	v.virtLogger.Write([]byte(fmt.Sprintf(text, args...)))
 }
 
 // Type returns the type of virtualizer
@@ -102,7 +87,7 @@ func (v *Virtualizer) getState() (string, error) {
 
 // Stop stops the virtual machine
 func (v *Virtualizer) Stop() error {
-	v.log("debug", "Stopping VM")
+	v.logger.Debugf("Stopping VM")
 	if v.state != virtualizers.Ready {
 		v.state = virtualizers.Changing
 		err := v.execute(exec.Command("VBoxManage", "controlvm", v.name, "acpipowerbutton"))
@@ -123,7 +108,7 @@ func (v *Virtualizer) Stop() error {
 			}
 			if count > 10 {
 				v.state = virtualizers.Broken
-				v.log("error", "Unable to stop virtual machine within 10 seconds powering off...")
+				v.logger.Errorf("Unable to stop virtual machine within 10 seconds powering off...")
 
 				err = v.ForceStop()
 				if err != nil {
@@ -142,7 +127,7 @@ func (v *Virtualizer) Stop() error {
 
 // Start starts the virtual machine
 func (v *Virtualizer) Start() error {
-	v.log("debug", "Starting VM")
+	v.logger.Debugf("Starting VM")
 	switch v.State() {
 	case "ready":
 		v.state = virtualizers.Changing
@@ -160,7 +145,7 @@ func (v *Virtualizer) Start() error {
 					if strings.Contains(err.Error(), "is already locked by a session (or being locked or unlocked)") {
 						return startVM()
 					}
-					v.log("error", "Error startvm: %v", err)
+					v.logger.Errorf("Error starting vm: %s", err.Error())
 					v.state = virtualizers.Broken
 
 					return err
@@ -170,7 +155,7 @@ func (v *Virtualizer) Start() error {
 			}
 			err := startVM()
 			if err != nil {
-				v.log("error", "Error Starting Virtual Machine: %v", err)
+				v.logger.Errorf("Error starting vm: %s", err.Error())
 				return
 			}
 			if v.networkType != "nat" {
@@ -285,7 +270,7 @@ func (v *Virtualizer) ConvertToVM() interface{} {
 		Networks: v.routes,
 		Kernel:   vm.Kernel,
 		Name:     info.Name,
-		Source:   v.source.(virtualizers.Source),
+		// Source:   v.source.(virtualizers.Source),
 		Summary:  info.Summary,
 		URL:      string(info.URL),
 		Version:  info.Version,
@@ -312,7 +297,7 @@ func (v *Virtualizer) ForceStop() error {
 
 // Close shuts down the virtual machine and cleans up the disk and folders
 func (v *Virtualizer) Close(force bool) error {
-	v.log("debug", "Deleting VM")
+	v.logger.Debugf("Deleting VM")
 	if force && !(v.state == virtualizers.Ready) {
 		err := v.ForceStop()
 		if err != nil {
@@ -415,11 +400,6 @@ func (o *operation) updateStatus(text string) {
 	o.Logs <- text
 }
 
-// Logs returns virtualizer logs. Shows what to execute
-func (v *Virtualizer) Logs() *logger.Logger {
-	return v.virtLogger
-}
-
 // Serial returns the serial logger which contains the serial output of the app.
 func (v *Virtualizer) Serial() *logger.Logger {
 	return v.serialLogger
@@ -433,14 +413,14 @@ func (v *Virtualizer) Prepare(args *virtualizers.PrepareArgs) *virtualizers.Virt
 	v.name = args.Name
 	v.pname = args.PName
 	v.vmdrive = args.VMDrive
-	v.source = args.Source
+	// v.source = args.Source
 	v.config = args.Config
 	v.state = virtualizers.Changing
 	v.created = time.Now()
-	v.virtLogger = logger.NewLogger(2048)
+	v.logger = args.Logger
 	v.serialLogger = logger.NewLogger(2048 * 10)
 
-	v.log("debug", "Preparing VM")
+	v.logger.Debugf("Preparing VM")
 	v.routes = v.Routes()
 
 	op.Logs = make(chan string, 128)
@@ -509,7 +489,7 @@ func (v *Virtualizer) Detach(source string) error {
 // execute is generic wrapping function to run command execs
 func (v *Virtualizer) execute(cmd *exec.Cmd) error {
 	if !strings.Contains(strings.Join(cmd.Args, " "), "showvminfo") {
-		v.log("info", "Executing %s", strings.Join(cmd.Args, " "))
+		v.logger.Infof("Executing %s", strings.Join(cmd.Args, " "))
 	}
 
 	stderr := new(bytes.Buffer)
@@ -534,7 +514,7 @@ func (v *Virtualizer) checkState() {
 		state, err := v.getState()
 		if err != nil {
 			if !strings.Contains(err.Error(), "Could not find a registered machine") {
-				v.log("error", "Getting State: %s", err)
+				v.logger.Errorf("Getting VM State: %s", err.Error())
 			}
 		}
 		if state == "" {
@@ -683,7 +663,7 @@ func (v *Virtualizer) createAndConfigure(diskpath string) error {
 			}
 		}
 		if len(v.routes) != 0 && !hasDefinedPorts {
-			v.log("warning", "Warning VM has network cards but no defined ports")
+			v.logger.Warnf("Warning VM has network cards but no defined ports")
 		}
 	}
 
@@ -766,34 +746,13 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	_, loaded := virtualizers.ActiveVMs.LoadOrStore(o.name, o.Virtualizer)
 	if loaded {
 		returnErr = errors.New("virtual machine already exists")
+		return
 	}
-	// diskPath := filepath.Join(o.folder, fmt.Sprintf("disk%s", ".vmdk"))
-
-	// tempDisk, err := os.Create(diskPath)
-	// if err != nil {
-	// 	o.Virtualizer.log("error", "Error creating temp disk: %v", err)
-	// }
-
-	// _, err = io.Copy(tempDisk, args.Image)
-	// if err != nil {
-	// 	o.Virtualizer.log("error", "Error copying temp disk: %v", err)
-	// }
-
-	// err = tempDisk.Sync()
-	// if err != nil {
-	// 	o.Virtualizer.log("error", "Error syncing disk: %v", err)
-	// }
-
-	// err = tempDisk.Close()
-	// if err != nil {
-	// 	o.Virtualizer.log("error", "Error closing disk: %v", err)
-	// }
-
-	// o.disk = tempDisk
 
 	err = o.createAndConfigure(args.ImagePath)
 	if err != nil {
-		o.Virtualizer.log("error", "Error configuring vm: %v", err)
+		returnErr = fmt.Errorf("Error configuring vm: %s", err.Error())
+		return
 	}
 
 	o.state = "ready"
@@ -804,7 +763,8 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	if args.Start {
 		err = o.Start()
 		if err != nil {
-			o.Virtualizer.log("error", "Error starting vm: %v", err)
+			returnErr = fmt.Errorf("Error starting vm: %s", err.Error())
+			return
 		}
 	}
 

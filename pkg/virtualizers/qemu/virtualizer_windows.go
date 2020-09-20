@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"github.com/mattn/go-shellwords"
 	"github.com/natefinch/npipe"
@@ -20,9 +21,9 @@ import (
 
 // Start creates the virtualmachine and runs it
 func (v *Virtualizer) Start() error {
-
-	v.log("debug", "Starting VM")
+	v.logger.Debugf("Starting VM")
 	v.command = exec.Command(v.command.Args[0], v.command.Args[1:]...)
+	v.command.SysProcAttr = &syscall.SysProcAttr{CreationFlags: syscall.CREATE_NEW_PROCESS_GROUP}
 	switch v.State() {
 	case "ready":
 		v.state = virtualizers.Changing
@@ -35,11 +36,11 @@ func (v *Virtualizer) Start() error {
 		go func() {
 			err = v.command.Start()
 			if err != nil {
-				v.log("error", "Error Command Start: %v", err)
+				v.logger.Errorf("Error executing Start: %s", err.Error())
 			}
 			conn, err := npipe.Dial(fmt.Sprintf("\\\\.\\pipe\\%s", v.id))
 			if err != nil {
-				v.log("error", "Error dialing pipe: %v", err)
+				v.logger.Errorf("Error dialing pipe: %s", err.Error())
 			}
 			v.sock = conn
 			go io.Copy(ioutil.Discard, conn)
@@ -48,12 +49,12 @@ func (v *Virtualizer) Start() error {
 			_, err = v.command.Process.Wait()
 			if err == nil || err.Error() != fmt.Errorf("wait: no child processes").Error() {
 				if err != nil {
-					v.log("error", "Error Command Wait: %v", err)
+					v.logger.Errorf("Error Command Wait: %s", err.Error())
 				}
 				if v.state == virtualizers.Alive {
 					err = v.Stop()
 					if err != nil {
-						v.log("error", "Error stopping vm: %v", err)
+						v.logger.Errorf("Error Stopping VM: %s", err.Error())
 					}
 				}
 			}
@@ -86,12 +87,6 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	o.folder = filepath.Dir(args.ImagePath)
 	o.id = strings.Split(filepath.Base(o.folder), "-")[1]
 
-	// err = os.MkdirAll(o.folder, os.ModePerm)
-	// if err != nil {
-	// 	returnErr = err
-	// 	return
-	// }
-
 	diskpath := filepath.ToSlash(args.ImagePath)
 	diskformat := "raw"
 
@@ -113,9 +108,7 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	}
 	o.command.Args = append(o.command.Args, netArgs...)
 
-	o.Virtualizer.log("info", "Creating QEMU VM with Args: %s", strings.Join(o.command.Args, " "))
-
-	o.log(fmt.Sprintf("Creating Qemu Virtualizer with args: %s\n", strings.Join(o.command.Args, " ")))
+	o.logger.Infof("Creating QEMU VM with Args: %s", strings.Join(o.command.Args, " "))
 
 	o.state = "ready"
 

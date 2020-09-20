@@ -48,7 +48,7 @@ func (a *allocator) Alloc() virtualizers.Virtualizer {
 	return new(Virtualizer)
 }
 
-// DiskAlignment returns the alignment Virtualbox requries to run properly
+// DiskAlignment returns the alignment Virtualbox requires to run properly
 func (a *allocator) DiskAlignment() vcfg.Bytes {
 	return 2 * vcfg.MiB
 }

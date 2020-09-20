@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/mattn/go-shellwords"
+	"github.com/vorteil/vorteil/pkg/elog"
 	"github.com/vorteil/vorteil/pkg/vcfg"
 	"github.com/vorteil/vorteil/pkg/vio"
 	"github.com/vorteil/vorteil/pkg/virtualizers"
@@ -48,7 +49,8 @@ type Virtualizer struct {
 	disk        *os.File    // disk of the machine
 	source      interface{} // details about how the vm was made
 	// loggers
-	virtLogger   *logger.Logger // logs about the provisioning process
+	logger elog.Logger
+	// virtLogger   *logger.Logger // logs about the provisioning process
 	serialLogger *logger.Logger // logs for the serial of the vm
 	// QEMU Specific
 	command *exec.Cmd     // The execute command to start the qemu instance
@@ -78,21 +80,6 @@ func createArgs(cpus uint, memory int, headless bool, diskpath string, diskforma
 	argsCommand += fmt.Sprintf(" -device virtio-scsi-pci,id=scsi -device scsi-hd,drive=hd0 -drive if=none,file=\"%s\",format=%s,id=hd0", diskpath, diskformat)
 
 	return argsCommand
-}
-
-// log writes a log line to the logger and adds prefix and suffix depending on what type of log was sent.
-func (v *Virtualizer) log(logType string, text string, args ...interface{}) {
-	switch logType {
-	case "error":
-		text = fmt.Sprintf("%s%s%s\n", "\033[31m", text, "\033[0m")
-	case "warning":
-		text = fmt.Sprintf("%s%s%s\n", "\033[33m", text, "\033[0m")
-	case "info":
-		text = fmt.Sprintf("%s%s%s\n", "\u001b[37;1m", text, "\u001b[0m")
-	default:
-		text = fmt.Sprintf("%s\n", text)
-	}
-	v.virtLogger.Write([]byte(fmt.Sprintf(text, args...)))
 }
 
 // Type returns the type of virtualizer
@@ -154,11 +141,6 @@ func (o *operation) updateStatus(text string) {
 	o.Logs <- text
 }
 
-// Logs returns virtualizer logs. Shows what to execute
-func (v *Virtualizer) Logs() *logger.Logger {
-	return v.virtLogger
-}
-
 // Serial returns the serial logger which contains the serial output of the app.
 func (v *Virtualizer) Serial() *logger.Logger {
 	return v.serialLogger
@@ -166,7 +148,7 @@ func (v *Virtualizer) Serial() *logger.Logger {
 
 // ForceStop is the same as stop without the sleep so we get no logs and the disk is freed to be deleted quicker.
 func (v *Virtualizer) ForceStop() error {
-	v.log("debug", "Stopping VM")
+	v.logger.Debugf("Stopping VM")
 	if v.state != virtualizers.Ready {
 		v.state = virtualizers.Changing
 
@@ -176,7 +158,7 @@ func (v *Virtualizer) ForceStop() error {
 			}
 			_, err := v.sock.Write([]byte("system_reset\n"))
 			if err != nil && err.Error() != fmt.Errorf("The pipe is being closed.").Error() && err.Error() != fmt.Errorf("write unix @->%s: write: broken pipe", filepath.ToSlash(filepath.Join(v.folder, "monitor.sock"))).Error() {
-				v.log("error", "Error system_powerdown: %v", err)
+				v.logger.Errorf("Error system_powerdown: %s", err.Error())
 				return err
 			}
 
@@ -199,7 +181,7 @@ func (v *Virtualizer) ForceStop() error {
 
 // Stop stops the vm and changes the status back to 'ready'
 func (v *Virtualizer) Stop() error {
-	v.log("debug", "Stopping VM")
+	v.logger.Debugf("Stopping VM")
 	if v.state != virtualizers.Ready {
 		v.state = virtualizers.Changing
 
@@ -209,7 +191,7 @@ func (v *Virtualizer) Stop() error {
 			}
 			_, err := v.sock.Write([]byte("system_powerdown\n"))
 			if err != nil && err.Error() != fmt.Errorf("The pipe is being closed.").Error() && err.Error() != fmt.Errorf("write unix @->%s: write: broken pipe", filepath.ToSlash(filepath.Join(v.folder, "monitor.sock"))).Error() {
-				v.log("error", "Error system_powerdown: %v", err)
+				v.logger.Errorf("Error system_powerdown: %s", err.Error())
 				return err
 			}
 
@@ -237,12 +219,12 @@ func (v *Virtualizer) initLogging() error {
 	var err error
 	v.errPipe, err = v.command.StderrPipe()
 	if err != nil {
-		v.log("error", "Error setting errPipe for command: %v", err)
+		v.logger.Errorf("Error setting Pipe for command: %s", err.Error())
 		return err
 	}
 	v.outPipe, err = v.command.StdoutPipe()
 	if err != nil {
-		v.log("error", "Error setting outPipe for command: %v", err)
+		v.logger.Errorf("Error setting Pipe for command: %s", err.Error())
 		return err
 	}
 
@@ -254,8 +236,7 @@ func (v *Virtualizer) initLogging() error {
 
 // initializeNetworkCards attempts the bind the ports provided and if it fails attempts to bind to a random port and adds it to the arguments for the qemu command.
 func (v *Virtualizer) initializeNetworkCards() ([]string, error) {
-	v.log("debug", "Initializing Network Cards")
-
+	v.logger.Debugf("Initializing Network Cards")
 	var nicArgs string
 	noNic := 0
 	hasDefinedPorts := false
@@ -268,7 +249,7 @@ func (v *Virtualizer) initializeNetworkCards() ([]string, error) {
 		for j, port := range route.HTTP {
 			bind, nr, err := virtualizers.BindPort(v.networkType, protocol, port.Port)
 			if err != nil {
-				v.log("error", "Error binding port: %v", err)
+				v.logger.Errorf("Error binding port: %s", err.Error())
 				return nil, err
 			}
 			v.routes[i].HTTP[j].Address = nr
@@ -278,7 +259,7 @@ func (v *Virtualizer) initializeNetworkCards() ([]string, error) {
 		for j, port := range route.HTTPS {
 			bind, nr, err := virtualizers.BindPort(v.networkType, protocol, port.Port)
 			if err != nil {
-				v.log("error", "Error binding port: %v", err)
+				v.logger.Errorf("Error binding port: %s", err.Error())
 				return nil, err
 			}
 			v.routes[i].HTTPS[j].Address = nr
@@ -288,7 +269,7 @@ func (v *Virtualizer) initializeNetworkCards() ([]string, error) {
 		for j, port := range route.TCP {
 			bind, nr, err := virtualizers.BindPort(v.networkType, protocol, port.Port)
 			if err != nil {
-				v.log("error", "Error binding port: %v", err)
+				v.logger.Errorf("Error binding port: %s", err.Error())
 				return nil, err
 			}
 			v.routes[i].TCP[j].Address = nr
@@ -299,8 +280,7 @@ func (v *Virtualizer) initializeNetworkCards() ([]string, error) {
 			protocol = "udp"
 			bind, nr, err := virtualizers.BindPort(v.networkType, protocol, port.Port)
 			if err != nil {
-				v.log("error", "Error binding port: %v", err)
-
+				v.logger.Errorf("Error binding port: %s", err.Error())
 				return nil, err
 			}
 			v.routes[i].UDP[j].Address = nr
@@ -311,9 +291,8 @@ func (v *Virtualizer) initializeNetworkCards() ([]string, error) {
 	}
 
 	if noNic > 0 && !hasDefinedPorts {
-		v.log("warning", "VM has network cards but no defined ports")
+		v.logger.Warnf("VM has network cards but no defined ports")
 	}
-	v.log("info", "Network Arguments: %s", nicArgs)
 
 	return shellwords.Parse(nicArgs)
 }
@@ -325,7 +304,7 @@ func (v *Virtualizer) State() string {
 
 // Download returns the disk
 func (v *Virtualizer) Download() (vio.File, error) {
-	v.log("debug", "Downloading Disk")
+	v.logger.Debugf("Downloading Disk")
 
 	if !(v.state == virtualizers.Ready) {
 		return nil, fmt.Errorf("the machine must be in a stopped or ready state")
@@ -362,7 +341,7 @@ func (v *Virtualizer) Detach(source string) error {
 
 // Close shuts down the virtual machine and cleans up the disk and folders
 func (v *Virtualizer) Close(force bool) error {
-	v.log("debug", "Deleting VM")
+	v.logger.Debugf("Deleting VM")
 	if force && !(v.state == virtualizers.Ready) {
 		err := v.ForceStop()
 		if err != nil {
@@ -384,7 +363,7 @@ func (v *Virtualizer) Close(force bool) error {
 	// kill process started from exec
 	if runtime.GOOS != "windows" {
 		if v.command.Process != nil {
-			v.log("debug", "Killing Process")
+			v.logger.Debugf("Killing Process")
 			if err := v.command.Process.Kill(); err != nil && !strings.Contains(err.Error(), "process already finished") {
 				return err
 			}
@@ -427,7 +406,7 @@ func (v *Virtualizer) ConvertToVM() interface{} {
 		Kernel:   vm.Kernel,
 		Name:     info.Name,
 		Summary:  info.Summary,
-		Source:   v.source.(virtualizers.Source),
+		// Source:   v.source.(virtualizers.Source),
 		URL:      string(info.URL),
 		Version:  info.Version,
 		Programs: programs,
@@ -448,11 +427,11 @@ func (v *Virtualizer) Prepare(args *virtualizers.PrepareArgs) *virtualizers.Virt
 	v.pname = args.PName
 	v.created = time.Now()
 	v.config = args.Config
-	v.source = args.Source
+	// v.source = args.Source
 	v.vmdrive = args.VMDrive
-	v.virtLogger = logger.NewLogger(2048)
+	v.logger = args.Logger
 	v.serialLogger = logger.NewLogger(2048 * 10)
-	v.log("debug", "Preparing VM")
+	v.logger.Debugf("Preparing VM")
 	v.routes = v.Routes()
 	op.Logs = make(chan string, 128)
 	op.Error = make(chan error, 1)

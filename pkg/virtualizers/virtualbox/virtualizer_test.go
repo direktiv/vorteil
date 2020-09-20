@@ -1,7 +1,6 @@
 package virtualbox
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -42,34 +41,6 @@ func TestInitialize(t *testing.T) {
 		t.Errorf("initialize failed, expected networkType to be %s but got %s", "nat", v.networkType)
 	}
 }
-func TestLogWrite(t *testing.T) {
-	v := &Virtualizer{
-		virtLogger: logger.NewLogger(2048),
-	}
-	exactText := []byte(fmt.Sprintf("%s%s%s\n", "\033[31m", "hello", "\033[0m"))
-	v.log("error", "%s", "hello")
-
-	sub := v.virtLogger.Subscribe()
-
-	var logs []byte
-	var done bool
-	for !done {
-		select {
-		case logdata, more := <-sub.Inbox():
-			if !more {
-				break
-			}
-			logs = append(logs, logdata...)
-		default:
-			done = true
-		}
-	}
-
-	if strings.TrimSpace(string(logs)) != strings.TrimSpace(string(exactText)) {
-		t.Errorf("logging \"hello\" failed, expected \"%v\" but got \"%v\"", strings.TrimSpace(string(exactText)), strings.TrimSpace(string(logs)))
-	}
-
-}
 
 func TestState(t *testing.T) {
 	v := &Virtualizer{
@@ -89,28 +60,14 @@ func TestType(t *testing.T) {
 	}
 }
 
-func TestLookForIp(t *testing.T) {
-	v := &Virtualizer{
-		serialLogger: logger.NewLogger(2048),
-	}
-
-	v.serialLogger.Write([]byte(codeBlockToLookIP))
-
-	address := v.lookForIP()
-	if address != "10.0.2.15" {
-		t.Errorf("unable to retrieve correct IP was expecting %s but got %s", "10.0.2.15", address)
-	}
-}
 func TestLoggerAndSerial(t *testing.T) {
 	v := &Virtualizer{
-		virtLogger:   logger.NewLogger(2048),
 		serialLogger: logger.NewLogger(2048),
 	}
 
-	virtl := v.Logs()
 	seriall := v.Serial()
 
-	if virtl == nil || seriall == nil {
+	if seriall == nil {
 		t.Errorf("unable to get loggers from virtualizer")
 	}
 }
@@ -147,9 +104,8 @@ func TestDownload(t *testing.T) {
 	}
 	defer f.Close()
 	v := &Virtualizer{
-		virtLogger: logger.NewLogger(2048),
-		disk:       f,
-		state:      "ready",
+		disk:  f,
+		state: "ready",
 	}
 
 	file, err := v.Download()
@@ -172,8 +128,7 @@ func TestRoutes(t *testing.T) {
 		Networks: vcfgI,
 	}
 	v := &Virtualizer{
-		virtLogger: logger.NewLogger(2048),
-		config:     vcfg,
+		config: vcfg,
 	}
 
 	ni := v.Routes()

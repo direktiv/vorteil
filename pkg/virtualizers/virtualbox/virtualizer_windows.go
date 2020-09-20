@@ -11,10 +11,10 @@ import (
 
 // initLogging setup the pipe to write serial out from the app.
 func (v *Virtualizer) initLogging() error {
-	v.virtLogger.Write([]byte(fmt.Sprintf("initializing logger...\n")))
+	v.logger.Debugf("Initializing Logger...")
 	conn, err := npipe.Dial(fmt.Sprintf("\\\\.\\pipe\\%s", v.id))
 	if err != nil {
-		v.virtLogger.Write([]byte(fmt.Sprintf("error dialing into pipe: %v\n", err)))
+		v.logger.Errorf("Error dialing into pipe: %s", err.Error())
 		return err
 	}
 	v.sock = conn

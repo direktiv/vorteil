@@ -73,7 +73,7 @@ func TestDiskAlignment(t *testing.T) {
 
 func TestDiskFormat(t *testing.T) {
 	format := Allocator.DiskFormat()
-	exactFormat := vdisk.ImageFormatFixedVHD
+	exactFormat := vdisk.VHDFixedFormat
 	if format != exactFormat {
 		t.Errorf("disk format does not match %v got %v instead", exactFormat, format)
 	}

@@ -1,10 +1,8 @@
 package qemu
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/vorteil/vorteil/pkg/vcfg"
@@ -60,34 +58,7 @@ func TestType(t *testing.T) {
 		t.Errorf("expected %s but got %s", "qemu", typeSt)
 	}
 }
-func TestLogWrite(t *testing.T) {
-	v := &Virtualizer{
-		virtLogger: logger.NewLogger(2048),
-	}
-	exactText := []byte(fmt.Sprintf("%s%s%s\n", "\033[31m", "hello", "\033[0m"))
-	v.log("error", "%s", "hello")
 
-	sub := v.virtLogger.Subscribe()
-
-	var logs []byte
-	var done bool
-	for !done {
-		select {
-		case logdata, more := <-sub.Inbox():
-			if !more {
-				break
-			}
-			logs = append(logs, logdata...)
-		default:
-			done = true
-		}
-	}
-
-	if strings.TrimSpace(string(logs)) != strings.TrimSpace(string(exactText)) {
-		t.Errorf("logging \"hello\" failed, expected \"%v\" but got \"%v\"", strings.TrimSpace(string(exactText)), strings.TrimSpace(string(logs)))
-	}
-
-}
 func TestNetworkArgs(t *testing.T) {
 	httpArr := []string{"8888"}
 	exactNetArgs := []string{"-netdev", "user,id=network0,hostfwd=tcp::-:8888", "-device", "virtio-net-pci,netdev=network0,id=virtio0,mac=26:10:05:00:00:0a"}
@@ -135,9 +106,8 @@ func TestDownload(t *testing.T) {
 	}
 	defer f.Close()
 	v := &Virtualizer{
-		virtLogger: logger.NewLogger(2048),
-		disk:       f,
-		state:      "ready",
+		disk:  f,
+		state: "ready",
 	}
 
 	file, err := v.Download()
@@ -160,8 +130,7 @@ func TestRoutes(t *testing.T) {
 		Networks: vcfgI,
 	}
 	v := &Virtualizer{
-		virtLogger: logger.NewLogger(2048),
-		config:     vcfg,
+		config: vcfg,
 	}
 
 	ni := v.Routes()

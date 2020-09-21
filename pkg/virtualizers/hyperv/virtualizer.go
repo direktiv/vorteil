@@ -105,6 +105,43 @@ func (v *Virtualizer) Stop() error {
 	return nil
 }
 
+func (v *Virtualizer) startVMCommand() error {
+	cmd := exec.Command(virtualizers.Powershell, "Start-VM", "-Name", v.name)
+	output, err := v.execute(cmd)
+	if err != nil {
+		v.logger.Errorf("Error Start-VM: %v", err)
+		return err
+	}
+
+	if len(output) != 0 {
+		v.logger.Infof("%s", output)
+	}
+
+	err = v.initLogs()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *Virtualizer) headlessCheck() error {
+	if !v.headless {
+		vmconnect, err := exec.LookPath("vmconnect.exe")
+		if err != nil {
+			return fmt.Errorf("Error finding vmconnect: %v", err)
+		}
+		// goroutine this as it hangs the processes forking a program on windows to open connection with vm
+		go func() {
+			cmd := exec.Command(vmconnect, "localhost", v.name)
+			_, err := v.execute(cmd)
+			if err != nil {
+				v.logger.Errorf("Error VMConnect: %v", err)
+			}
+		}()
+	}
+	return nil
+}
+
 // Start creates the virtualmachine and runs it
 func (v *Virtualizer) Start() error {
 	v.logger.Debugf("Starting VM")
@@ -112,18 +149,7 @@ func (v *Virtualizer) Start() error {
 	case "ready":
 		v.state = virtualizers.Changing
 
-		cmd := exec.Command(virtualizers.Powershell, "Start-VM", "-Name", v.name)
-		output, err := v.execute(cmd)
-		if err != nil {
-			v.logger.Errorf("Error Start-VM: %v", err)
-			return err
-		}
-
-		if len(output) != 0 {
-			v.logger.Infof("%s", output)
-		}
-
-		err = v.initLogs()
+		err := v.startVMCommand()
 		if err != nil {
 			return err
 		}
@@ -134,21 +160,10 @@ func (v *Virtualizer) Start() error {
 		go func() {
 			v.routes = util.LookForIP(v.serialLogger, v.routes)
 		}()
-		// go v.checkVMList()
 
-		if !v.headless {
-			vmconnect, err := exec.LookPath("vmconnect.exe")
-			if err != nil {
-				return fmt.Errorf("Error finding vmconnect: %v", err)
-			}
-			// goroutine this as it hangs the processes forking a program on windows to open connection with vm
-			go func() {
-				cmd = exec.Command(vmconnect, "localhost", v.name)
-				_, err := v.execute(cmd)
-				if err != nil {
-					v.logger.Errorf("Error VMConnect: %v", err)
-				}
-			}()
+		err = v.headlessCheck()
+		if err != nil {
+			return err
 		}
 	default:
 		return fmt.Errorf("vm not in a state to be started currently in: %s", v.State())
@@ -177,7 +192,6 @@ func (v *Virtualizer) Details() (string, string, string, []virtualizers.NetworkI
 // Close shuts down the virtual machine and cleans up the disk and folders
 func (v *Virtualizer) Close(force bool) error {
 	v.logger.Debugf("Deleting VM")
-	// if !(force) {
 	if !(v.state == virtualizers.Ready) {
 		err := v.Stop()
 		if err != nil {
@@ -187,7 +201,6 @@ func (v *Virtualizer) Close(force bool) error {
 			}
 		}
 	}
-	// }
 	v.state = virtualizers.Changing
 
 	cmd := exec.Command(virtualizers.Powershell, "Remove-VM", "-Name", v.name, "-Force")
@@ -312,101 +325,101 @@ func (v *Virtualizer) Serial() *logger.Logger {
 	return v.serialLogger
 }
 
-func (v *Virtualizer) GeneratePowershell(source string) error {
-	name := filepath.Base(v.folder)
-	err := os.MkdirAll(filepath.Join(source), 0777)
-	if err != nil {
-		return err
-	}
-	err = os.Rename(v.folder, filepath.Join(source, name))
-	if err != nil {
-		return err
-	}
-	v.config.VM.RAM.Align(vcfg.MiB * 2)
+// func (v *Virtualizer) GeneratePowershell(source string) error {
+// 	name := filepath.Base(v.folder)
+// 	err := os.MkdirAll(filepath.Join(source), 0777)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	err = os.Rename(v.folder, filepath.Join(source, name))
+// 	if err != nil {
+// 		return err
+// 	}
+// 	v.config.VM.RAM.Align(vcfg.MiB * 2)
 
-	size := fmt.Sprintf("%v%s", v.config.VM.RAM.Units(vcfg.MiB), "MB")
+// 	size := fmt.Sprintf("%v%s", v.config.VM.RAM.Units(vcfg.MiB), "MB")
 
-	var args []string
-	// New-VM
-	args = append(args, fmt.Sprintf("New-VM -Name %s -BootDevice VHD -VHDPath %s -Path %s -Generation 1 -SwitchName \"%s\"",
-		v.name, filepath.Join(source, name, fmt.Sprintf("disk.vhd")), filepath.Join(source, name), v.switchName))
+// 	var args []string
+// 	// New-VM
+// 	args = append(args, fmt.Sprintf("New-VM -Name %s -BootDevice VHD -VHDPath %s -Path %s -Generation 1 -SwitchName \"%s\"",
+// 		v.name, filepath.Join(source, name, fmt.Sprintf("disk.vhd")), filepath.Join(source, name), v.switchName))
 
-	// Set-VMMemory
-	args = append(args, fmt.Sprintf("Set-VMMemory -VMName %s -DynamicMemoryEnabled 0 -Startupbytes %s", v.name, size))
+// 	// Set-VMMemory
+// 	args = append(args, fmt.Sprintf("Set-VMMemory -VMName %s -DynamicMemoryEnabled 0 -Startupbytes %s", v.name, size))
 
-	// Add-VMNetworkAdapter
-	if len(v.routes) > 1 {
-		for i := 1; i < len(v.routes); i++ {
-			args = append(args, fmt.Sprintf("Add-VMNetworkAdapter -VMName %s -SwitchName \"%s\"", v.name, v.switchName))
-		}
-	}
+// 	// Add-VMNetworkAdapter
+// 	if len(v.routes) > 1 {
+// 		for i := 1; i < len(v.routes); i++ {
+// 			args = append(args, fmt.Sprintf("Add-VMNetworkAdapter -VMName %s -SwitchName \"%s\"", v.name, v.switchName))
+// 		}
+// 	}
 
-	// Set-VMProcessor
-	args = append(args, fmt.Sprintf("Set-VMProcessor -VMName %s -Count %s -ExposeVirtualizationExtensions $true", v.name, strconv.Itoa(int(v.config.VM.CPUs))))
+// 	// Set-VMProcessor
+// 	args = append(args, fmt.Sprintf("Set-VMProcessor -VMName %s -Count %s -ExposeVirtualizationExtensions $true", v.name, strconv.Itoa(int(v.config.VM.CPUs))))
 
-	// Start-VM
-	args = append(args, fmt.Sprintf("Start-VM -Name %s", v.name))
+// 	// Start-VM
+// 	args = append(args, fmt.Sprintf("Start-VM -Name %s", v.name))
 
-	// vmconnect gui to go with command
-	vmconnect, err := exec.LookPath("vmconnect.exe")
-	if err != nil {
-		return fmt.Errorf("error finding vmconnect: %v", err)
-	}
-	args = append(args, fmt.Sprintf("%s localhost %s", vmconnect, v.name))
+// 	// vmconnect gui to go with command
+// 	vmconnect, err := exec.LookPath("vmconnect.exe")
+// 	if err != nil {
+// 		return fmt.Errorf("error finding vmconnect: %v", err)
+// 	}
+// 	args = append(args, fmt.Sprintf("%s localhost %s", vmconnect, v.name))
 
-	// Create stop script
-	stop, err := os.Create(filepath.Join(source, name, "stop.ps1"))
-	if err != nil {
-		return err
-	}
+// 	// Create stop script
+// 	stop, err := os.Create(filepath.Join(source, name, "stop.ps1"))
+// 	if err != nil {
+// 		return err
+// 	}
 
-	// Stop-VM
-	stop.Write([]byte(fmt.Sprintf("Stop-VM -Name %s\n", v.name)))
+// 	// Stop-VM
+// 	stop.Write([]byte(fmt.Sprintf("Stop-VM -Name %s\n", v.name)))
 
-	// Remove-VM
-	stop.Write([]byte(fmt.Sprintf("Remove-VM -Name %s -Force", v.name)))
+// 	// Remove-VM
+// 	stop.Write([]byte(fmt.Sprintf("Remove-VM -Name %s -Force", v.name)))
 
-	// Create start script
-	f, err := os.Create(filepath.Join(source, name, "start.ps1"))
-	if err != nil {
-		return err
-	}
+// 	// Create start script
+// 	f, err := os.Create(filepath.Join(source, name, "start.ps1"))
+// 	if err != nil {
+// 		return err
+// 	}
 
-	f.Write([]byte(strings.Join(args, "\n")))
-	defer f.Close()
-	defer stop.Close()
-	return nil
-}
+// 	f.Write([]byte(strings.Join(args, "\n")))
+// 	defer f.Close()
+// 	defer stop.Close()
+// 	return nil
+// }
 
 // Detach removes vm from active vm list
-func (v *Virtualizer) Detach(source string) error {
-	if v.state != virtualizers.Ready {
-		return errors.New("virtual machine must be in a ready state to detach")
-	}
+// func (v *Virtualizer) Detach(source string) error {
+// 	if v.state != virtualizers.Ready {
+// 		return errors.New("virtual machine must be in a ready state to detach")
+// 	}
 
-	// clean up from hyper-v
-	cmd := exec.Command(virtualizers.Powershell, "Remove-VM", "-Name", v.name, "-Force")
-	_, err := v.execute(cmd)
-	if err != nil {
-		v.logger.Errorf("Error Remove-VM: %v", err)
-	}
-	v.state = virtualizers.Deleted
+// 	// clean up from hyper-v
+// 	cmd := exec.Command(virtualizers.Powershell, "Remove-VM", "-Name", v.name, "-Force")
+// 	_, err := v.execute(cmd)
+// 	if err != nil {
+// 		v.logger.Errorf("Error Remove-VM: %v", err)
+// 	}
+// 	v.state = virtualizers.Deleted
 
-	v.disk.Close()
-	if v.sock != nil {
+// 	v.disk.Close()
+// 	if v.sock != nil {
 
-		v.sock.Close()
-	}
+// 		v.sock.Close()
+// 	}
 
-	err = v.GeneratePowershell(source)
-	if err != nil {
-		return err
-	}
+// 	err = v.GeneratePowershell(source)
+// 	if err != nil {
+// 		return err
+// 	}
 
-	virtualizers.ActiveVMs.Delete(v.name)
+// 	virtualizers.ActiveVMs.Delete(v.name)
 
-	return nil
-}
+// 	return nil
+// }
 
 // Prepare prepares the virtualizer with the appropriate fields to run the virtual machine
 func (v *Virtualizer) Prepare(args *virtualizers.PrepareArgs) *virtualizers.VirtualizeOperation {
@@ -440,45 +453,13 @@ func (v *Virtualizer) Prepare(args *virtualizers.PrepareArgs) *virtualizers.Virt
 	return o
 }
 
-// prepare sets the fields and arguments to spawn the virtual machine
-func (o *operation) prepare(args *virtualizers.PrepareArgs) {
-	var returnErr error
-
-	o.updateStatus(fmt.Sprintf("Preparing hyperv files..."))
-	defer func() {
-		if returnErr != nil {
-			o.logger.Errorf("Error Preparing VM: %v", returnErr)
-		}
-		o.finished(returnErr)
-	}()
-	o.name = args.Name
-	o.folder = filepath.Dir(args.ImagePath)
-	o.id = strings.Split(filepath.Base(o.folder), "-")[1]
-
-	_, loaded := virtualizers.ActiveVMs.LoadOrStore(o.name, o.Virtualizer)
-	if loaded {
-		returnErr = errors.New("virtual machine already exists")
-	}
-
-	o.config.VM.RAM.Align(vcfg.MiB * 2)
-
-	size := fmt.Sprintf("%v%s", o.config.VM.RAM.Units(vcfg.MiB), "MB")
-
-	cmd := exec.Command(virtualizers.Powershell, "New-VM", "-Name", o.name,
-		"-BootDevice", "VHD", "-VHDPath", filepath.ToSlash(args.ImagePath), "-Path", o.folder, "-Generation", "1", "-SwitchName", fmt.Sprintf("\"%s\"", o.switchName))
+func (o *operation) setVMDetails(size string) error {
+	// set vm memory
+	cmd := exec.Command(virtualizers.Powershell, "Set-VMMemory", "-VMName", o.name, "-DynamicMemoryEnabled", "0", "-StartupBytes", size)
 	output, err := o.execute(cmd)
 	if err != nil {
-		o.logger.Errorf("Error New-VM: %v", err)
-	}
-	if len(output) != 0 {
-		o.logger.Errorf("%s", output)
-	}
-
-	// set vm memory
-	cmd = exec.Command(virtualizers.Powershell, "Set-VMMemory", "-VMName", o.name, "-DynamicMemoryEnabled", "0", "-StartupBytes", size)
-	output, err = o.execute(cmd)
-	if err != nil {
 		o.logger.Errorf("Error Set-VMMemory: %v", err)
+		return err
 	}
 	if len(output) != 0 {
 		o.logger.Infof("%s", output)
@@ -491,6 +472,7 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 			output, err = o.execute(cmd)
 			if err != nil {
 				o.logger.Errorf("Error Adding VMNetwork Adapter: %v", err)
+				return err
 			}
 			if len(output) != 0 {
 				o.logger.Infof("%s", output)
@@ -502,6 +484,7 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	output, err = o.execute(cmd)
 	if err != nil {
 		o.logger.Errorf("Error Set-VMProcessor: %v", err)
+		return err
 	}
 	if len(output) != 0 {
 		o.logger.Infof("%s", output)
@@ -513,9 +496,56 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	output, err = o.execute(cmd)
 	if err != nil {
 		o.logger.Errorf("error", "Error Set-VMComPort: %v", err)
+		return err
 	}
 	if len(output) != 0 {
 		o.logger.Infof("info", "%s", output)
+	}
+	return nil
+}
+
+// prepare sets the fields and arguments to spawn the virtual machine
+func (o *operation) prepare(args *virtualizers.PrepareArgs) {
+	var returnErr error
+
+	o.updateStatus(fmt.Sprintf("Preparing hyperv files..."))
+	defer func() {
+		if returnErr != nil {
+			o.logger.Errorf("Error Preparing VM: %v", returnErr)
+		}
+		o.finished(returnErr)
+	}()
+
+	o.name = args.Name
+	o.folder = filepath.Dir(args.ImagePath)
+	o.id = strings.Split(filepath.Base(o.folder), "-")[1]
+
+	_, loaded := virtualizers.ActiveVMs.LoadOrStore(o.name, o.Virtualizer)
+	if loaded {
+		returnErr = errors.New("virtual machine already exists")
+		return
+	}
+
+	o.config.VM.RAM.Align(vcfg.MiB * 2)
+
+	size := fmt.Sprintf("%v%s", o.config.VM.RAM.Units(vcfg.MiB), "MB")
+
+	cmd := exec.Command(virtualizers.Powershell, "New-VM", "-Name", o.name,
+		"-BootDevice", "VHD", "-VHDPath", filepath.ToSlash(args.ImagePath), "-Path", o.folder, "-Generation", "1", "-SwitchName", fmt.Sprintf("\"%s\"", o.switchName))
+	output, err := o.execute(cmd)
+	if err != nil {
+		o.logger.Errorf("Error New-VM: %v", err)
+		returnErr = err
+		return
+	}
+	if len(output) != 0 {
+		o.logger.Infof("%s", output)
+	}
+
+	err = o.setVMDetails(size)
+	if err != nil {
+		returnErr = err
+		return
 	}
 
 	o.state = "ready"
@@ -524,6 +554,7 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 		err = o.Start()
 		if err != nil {
 			returnErr = err
+			return
 		}
 	}
 

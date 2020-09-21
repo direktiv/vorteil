@@ -774,7 +774,7 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	}
 	resp, err := http.Post("http://localhost:7476/", "application/json", bytes.NewBuffer(cdm))
 	if err != nil {
-		returnErr = errors.New("Run ./sudo firecracker-setup for the listener")
+		returnErr = errors.New("Run 'sudo vorteil firecracker-setup' for the listener")
 		return
 	}
 

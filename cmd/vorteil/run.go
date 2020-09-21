@@ -344,7 +344,6 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG) error {
 			decompile(diskpath, flagRecord)
 		}
 		virt.Close(false)
-
 	}()
 
 	for {

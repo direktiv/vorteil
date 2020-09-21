@@ -137,7 +137,6 @@ type Manager interface {
 	Get(ctx context.Context, version CalVer) (*ManagedBundle, error)
 	List(ctx context.Context) (List, error)
 	Latest() (string, error)
-	Sync(ctx context.Context) error
 }
 
 //
@@ -248,10 +247,6 @@ func (mgr *LocalManager) List(ctx context.Context) (List, error) {
 	return list, nil
 }
 
-func (mgr *LocalManager) Sync(ctx context.Context) error {
-	return nil
-}
-
 // Close ..
 func (mgr *LocalManager) Close() error {
 	return nil
@@ -302,10 +297,6 @@ func NewRemoteManager(url, dir string) (*RemoteManager, error) {
 	}
 	go mgr.poll()
 	return mgr, nil
-}
-
-func (mgr *RemoteManager) Sync(ctx context.Context) error {
-	return mgr.pollOnce(ctx)
 }
 
 func (mgr *RemoteManager) pollOnce(ctx context.Context) error {
@@ -637,13 +628,6 @@ func (mgr *RemoteManager) Get(ctx context.Context, version CalVer) (*ManagedBund
 // List ..
 func (mgr *RemoteManager) List(ctx context.Context) (List, error) {
 
-	if len(mgr.cache) == 0 {
-		err := mgr.Sync(ctx)
-		if err != nil {
-			return nil, err
-		}
-	}
-
 	mgr.lock.RLock()
 	defer mgr.lock.RUnlock()
 
@@ -700,26 +684,6 @@ func (mgr *CompoundManager) Get(ctx context.Context, version CalVer) (*ManagedBu
 	}
 
 	return b, nil
-}
-
-func (mgr *CompoundManager) Sync(ctx context.Context) error {
-	var wg sync.WaitGroup
-	var e error
-	wg.Add(len(mgr.mgrs))
-	for _, m := range mgr.mgrs {
-		go func(m Manager) {
-			err := m.Sync(ctx)
-			if e != nil {
-				e = err
-			}
-			wg.Done()
-		}(m)
-	}
-	wg.Wait()
-	if e != nil {
-		return e
-	}
-	return nil
 }
 
 // List ..

@@ -16,6 +16,7 @@ type FSCompiler interface {
 	AddFile(path string, r io.ReadCloser, size int64, force bool) error
 	IncreaseMinimumFreeSpace(space int64)
 	SetMinimumInodes(inodes int64)
+	SetMinimumInodesPer64MiB(inodes int64)
 	IncreaseMinimumInodes(inodes int64)
 	Commit(ctx context.Context) error
 	MinimumSize() int64

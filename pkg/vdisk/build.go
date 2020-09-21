@@ -63,6 +63,7 @@ func Build(ctx context.Context, w io.WriteSeeker, args *BuildArgs) error {
 		},
 		FSCompiler: ext.NewCompiler(&ext.CompilerArgs{
 			FileTree: args.PackageReader.FS(),
+			Logger:   args.Logger,
 		}),
 		VCFG:   cfg,
 		Logger: log,

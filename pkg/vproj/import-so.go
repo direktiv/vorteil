@@ -24,6 +24,9 @@ import (
 const (
 	DynamicLinkerConfig = "/etc/ld.so.conf"
 	WindowsWSLPrefix    = "\\\\wsl$\\Ubuntu-18.04"
+	DefaultLinuxUserLibPath = "/usr/lib"
+	DefaultLinuxLibPath = "/lib"
+
 )
 
 var prefix = ""
@@ -214,8 +217,8 @@ func (isoOp *importSharedObjectsOperation) listDependencies(fpath string) ([]str
 	if err != nil {
 		return nil, nil, err
 	}
-	paths = append(paths, filepath.Join(prefix, "/lib"))
-	paths = append(paths, filepath.Join(prefix, "/usr/lib"))
+	paths = append(paths, filepath.Join(prefix, DefaultLinuxLibPath))
+	paths = append(paths, filepath.Join(prefix, DefaultLinuxUserLibPath))
 
 	fn := func(lib string) (string, error) {
 		for _, sp := range paths {
@@ -246,7 +249,7 @@ func (isoOp *importSharedObjectsOperation) listDependencies(fpath string) ([]str
 					linuxPath := filepath.ToSlash(strings.TrimPrefix(sp, prefix))
 					target, err := ReadLink(linuxPath)
 					if err != nil {
-						return "", fmt.Errorf("unable to readlink dependency: %w", err)
+						return "", errorDependencyReadlink(err)
 					}
 					if strings.HasPrefix(target, "/") {
 						target = filepath.Join(prefix, target)
@@ -255,10 +258,10 @@ func (isoOp *importSharedObjectsOperation) listDependencies(fpath string) ([]str
 					}
 					l, err = elf.Open(target)
 					if err != nil {
-						return "", fmt.Errorf("unable to scan candidate dependency: %w", err)
+						return "", errorDependencyScan(err)
 					}
 				} else {
-					return "", fmt.Errorf("unable to scan candidate dependency: %w", err)
+					return "", errorDependencyScan(err)
 				}
 			}
 			defer l.Close()
@@ -334,8 +337,8 @@ func (isoOp *importSharedObjectsOperation) initLDPATHS() error {
 	}
 
 	// Append Common Linux Lib Paths
-	isoOp.ldPATHS = append(isoOp.ldPATHS, filepath.Join(prefix, "/lib"))
-	isoOp.ldPATHS = append(isoOp.ldPATHS, filepath.Join(prefix, "/usr/lib"))
+	isoOp.ldPATHS = append(isoOp.ldPATHS, filepath.Join(prefix, DefaultLinuxLibPath))
+	isoOp.ldPATHS = append(isoOp.ldPATHS, filepath.Join(prefix, DefaultLinuxUserLibPath))
 
 	return nil
 }
@@ -422,7 +425,7 @@ func (isoOp *importSharedObjectsOperation) findLib(name string, class elf.Class)
 				linuxPath := filepath.ToSlash(strings.TrimPrefix(sp, prefix))
 				target, err := ReadLink(linuxPath)
 				if err != nil {
-					return "", fmt.Errorf("unable to readlink dependency: %w", err)
+					return "", errorDependencyReadlink(err)
 				}
 				if strings.HasPrefix(target, "/") {
 					target = filepath.Join(prefix, target)
@@ -432,10 +435,10 @@ func (isoOp *importSharedObjectsOperation) findLib(name string, class elf.Class)
 
 				l, err = elf.Open(target)
 				if err != nil {
-					return "", fmt.Errorf("unable to scan candidate dependency: %w", err)
+					return "", errorDependencyScan(err)
 				}
 			} else {
-				return "", fmt.Errorf("unable to scan candidate dependency: %w", err)
+				return "", errorDependencyScan(err)
 			}
 		}
 		defer l.Close()
@@ -488,7 +491,7 @@ func (isoOp *importSharedObjectsOperation) Start() error {
 				return err
 			}
 			adjustedPath := path
-			if strings.HasPrefix(adjustedPath, "/usr/lib") {
+			if strings.HasPrefix(adjustedPath, DefaultLinuxUserLibPath) {
 				if _, err = os.Stat(filepath.Join(isoOp.projectDir, adjustedPath)); err == nil {
 					isoOp.logger.Warnf(fmt.Sprintf("Skipping '%s' -- file from higher priority source already exists within the project directory.", adjustedPath))
 				}
@@ -504,7 +507,7 @@ func (isoOp *importSharedObjectsOperation) Start() error {
 				}
 
 				adjustedTarget := target
-				if strings.HasPrefix(target, "/usr/lib") {
+				if strings.HasPrefix(target, DefaultLinuxUserLibPath) {
 					isoOp.logger.Warnf(fmt.Sprintf("Adjusted symlink target (/usr/lib -> /lib) for: %s", target))
 					adjustedTarget = strings.TrimPrefix(adjustedTarget, "/usr")
 				}
@@ -579,7 +582,7 @@ func (isoOp *importSharedObjectsOperation) Start() error {
 			}
 		}
 
-		if strings.HasPrefix(path, "/lib") || strings.HasPrefix(path, "\\lib") {
+		if strings.HasPrefix(path, DefaultLinuxLibPath) || strings.HasPrefix(path, "\\lib") {
 			// append win prefix to find actual dependencies
 			path = filepath.Join(prefix, path)
 		}
@@ -714,3 +717,14 @@ END:
 	}
 	return nil
 }
+
+// ERRORS
+func errorDependencyScan(err error) error {
+	return fmt.Errorf("unable to scan candidate dependency: %w", err)
+}
+
+func errorDependencyReadlink(err error) error{
+	return fmt.Errorf("unable to readlink dependency: %w", err)
+}
+
+

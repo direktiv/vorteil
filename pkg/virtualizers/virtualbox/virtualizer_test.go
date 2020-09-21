@@ -90,7 +90,7 @@ func TestModifyVM(t *testing.T) {
 		"--bioslogofadein", "off", "--bioslogofadeout", "off",
 		"--bioslogodisplaytime", "1", "--biosbootmenu", "disabled",
 		"--rtcuseutc", "on", "--uart1", "0x3F8", "4", "--uartmode1",
-		"server", "/tmp/test/socket"}
+		"server", "/tmp/test/socket", "--nested-hw-virt", "on"}
 
 	argTest := modifyVM("helloworld", "1024", "1", "/tmp/test/socket")
 	if strings.Join(exactArgs, " ") != strings.Join(argTest, " ") {

@@ -32,8 +32,8 @@ func TestType(t *testing.T) {
 	v := &Virtualizer{}
 
 	typeSt := v.Type()
-	if typeSt != "vmware" {
-		t.Errorf("expected %s but got %s", "vmware", typeSt)
+	if typeSt != "firecracker" {
+		t.Errorf("expected %s but got %s", "firecracker", typeSt)
 	}
 }
 func TestLoggerAndSerial(t *testing.T) {

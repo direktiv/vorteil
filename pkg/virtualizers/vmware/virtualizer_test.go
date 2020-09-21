@@ -134,7 +134,7 @@ func TestRoutes(t *testing.T) {
 		Networks: vcfgI,
 	}
 
-	ni := util.Routes(vcfg)
+	ni := util.Routes(vcfg.Networks)
 	for _, n := range ni {
 		for _, typep := range n.HTTP {
 			if typep.Port != "8888" {

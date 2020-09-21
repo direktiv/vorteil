@@ -1921,13 +1921,19 @@ The PACKAGE argument must be a path to a Vorteil package. If DEST is
 provided it must be a path to a directory that is not already a Vorteil project,
 or path to a file that does not exist and could be created without deleting any
 other files. If the DEST argument is omitted it will default to ".".`,
-	Args: cobra.RangeArgs(1, 2),
+	Args: cobra.ExactArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
 
 		pkgPath := args[0]
-		prjPath := "."
-		if len(args) >= 2 {
-			prjPath = args[1]
+		prjPath := args[1]
+
+		// Create project path 'prjPath' if it does not exist
+		if _, err := os.Stat(prjPath); os.IsNotExist(err) {
+			if err = os.Mkdir(prjPath, 0777); err != nil {
+				log.Errorf("could not create DEST path \"%s\", err: %v", prjPath, err)
+			} else {
+				log.Debugf("created DEST path \"%s\"", prjPath)
+			}
 		}
 
 		err := checkValidNewDirOutput(prjPath, flagForce, "DEST", "-f")

@@ -343,9 +343,9 @@ func (v *Virtualizer) Prepare(args *virtualizers.PrepareArgs) *virtualizers.Virt
 	v.created = time.Now()
 	v.logger = args.Logger
 	v.serialLogger = logger.NewLogger(2048 * 10)
-
+	cc := args.Config.Info.Name
 	v.logger.Debugf("Preparing VM")
-	v.routes = util.Routes(v.config)
+	v.routes = util.Routes(args.Config.Networks)
 
 	op.Logs = make(chan string, 128)
 	op.Error = make(chan error, 1)

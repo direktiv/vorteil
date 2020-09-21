@@ -36,7 +36,7 @@ func ConvertToVM(name string, pname string, state string, routes []virtualizers.
 		Kernel:   vm.Kernel,
 		Name:     info.Name,
 		Summary:  info.Summary,
-		Source:   source.(virtualizers.Source),
+		// Source:   source.(virtualizers.Source),
 		URL:      string(info.URL),
 		Version:  info.Version,
 		Programs: programs,
@@ -94,10 +94,10 @@ func LookForIP(l *logger.Logger) []string {
 	return ips
 }
 
-// GenerateRoutes returns a readable virtualizers.routes struct
-func GenerateRoutes(cfg *vcfg.VCFG) *virtualizers.Routes {
+// Routes generates api friendly routes for the machine
+func Routes(networks []vcfg.NetworkInterface) []virtualizers.NetworkInterface {
 	routes := virtualizers.Routes{}
-	var nics = cfg.Networks
+	var nics = networks
 	for i, nic := range nics {
 		if nic.IP == "" {
 			continue
@@ -136,16 +136,8 @@ func GenerateRoutes(cfg *vcfg.VCFG) *virtualizers.Routes {
 			routes.NIC[i].Protocol[p] = existingPorts
 		}
 	}
-	return &routes
-}
-
-// Routes converts networks from the config to readable virtualizers.NetworkInterface fields.
-func Routes(cfg *vcfg.VCFG) []virtualizers.NetworkInterface {
-
-	routes := GenerateRoutes(cfg)
-
 	apiNics := make([]virtualizers.NetworkInterface, 0)
-	for i, net := range cfg.Networks {
+	for i, net := range networks {
 		newNetwork := virtualizers.NetworkInterface{
 			Name:    "",
 			IP:      net.IP,

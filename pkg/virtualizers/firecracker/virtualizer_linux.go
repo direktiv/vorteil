@@ -34,6 +34,7 @@ import (
 	"github.com/vorteil/vorteil/pkg/virtualizers"
 	dhcpHandler "github.com/vorteil/vorteil/pkg/virtualizers/dhcp"
 	logger "github.com/vorteil/vorteil/pkg/virtualizers/logging"
+	"github.com/vorteil/vorteil/pkg/virtualizers/util"
 )
 
 func FetchBridgeDev() error {
@@ -117,7 +118,6 @@ func OrganiseTapDevices(w http.ResponseWriter, r *http.Request) {
 		bridgeDev, err := tenus.BridgeFromName("vorteil-bridge")
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
-
 		}
 
 		// set network adapters
@@ -689,8 +689,7 @@ func (v *Virtualizer) Prepare(args *virtualizers.PrepareArgs) *virtualizers.Virt
 	v.logger = args.Logger
 	v.serialLogger = logger.NewLogger(2048 * 10)
 	v.logger.Debugf("Preparing VM")
-	v.routes = util.Routes(v.config)
-
+	v.routes = util.Routes(args.Config.Networks)
 	op.Logs = make(chan string, 128)
 	op.Error = make(chan error, 1)
 	op.Status = make(chan string, 10)
@@ -836,7 +835,6 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 		returnErr = err
 		return
 	}
-
 	resp, err := http.Post("http://localhost:7476/", "application/json", bytes.NewBuffer(cdm))
 	if err != nil {
 		returnErr = errors.New("Run ./sudo firecracker-setup for the listener")
@@ -849,7 +847,6 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 		returnErr = err
 		return
 	}
-
 	var ifs Devices
 	err = json.Unmarshal(body, &ifs)
 	if err != nil {

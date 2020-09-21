@@ -433,7 +433,7 @@ func (v *Virtualizer) Prepare(args *virtualizers.PrepareArgs) *virtualizers.Virt
 	v.config = args.Config
 	v.pname = args.PName
 	// v.source = args.Source
-	v.routes = util.Routes(v.config)
+	v.routes = util.Routes(args.Config.Networks)
 	v.state = virtualizers.Changing
 	v.vmdrive = args.VMDrive
 	v.created = time.Now()

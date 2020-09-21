@@ -32,8 +32,8 @@ import (
 	"github.com/vorteil/vorteil/pkg/vconvert"
 	"github.com/vorteil/vorteil/pkg/vdecompiler"
 	"github.com/vorteil/vorteil/pkg/vdisk"
-	"github.com/vorteil/vorteil/pkg/virtualizers"
 	"github.com/vorteil/vorteil/pkg/vio"
+	"github.com/vorteil/vorteil/pkg/virtualizers"
 	"github.com/vorteil/vorteil/pkg/virtualizers/firecracker"
 	"github.com/vorteil/vorteil/pkg/vpkg"
 	"github.com/vorteil/vorteil/pkg/vproj"
@@ -1722,12 +1722,12 @@ var provisionCmd = &cobra.Command{
 
 		ctx := context.TODO()
 		err = prov.Provision(&provisioners.ProvisionArgs{
-			Context:     ctx,
-			Image:       image,
-			Name:        provisionName,
-			Description: provisionDescription,
-			Force:       provisionForce,
-			Logger: log,
+			Context:         ctx,
+			Image:           image,
+			Name:            provisionName,
+			Description:     provisionDescription,
+			Force:           provisionForce,
+			Logger:          log,
 			ReadyWhenUsable: provisionReadyWhenUsable,
 		})
 		if err != nil {
@@ -2322,7 +2322,7 @@ and cleaning up the instance when it's done.`,
 			log.Errorf("%v", err)
 			os.Exit(1)
 		}
-
+		fmt.Printf("CONFIG: %+v\n", cfg)
 		err = initKernels()
 		if err != nil {
 			log.Errorf("%v", err)

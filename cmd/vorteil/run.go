@@ -315,7 +315,6 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG) error {
 	if err != nil {
 		return err
 	}
-
 	_ = virt.Prepare(&virtualizers.PrepareArgs{
 		Name:      "vorteil-vm",
 		PName:     virt.Type(),

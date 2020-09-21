@@ -17,10 +17,19 @@ import (
 	"github.com/vorteil/vorteil/pkg/vio"
 )
 
+// Sizer is an interface that shouldn't exist in a vacuum, but does because our
+// other image formats follow a similar patten and need more information. A
+// Sizer should return the true and final RAW size of the image and be callable
+// before the first byte of data is written to the Writer. Note that our
+// vimg.Builder implements this interface and is the intended argument in most
+// cases.
 type Sizer interface {
 	Size() int64
 }
 
+// Writer implements io.Closer, io.Writer, and io.Seeker interfaces. Creating an
+// XVA image is as simple as getting one of these writers and copying a raw
+// image into it.
 type Writer struct {
 	tw  *tar.Writer
 	h   Sizer
@@ -32,6 +41,9 @@ type Writer struct {
 	cursor int64
 }
 
+// NewWriter returns a Writer to which a RAW image can be copied in order to
+// create an XVA format disk image. The Sizer 'h' must accurately return the
+// true and final RAW size of the image.
 func NewWriter(w io.Writer, h Sizer, cfg *vcfg.VCFG) (*Writer, error) {
 
 	xw := new(Writer)
@@ -53,6 +65,7 @@ func NewWriter(w io.Writer, h Sizer, cfg *vcfg.VCFG) (*Writer, error) {
 }
 
 func (w *Writer) writeOVAXML() error {
+
 	// timestamp := src.ModTime()
 	timestamp := time.Now()
 
@@ -79,11 +92,13 @@ func (w *Writer) writeOVAXML() error {
 	}
 
 	return nil
+
 }
 
 const mib = 0x100000
 const emptyChunkChecksum = "3b71f43ff30f4b15b5cd85dd9e95ebc7e84eb5a3"
 
+// Write implements io.Writer.
 func (w *Writer) Write(p []byte) (n int, err error) {
 
 	var total int
@@ -123,29 +138,53 @@ func (w *Writer) Write(p []byte) (n int, err error) {
 
 }
 
+func (w *Writer) flushChunkHeader(chunk int64) error {
+
+	w.hdr.Name = filepath.Join("Ref:4", fmt.Sprintf("%08d", chunk))
+	w.hdr.Size = int64(mib)
+	err := w.tw.WriteHeader(w.hdr)
+	if err != nil {
+		return err
+	}
+
+	_, err = io.Copy(w.tw, bytes.NewReader(w.buffer.Bytes()))
+	if err != nil {
+		return err
+	}
+
+	return nil
+
+}
+
+func (w *Writer) flushChunkData(checksum string) error {
+
+	w.hdr.Name += ".checksum"
+	w.hdr.Size = 40
+	err := w.tw.WriteHeader(w.hdr)
+	if err != nil {
+		return err
+	}
+
+	_, err = io.Copy(w.tw, strings.NewReader(checksum))
+	if err != nil {
+		return err
+	}
+
+	return nil
+
+}
+
 func (w *Writer) flushBuffer() error {
 
 	chunk := w.cursor/mib - 1
 	checksum := hex.EncodeToString(w.hasher.Sum(nil))
 	if checksum != emptyChunkChecksum {
-		w.hdr.Name = filepath.Join("Ref:4", fmt.Sprintf("%08d", chunk))
-		w.hdr.Size = int64(mib)
-		err := w.tw.WriteHeader(w.hdr)
-		if err != nil {
-			return err
-		}
-		_, err = io.Copy(w.tw, bytes.NewReader(w.buffer.Bytes()))
+		err := w.flushChunkHeader(chunk)
 		if err != nil {
 			return err
 		}
 
-		w.hdr.Name += ".checksum"
-		w.hdr.Size = 40
-		err = w.tw.WriteHeader(w.hdr)
-		if err != nil {
-			return err
-		}
-		_, err = io.Copy(w.tw, strings.NewReader(checksum))
+		err = w.flushChunkData(checksum)
 		if err != nil {
 			return err
 		}
@@ -154,9 +193,12 @@ func (w *Writer) flushBuffer() error {
 	w.buffer.Reset()
 	w.hasher.Reset()
 	return nil
+
 }
 
+// Seek implements io.Seeker
 func (w *Writer) Seek(offset int64, whence int) (int64, error) {
+
 	var abs int64
 	switch whence {
 	case io.SeekStart:
@@ -181,8 +223,10 @@ func (w *Writer) Seek(offset int64, whence int) (int64, error) {
 	}
 
 	return w.cursor, nil
+
 }
 
+// Close implements io.Closer
 func (w *Writer) Close() error {
 
 	if w.cursor < w.h.Size() {
@@ -239,6 +283,7 @@ func (w *Writer) ovaXML() string {
 	s = strings.Join(lines, "")
 
 	return s
+
 }
 
 const networkVIFTemplate = `<value>Ref:%d</value>`

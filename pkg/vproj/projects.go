@@ -20,7 +20,7 @@ import (
 	"github.com/vorteil/vorteil/pkg/vio"
 	"github.com/vorteil/vorteil/pkg/vpkg"
 
-	toml "github.com/sisatech/toml"
+	"github.com/sisatech/toml"
 )
 
 const (

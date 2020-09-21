@@ -26,6 +26,8 @@ const (
 	WindowsWSLPrefix    = "\\\\wsl$\\Ubuntu-18.04"
 )
 
+var prefix = ""
+
 var DefaultLibs = []string{"libnss_dns.so.2", "libnss_files.so.2", "libresolv.so.2"}
 
 // NewImportSharedObject: This function is used to create and initialize a importSharedObjectsOperation.
@@ -60,12 +62,17 @@ type importSharedObjectsOperation struct {
 	imported32bit      bool
 	imported64bit      bool
 
+	ldPATHS []string
+
 	logger elog.View
 }
 
 // initialize: Locate shared objects and save them to a map in the importSharedObjectsOperation object
 func (isoOp *importSharedObjectsOperation) initialize() error {
 	isoOp.progressPaths = make(map[string]bool)
+	if err := isoOp.initLDPATHS(); err != nil {
+		return fmt.Errorf("could not get all ld library paths, error: %v", err)
+	}
 
 	var recurseCount func(string) error
 	recurseCount = func(d string) error {
@@ -316,118 +323,128 @@ func (isoOp *importSharedObjectsOperation) listDependencies(fpath string) ([]str
 	return deps, noLocates, nil
 }
 
-//findLib: Given a library name and class, locate that libraries path on the system and return the path.
-func findLib(name string, class elf.Class) (string, error) {
-	prefix := ""
-	var paths []string
+//initLDPATHS: initializes importSharedObjectsOperation.ldPATHS so that it may be used later with findLib func
+func (isoOp *importSharedObjectsOperation) initLDPATHS() error {
+	// Load paths from env
+	isoOp.ldPATHS = getLDPathsFromENV()
+
+	// Load paths from linker config
+	if err := isoOp.loadLDPathsFromLinkerConfig(filepath.Join(prefix, DynamicLinkerConfig)); err != nil {
+		return err
+	}
+
+	// Append Common Linux Lib Paths
+	isoOp.ldPATHS = append(isoOp.ldPATHS, filepath.Join(prefix, "/lib"))
+	isoOp.ldPATHS = append(isoOp.ldPATHS, filepath.Join(prefix, "/usr/lib"))
+
+	return nil
+}
+
+//getLDPathsFromENV: Gets LD_LIBRARY_PATH env value and split the paths into a string slice
+func getLDPathsFromENV() []string {
+	var paths = make([]string, 0, 0)
 	y := os.Getenv("LD_LIBRARY_PATH")
 	if y != "" {
 		x := filepath.SplitList(y)
 		paths = append(paths, x...)
 	}
-	// system paths path (/etc/ld.so.conf)
-	var loadPathsFromFile func(path string) error
-	loadPathsFromFile = func(path string) error {
-		if strings.Contains(path, "*") {
-			return nil
-		}
-		data, err := ioutil.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		lines := strings.Split(string(data), "\n")
-		for _, line := range lines {
-			if strings.HasPrefix(line, "/") {
-				paths = append(paths, line)
-				continue
-			}
 
-			if strings.HasPrefix(line, "include") {
-				line = strings.TrimPrefix(line, "include ")
-				line = strings.TrimSpace(line)
-				line = filepath.ToSlash(filepath.Join(prefix, line))
-				matches, err := filepath.Glob(line)
-				if err != nil {
-					return err
-				}
+	return paths
+}
 
-				for _, match := range matches {
-					err = loadPathsFromFile(match)
-					if err != nil {
-						return err
-					}
-				}
-				err = loadPathsFromFile(line)
-				if err != nil {
-					return err
-				}
-			}
-			if strings.TrimSpace(line) != "" {
-				if strings.HasPrefix(line, "#") || strings.Contains(line, "*") {
-					continue
-				}
-				return fmt.Errorf("unexpected line in '%s' file: %s", DynamicLinkerConfig, line)
-			}
-		}
-
+//loadLDPathsFromLinkerConfig Load LD config file located at parameter 1 'path', scan for library paths
+//	and append these paths to importSharedObjectsOperation tracked paths at 'ldPATHS.
+func (isoOp *importSharedObjectsOperation) loadLDPathsFromLinkerConfig(path string) error {
+	if strings.Contains(path, "*") {
 		return nil
 	}
-
-	err := loadPathsFromFile(filepath.Join(prefix, DynamicLinkerConfig))
+	data, err := ioutil.ReadFile(path)
 	if err != nil {
-		return "", err
+		return err
 	}
-	paths = append(paths, filepath.Join(prefix, "/lib"))
-	paths = append(paths, filepath.Join(prefix, "/usr/lib"))
-
-	fn := func(lib string) (string, error) {
-		for _, sp := range paths {
-			sp = filepath.Join(sp, lib)
-			if runtime.GOOS == "windows" {
-				if !strings.HasPrefix(sp, prefix) {
-					sp = filepath.Join(prefix, sp)
-				}
-			}
-			_, err := os.Stat(sp)
-			if err != nil {
-				if !os.IsNotExist(err) {
-					return "", fmt.Errorf("unable to stat candidate dependency: %w", err)
-				}
-				continue
-			}
-			l, err := elf.Open(sp)
-			if err != nil {
-				if strings.Contains(err.Error(), "The name of the file cannot be resolved by the system.") {
-					// symlink reopen elf at point
-					linuxPath := filepath.ToSlash(strings.TrimPrefix(sp, prefix))
-					target, err := ReadLink(linuxPath)
-					if err != nil {
-						return "", fmt.Errorf("unable to readlink dependency: %w", err)
-					}
-					if strings.HasPrefix(target, "/") {
-						target = filepath.Join(prefix, target)
-					} else {
-						target = filepath.Join(prefix, filepath.Dir(linuxPath), target)
-					}
-
-					l, err = elf.Open(target)
-					if err != nil {
-						return "", fmt.Errorf("unable to scan candidate dependency: %w", err)
-					}
-				} else {
-					return "", fmt.Errorf("unable to scan candidate dependency: %w", err)
-				}
-			}
-			defer l.Close()
-			if class == l.FileHeader.Class {
-				return sp, nil
-			}
+	lines := strings.Split(string(data), "\n")
+	for _, line := range lines {
+		if strings.HasPrefix(line, "/") {
+			isoOp.ldPATHS = append(isoOp.ldPATHS, line)
+			continue
 		}
 
-		return "", fmt.Errorf("unable to locate dependency: %s", lib)
+		if strings.HasPrefix(line, "include") {
+			line = strings.TrimPrefix(line, "include ")
+			line = strings.TrimSpace(line)
+			line = filepath.ToSlash(filepath.Join(prefix, line))
+			matches, err := filepath.Glob(line)
+			if err != nil {
+				return err
+			}
+
+			for _, match := range matches {
+				err = isoOp.loadLDPathsFromLinkerConfig(match)
+				if err != nil {
+					return err
+				}
+			}
+			err = isoOp.loadLDPathsFromLinkerConfig(line)
+			if err != nil {
+				return err
+			}
+		}
+		if strings.TrimSpace(line) != "" {
+			if strings.HasPrefix(line, "#") || strings.Contains(line, "*") {
+				continue
+			}
+			return fmt.Errorf("unexpected line in '%s' file: %s", DynamicLinkerConfig, line)
+		}
+	}
+	return nil
+}
+
+//findLib: Given a library name and class, locate that libraries path on the system and return the path.
+func (isoOp *importSharedObjectsOperation) findLib(name string, class elf.Class) (string, error) {
+	for _, sp := range isoOp.ldPATHS {
+		sp = filepath.Join(sp, name)
+		if runtime.GOOS == "windows" {
+			if !strings.HasPrefix(sp, prefix) {
+				sp = filepath.Join(prefix, sp)
+			}
+		}
+		_, err := os.Stat(sp)
+		if err != nil {
+			if !os.IsNotExist(err) {
+				return "", fmt.Errorf("unable to stat candidate dependency: %w", err)
+			}
+			continue
+		}
+		l, err := elf.Open(sp)
+		if err != nil {
+			if strings.Contains(err.Error(), "The name of the file cannot be resolved by the system.") {
+				// symlink reopen elf at point
+				linuxPath := filepath.ToSlash(strings.TrimPrefix(sp, prefix))
+				target, err := ReadLink(linuxPath)
+				if err != nil {
+					return "", fmt.Errorf("unable to readlink dependency: %w", err)
+				}
+				if strings.HasPrefix(target, "/") {
+					target = filepath.Join(prefix, target)
+				} else {
+					target = filepath.Join(prefix, filepath.Dir(linuxPath), target)
+				}
+
+				l, err = elf.Open(target)
+				if err != nil {
+					return "", fmt.Errorf("unable to scan candidate dependency: %w", err)
+				}
+			} else {
+				return "", fmt.Errorf("unable to scan candidate dependency: %w", err)
+			}
+		}
+		defer l.Close()
+		if class == l.FileHeader.Class {
+			return sp, nil
+		}
 	}
 
-	return fn(name)
+	return "", fmt.Errorf("unable to locate dependency: %s", name)
 }
 
 // Start: Start the process of scanning for shared objects and copying them into you project path.
@@ -437,6 +454,7 @@ func (isoOp *importSharedObjectsOperation) Start() error {
 	if runtime.GOOS == "windows" {
 		prefix = WindowsWSLPrefix
 	}
+
 	mapLock := sync.Mutex{}
 	filesDone := make(map[string]interface{})
 
@@ -658,7 +676,7 @@ func (isoOp *importSharedObjectsOperation) Start() error {
 
 					for _, l := range DefaultLibs {
 						for _, c := range classes {
-							path, err := findLib(l, c)
+							path, err := isoOp.findLib(l, c)
 							if err != nil {
 								isoOp.logger.Warnf(err.Error())
 								continue

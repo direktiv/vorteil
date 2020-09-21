@@ -5,6 +5,9 @@ language: go
 go:
   - 1.15
 
+services:
+  - docker
+
 stages:
   - name: release
     if: branch = master

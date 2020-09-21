@@ -22,7 +22,7 @@ jobs:
         - chmod +x ./cc-test-reporter
         - ./cc-test-reporter before-build
       script:
-        - go build -o vorteil github.com/vorteil/vorteil/cmd/vorteil
+        - go build -o vorteil github.com/vorteil/vorteil/cmd/vorteil 
         - GOOS=windows go build -o vorteil.exe github.com/vorteil/vorteil/cmd/vorteil
         - go test -coverprofile c.out ./...
         - zip vorteil_windows-x86.zip vorteil.exe

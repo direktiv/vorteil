@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/fatih/color"
 	"github.com/sirupsen/logrus"
@@ -139,11 +140,15 @@ func (log *CLI) NewProgress(label string, units string, total int64) Progress {
 
 	log.bars[p] = true
 
-	return &pb{
-		log:   log,
-		p:     p,
-		total: total,
+	pb := &pb{
+		log:      log,
+		p:        p,
+		total:    total,
+		interval: time.Millisecond * 100,
 	}
+	pb.nextUpdate = time.Now().Add(pb.interval)
+
+	return pb
 
 }
 
@@ -200,17 +205,31 @@ type pb struct {
 	total  int64
 	cursor int64
 	bar    int64
+
+	buffered   int64
+	interval   time.Duration
+	nextUpdate time.Time
 }
 
 func (pb *pb) Increment(n int64) {
-	pb.p.IncrInt64(n)
+	pb.buffered += n
 	pb.bar += n
+	if !time.Now().Before(pb.nextUpdate) {
+		pb.flush()
+	}
+}
+
+func (pb *pb) flush() {
+	pb.nextUpdate = time.Now().Add(pb.interval)
+	pb.p.IncrInt64(pb.buffered)
+	pb.buffered = 0
 }
 
 func (pb *pb) Finish(success bool) {
 	if pb.closed {
 		return
 	}
+	pb.flush()
 	pb.closed = true
 	if pb.bar != pb.total || pb.total == 0 || !success {
 		pb.p.Abort(false)

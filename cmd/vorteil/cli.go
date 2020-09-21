@@ -1910,7 +1910,7 @@ func init() {
 }
 
 var unpackCmd = &cobra.Command{
-	Use:     "unpack PACKAGE [DEST]",
+	Use:     "unpack PACKAGE DEST",
 	Aliases: []string{"extract"},
 	Short:   "Unpack a Vorteil package",
 	Long: `Unpack the contents of a Vorteil package into a directory. To simplify

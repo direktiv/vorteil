@@ -22,11 +22,10 @@ import (
 )
 
 const (
-	DynamicLinkerConfig = "/etc/ld.so.conf"
-	WindowsWSLPrefix    = "\\\\wsl$\\Ubuntu-18.04"
+	DynamicLinkerConfig     = "/etc/ld.so.conf"
+	WindowsWSLPrefix        = "\\\\wsl$\\Ubuntu-18.04"
 	DefaultLinuxUserLibPath = "/usr/lib"
-	DefaultLinuxLibPath = "/lib"
-
+	DefaultLinuxLibPath     = "/lib"
 )
 
 var prefix = ""
@@ -59,7 +58,11 @@ type importSharedObjectsOperation struct {
 
 	count float64
 
-	progressPaths map[string]bool
+	progressPaths       map[string]bool
+	mapLock             sync.Mutex
+	filesDone           map[string]interface{}
+	unfoundDependencies map[string]interface{}
+	foundAtLeast1File   bool
 
 	excludeDefaultLibs bool
 	imported32bit      bool
@@ -98,6 +101,12 @@ func (isoOp *importSharedObjectsOperation) initialize() error {
 	}
 
 	isoOp.count = float64(len(isoOp.progressPaths))
+
+	// Init Map Files
+	isoOp.mapLock = sync.Mutex{}
+	isoOp.filesDone = make(map[string]interface{})
+	isoOp.unfoundDependencies = make(map[string]interface{})
+
 	return nil
 }
 
@@ -114,7 +123,6 @@ func ReadLink(path string) (string, error) {
 //listDependencies: Given a file path 'fpath' locate the files dependencies.
 //	Return a list of paths to dependencies found on system, and a list names of dependencies who are missing from system.
 func (isoOp *importSharedObjectsOperation) listDependencies(fpath string) ([]string, []string, error) {
-	prefix := ""
 	e, err := elf.Open(fpath)
 	if err != nil {
 		if strings.HasPrefix(err.Error(), "bad magic number") {
@@ -326,6 +334,13 @@ func (isoOp *importSharedObjectsOperation) listDependencies(fpath string) ([]str
 	return deps, noLocates, nil
 }
 
+//appendSliceToUnfoundDependencies appends missingDeps arg to operations unfoundDependencies
+func (isoOp *importSharedObjectsOperation) appendSliceToUnfoundDependencies(missingDeps []string) () {
+	for _, l := range missingDeps {
+		isoOp.unfoundDependencies[l] = nil
+	}
+}
+
 //initLDPATHS: initializes importSharedObjectsOperation.ldPATHS so that it may be used later with findLib func
 func (isoOp *importSharedObjectsOperation) initLDPATHS() error {
 	// Load paths from env
@@ -450,35 +465,32 @@ func (isoOp *importSharedObjectsOperation) findLib(name string, class elf.Class)
 	return "", fmt.Errorf("unable to locate dependency: %s", name)
 }
 
+//registerFile Add filePath to operations filesDone Map if it does not exist in keys.
+//	If it does, return 'skip' set to true bool
+func (isoOp *importSharedObjectsOperation) registerFile(filePath string) bool {
+	isoOp.mapLock.Lock()
+	var skip bool
+	if _, ok := isoOp.filesDone[filePath]; !ok {
+		// Path is not in map; register filePath in map
+		isoOp.filesDone[filePath] = nil
+	} else {
+		// Path is already in map, set skip bool to true
+		skip = true
+	}
+	isoOp.mapLock.Unlock()
+	return skip
+}
+
 // Start: Start the process of scanning for shared objects and copying them into you project path.
 //	If excludeDefaultLibs was set to false in builder, also copy default libs.
 func (isoOp *importSharedObjectsOperation) Start() error {
-	var prefix string
-	if runtime.GOOS == "windows" {
-		prefix = WindowsWSLPrefix
-	}
 
-	mapLock := sync.Mutex{}
-	filesDone := make(map[string]interface{})
-
-	unfoundDependencies := make(map[string]interface{})
-	var foundAtLeast1File bool
-
-	Progress := isoOp.logger.NewProgress("Importing Shared Objects ", "", 0)
-	defer Progress.Finish(true)
+	isoProgress := isoOp.logger.NewProgress("Importing Shared Objects ", "", 0)
+	defer isoProgress.Finish(true)
 
 	var recurseFile func(string) error
 	recurseFile = func(path string) error {
-		var skip bool
-		mapLock.Lock()
-		if _, ok := filesDone[path]; !ok {
-			filesDone[path] = nil
-		} else {
-			skip = true
-		}
-		mapLock.Unlock()
-
-		if skip {
+		if skip := isoOp.registerFile(path); skip {
 			return nil
 		}
 
@@ -591,12 +603,9 @@ func (isoOp *importSharedObjectsOperation) Start() error {
 		if err != nil {
 			return err
 		}
-		if len(libs) > 0 {
-			foundAtLeast1File = true
-		}
-		for _, l := range missingLibs {
-			unfoundDependencies[l] = nil
-		}
+
+		isoOp.foundAtLeast1File = len(libs) > 0
+		isoOp.appendSliceToUnfoundDependencies(missingLibs)
 
 		for _, l := range libs {
 			err = recurseFile(filepath.Join(prefix, l))
@@ -655,11 +664,11 @@ func (isoOp *importSharedObjectsOperation) Start() error {
 		select {
 		case p := <-paths:
 			if p == endPathScan {
-				if !isoOp.excludeDefaultLibs && !foundAtLeast1File {
+				if !isoOp.excludeDefaultLibs && !isoOp.foundAtLeast1File {
 					isoOp.logger.Warnf("omitting default libs --- no libs were required by the project.")
 				}
 
-				if !isoOp.excludeDefaultLibs && foundAtLeast1File {
+				if !isoOp.excludeDefaultLibs && isoOp.foundAtLeast1File {
 					isoOp.logger.Infof("copying default libs")
 
 					defaultLibPaths := make([]string, 0)
@@ -696,7 +705,7 @@ func (isoOp *importSharedObjectsOperation) Start() error {
 					}
 				}
 
-				for l := range unfoundDependencies {
+				for l := range isoOp.unfoundDependencies {
 					isoOp.logger.Warnf(fmt.Sprintf("unable to locate dependency: %s", l))
 				}
 
@@ -710,7 +719,7 @@ func (isoOp *importSharedObjectsOperation) Start() error {
 	}
 
 END:
-	if len(unfoundDependencies) != 0 {
+	if len(isoOp.unfoundDependencies) != 0 {
 		isoOp.logger.Printf("Completed with warnings.")
 	} else {
 		isoOp.logger.Printf("Completed.")
@@ -723,8 +732,6 @@ func errorDependencyScan(err error) error {
 	return fmt.Errorf("unable to scan candidate dependency: %w", err)
 }
 
-func errorDependencyReadlink(err error) error{
+func errorDependencyReadlink(err error) error {
 	return fmt.Errorf("unable to readlink dependency: %w", err)
 }
-
-

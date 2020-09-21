@@ -29,11 +29,16 @@ type VCFG struct {
 	modtime  time.Time
 }
 
+//Privilege: The privilege level that the machine user will bet set with.
+//	Additional information can be found @ https://support.vorteil.io/docs/VCFG-Reference/program/privilege
 type Privilege string
 
 var (
+	//RootPrivilege: root privilege level, has full rights to everything and will run as the 'root' suer
 	RootPrivilege      = Privilege("root")
+	//SuperuserPrivilege: sudo user level privileges, and will run as the configured user
 	SuperuserPrivilege = Privilege("superuser")
+	//SuperuserPrivilege: non-root level privileges, and will run as the configured user
 	UserPrivilege      = Privilege("user")
 )
 
@@ -432,9 +437,6 @@ func sanitize(all []string) []string {
 
 // Merge ..
 func Merge(a, b *VCFG) (*VCFG, error) {
-
-	var err error
-
 	// Sysctl
 	if a.Sysctl == nil {
 		a.Sysctl = b.Sysctl
@@ -443,109 +445,18 @@ func Merge(a, b *VCFG) (*VCFG, error) {
 	}
 
 	// Programs
-	if a.Programs == nil {
-		a.Programs = b.Programs
-	} else if b.Programs != nil {
-
-		for k, p := range a.Programs {
-			if len(b.Programs) > k {
-
-				// merge b.Programs[k] over p
-				envs := mergeStringArray(p.Env, b.Programs[k].Env)
-				bstp := mergeStringArray(p.Bootstrap, b.Programs[k].Bootstrap)
-				logfiles := mergeStringArrayExcludingDuplicateValues(p.LogFiles, b.Programs[k].LogFiles)
-
-				err = mergo.Merge(&p, &b.Programs[k], mergo.WithOverride)
-				if err != nil {
-					return nil, err
-				}
-
-				p.Env = envs
-				p.Bootstrap = bstp
-				p.LogFiles = logfiles
-
-				a.Programs[k] = p
-
-			}
-		}
-
-		if len(b.Programs) > len(a.Programs) {
-			a.Programs = append(a.Programs, b.Programs[len(a.Programs):]...)
-		}
+	if err := vcfgMergeProgram(&a.Programs, &b.Programs); err != nil {
+		return nil, err
 	}
 
 	// Logging
-	if a.Logging == nil {
-		a.Logging = b.Logging
-	} else if b.Logging != nil {
-
-		for k, p := range a.Logging {
-			if len(b.Logging) > k {
-				cfgs := mergeStringArray(p.Config, b.Logging[k].Config)
-
-				err = mergo.Merge(&p, &b.Logging[k], mergo.WithOverride)
-				if err != nil {
-					return nil, err
-				}
-
-				p.Config = cfgs
-				a.Logging[k] = p
-			}
-		}
-
-		if len(b.Logging) > len(a.Logging) {
-			a.Logging = append(a.Logging, b.Logging[len(a.Logging):]...)
-		}
+	if err := vcfgMergeLogging(&a.Logging, &b.Logging); err != nil {
+		return nil, err
 	}
 
 	// Networks
-	if a.Networks == nil {
-		a.Networks = b.Networks
-	} else if b.Networks != nil {
-
-		for k, n := range a.Networks {
-
-			if len(b.Networks) > k {
-
-				// merge b.Networks[k] over p
-				http := mergeStringArrayExcludingDuplicateValues(n.HTTP, b.Networks[k].HTTP)
-				https := mergeStringArrayExcludingDuplicateValues(n.HTTPS, b.Networks[k].HTTPS)
-				udp := mergeStringArrayExcludingDuplicateValues(n.UDP, b.Networks[k].UDP)
-				tcp := mergeStringArrayExcludingDuplicateValues(n.TCP, b.Networks[k].TCP)
-
-				err = mergo.Merge(&n, &b.Networks[k], mergo.WithOverride)
-				if err != nil {
-					return nil, err
-				}
-
-				n.HTTP = http
-				n.HTTPS = https
-				n.UDP = udp
-				n.TCP = tcp
-
-				a.Networks[k] = n
-			}
-
-			if len(b.Networks) > len(a.Networks) {
-				a.Networks = append(a.Networks, b.Networks[len(a.Networks):]...)
-			}
-		}
-
-	}
-
-	if a.Logging == nil {
-		a.Logging = b.Logging
-	} else if b.Logging != nil {
-		for k, r := range a.Logging {
-			err = mergo.Merge(&r, &b.Logging[k], mergo.WithOverride)
-			if err != nil {
-				return nil, err
-			}
-		}
-
-		if len(b.Logging) > len(a.Logging) {
-			a.Logging = append(a.Logging, b.Logging[len(a.Logging):]...)
-		}
+	if err := vcfgMergeNetwork(&a.Networks, &b.Networks); err != nil {
+		return nil, err
 	}
 
 	// System.DNS
@@ -554,8 +465,7 @@ func Merge(a, b *VCFG) (*VCFG, error) {
 	ntp := mergeStringArrayExcludingDuplicateValues(a.System.NTP, b.System.NTP)
 
 	// System
-	err = mergo.Merge(&a.System, &b.System, mergo.WithOverride)
-	if err != nil {
+	if err := mergo.Merge(&a.System, &b.System, mergo.WithOverride); err != nil {
 		return nil, err
 	}
 
@@ -563,59 +473,192 @@ func Merge(a, b *VCFG) (*VCFG, error) {
 	a.System.NTP = ntp
 
 	// Info
-	err = mergo.Merge(&a.Info, &b.Info)
-	if err != nil {
+	if err := mergo.Merge(&a.Info, &b.Info); err != nil {
 		return nil, err
 	}
 
 	// VM
-	err = mergo.Merge(&a.VM, &b.VM, mergo.WithOverride)
-	if err != nil {
+	if err := mergo.Merge(&a.VM, &b.VM, mergo.WithOverride); err != nil {
 		return nil, err
 	}
 
 	// NFS
-	if a.NFS == nil {
-		a.NFS = b.NFS
-	} else if b.NFS != nil {
-
-		for k, n := range a.NFS {
-			if len(b.NFS) > k {
-				err = mergo.Merge(&n, &b.NFS[k], mergo.WithOverride)
-				if err != nil {
-					return nil, err
-				}
-
-				a.NFS[k] = n
-			}
-		}
-
-		if len(b.NFS) > len(a.NFS) {
-			a.NFS = append(a.NFS, b.NFS[len(a.NFS):]...)
-		}
-
+	if err := vcfgMergeNFS(&a.NFS, &b.NFS); err != nil {
+		return nil, err
 	}
 
 	// Routes
-	if a.Routing == nil {
-		a.Routing = b.Routing
-	} else if b.Routing != nil {
-
-		for k, r := range a.Routing {
-			if len(b.Routing) > k {
-				err = mergo.Merge(&r, &b.Routing[k], mergo.WithOverride)
-				if err != nil {
-					return nil, err
-				}
-
-				a.Routing[k] = r
-			}
-		}
-
-		if len(b.Routing) > len(a.Routing) {
-			a.Routing = append(a.Routing, b.Routing[len(a.Routing):]...)
-		}
+	if err := vcfgMergeRouting(&a.Routing, &b.Routing); err != nil {
+		return nil, err
 	}
 
 	return a, nil
+}
+
+// Merge Helpers
+func vcfgMergeProgram(a *[]Program, b *[]Program) error {
+	var err error
+	if *a == nil {
+		*a = *b
+	} else if *b != nil {
+
+		for k, p := range *a {
+			if len(*b) > k {
+
+				// merge (*b)[k] over p
+				envs := mergeStringArray(p.Env, (*b)[k].Env)
+				bstp := mergeStringArray(p.Bootstrap, (*b)[k].Bootstrap)
+				logfiles := mergeStringArrayExcludingDuplicateValues(p.LogFiles, (*b)[k].LogFiles)
+
+				err = mergo.Merge(&p, &(*b)[k], mergo.WithOverride)
+				if err != nil {
+					return err
+				}
+
+				p.Env = envs
+				p.Bootstrap = bstp
+				p.LogFiles = logfiles
+
+				(*a)[k] = p
+
+			}
+		}
+
+		if len(*b) > len(*a) {
+			*a = append(*a, (*b)[len(*a):]...)
+		}
+	}
+
+	return nil
+}
+
+func vcfgMergeNetwork(a *[]NetworkInterface, b *[]NetworkInterface) error {
+	var err error
+	if a == nil {
+		*a = *b
+	} else if b != nil {
+
+		for k, n := range *a {
+
+			if len(*b) > k {
+
+				// merge *b[k] over p
+				http := mergeStringArrayExcludingDuplicateValues(n.HTTP, (*b)[k].HTTP)
+				https := mergeStringArrayExcludingDuplicateValues(n.HTTPS, (*b)[k].HTTPS)
+				udp := mergeStringArrayExcludingDuplicateValues(n.UDP, (*b)[k].UDP)
+				tcp := mergeStringArrayExcludingDuplicateValues(n.TCP, (*b)[k].TCP)
+
+				err = mergo.Merge(&n, &(*b)[k], mergo.WithOverride)
+				if err != nil {
+					return err
+				}
+
+				n.HTTP = http
+				n.HTTPS = https
+				n.UDP = udp
+				n.TCP = tcp
+
+				(*a)[k] = n
+			}
+
+			if len(*b) > len(*a) {
+				*a = append(*a, (*b)[len(*a):]...)
+			}
+		}
+
+	}
+
+	return nil
+}
+
+func vcfgMergeLogging(a *[]Logging, b *[]Logging) error {
+	var err error
+	if a == nil {
+		*a = *b
+		return nil
+	} else if *b != nil {
+
+		for k, p := range *a {
+			if len(*b) > k {
+				cfgs := mergeStringArray(p.Config, (*b)[k].Config)
+
+				err = mergo.Merge(&p, &(*b)[k], mergo.WithOverride)
+				if err != nil {
+					return err
+				}
+
+				p.Config = cfgs
+				(*a)[k] = p
+			}
+		}
+
+		if len(*b) > len(*a) {
+			*a = append(*a, (*b)[len(*a):]...)
+		}
+
+		for k, r := range *a {
+			err = mergo.Merge(&r, &(*b)[k], mergo.WithOverride)
+			if err != nil {
+				return err
+			}
+		}
+
+		if len(*b) > len(*a) {
+			*a = append(*a, (*b)[len(*a):]...)
+		}
+	}
+
+	return nil
+}
+
+func vcfgMergeNFS(a *[]NFSSettings, b *[]NFSSettings) error {
+	var err error
+
+	if a == nil {
+		*a = *b
+	} else if b != nil {
+
+		for k, n := range *a {
+			if len(*b) > k {
+				err = mergo.Merge(&n, &(*b)[k], mergo.WithOverride)
+				if err != nil {
+					return err
+				}
+
+				(*a)[k] = n
+			}
+		}
+
+		if len(*b) > len(*a) {
+			*a = append(*a, (*b)[len(*a):]...)
+		}
+
+	}
+
+	return nil
+}
+
+func vcfgMergeRouting(a *[]Route, b *[]Route) error {
+	var err error
+	if a == nil {
+		*a = *b
+	} else if b != nil {
+
+		for k, r := range *a {
+			if len(*b) > k {
+				err = mergo.Merge(&r, &(*b)[k], mergo.WithOverride)
+				if err != nil {
+					return err
+				}
+
+				(*a)[k] = r
+			}
+		}
+
+		if len(*b) > len(*a) {
+			*a = append(*a, (*b)[len(*a):]...)
+		}
+	}
+
+	return nil
 }

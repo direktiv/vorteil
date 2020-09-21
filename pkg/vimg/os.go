@@ -391,6 +391,12 @@ func (b *Builder) validateOSArgs(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
+	} else if b.kernel.Less(vkern.CalVer("20.9.1")) {
+		b.kernel, err = GetLatestKernel(ctx)
+		if err != nil {
+			return err
+		}
+		b.log.Warnf("Requested kernel '%s' is too old for this compiler. Using latest kernel instead.", b.vcfg.VM.Kernel)
 	}
 
 	err = b.processLinuxArgs()

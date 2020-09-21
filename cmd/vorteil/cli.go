@@ -32,8 +32,8 @@ import (
 	"github.com/vorteil/vorteil/pkg/vconvert"
 	"github.com/vorteil/vorteil/pkg/vdecompiler"
 	"github.com/vorteil/vorteil/pkg/vdisk"
-	"github.com/vorteil/vorteil/pkg/virtualizers"
 	"github.com/vorteil/vorteil/pkg/vio"
+	"github.com/vorteil/vorteil/pkg/virtualizers"
 	"github.com/vorteil/vorteil/pkg/virtualizers/firecracker"
 	"github.com/vorteil/vorteil/pkg/vpkg"
 	"github.com/vorteil/vorteil/pkg/vproj"
@@ -53,6 +53,7 @@ var (
 	flagPlatform         string
 	flagGUI              bool
 	flagOS               bool
+	flagRecord           string
 	flagShell            bool
 	flagTouched          bool
 )
@@ -302,157 +303,7 @@ var decompileCmd = &cobra.Command{
 
 		srcPath := args[0]
 		outPath := args[1]
-
-		iio, err := vdecompiler.Open(srcPath)
-		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
-		}
-		defer iio.Close()
-
-		fi, err := os.Stat(outPath)
-		if err != nil && !os.IsNotExist(err) {
-			log.Errorf("%v", err)
-			os.Exit(1)
-		}
-		var into bool
-		if !os.IsNotExist(err) && fi.IsDir() {
-			into = true
-		}
-
-		fpath := "/"
-		dpath := outPath
-		if into {
-			dpath = filepath.ToSlash(filepath.Join(outPath, filepath.Base(fpath)))
-		}
-
-		var counter int
-
-		symlinkCallbacks := make([]func() error, 0)
-
-		var recurse func(int, string, string) error
-		recurse = func(ino int, rpath string, dpath string) error {
-
-			inode, err := iio.ResolveInode(ino)
-			if err != nil {
-				return err
-			}
-
-			if flagTouched && inode.LastAccessTime == 0 && !inode.IsDirectory() && rpath != "/" {
-				log.Printf("skipping untouched object: %s", rpath)
-				return nil
-			}
-
-			counter++
-
-			log.Printf("copying %s", rpath)
-
-			if inode.IsRegularFile() {
-				fi, err = os.Stat(dpath)
-				if !os.IsNotExist(err) {
-					if err == nil {
-						return fmt.Errorf("file already exists: %s", dpath)
-					}
-					return err
-				}
-
-				f, err := os.Create(dpath)
-				if err != nil {
-					return err
-				}
-				defer f.Close()
-
-				rdr, err := iio.InodeReader(inode)
-				if err != nil {
-					return err
-				}
-
-				_, err = io.CopyN(f, rdr, int64(inode.Fullsize()))
-				if err != nil {
-					return err
-				}
-				return nil
-			}
-
-			if inode.IsSymlink() {
-
-				symlinkCallbacks = append(symlinkCallbacks, func() error {
-					rdr, err := iio.InodeReader(inode)
-					if err != nil {
-						return err
-					}
-					data, err := ioutil.ReadAll(rdr)
-					if err != nil {
-						return err
-					}
-
-					err = os.Symlink(string(string(data)), dpath)
-					if err != nil {
-						return err
-					}
-					return nil
-				})
-				return nil
-			}
-
-			if !inode.IsDirectory() {
-				log.Warnf("skipping abnormal file: %s", rpath)
-				return nil
-			}
-
-			fi, err = os.Stat(dpath)
-			if !os.IsNotExist(err) {
-				if err == nil {
-					return fmt.Errorf("file already exists: %s", dpath)
-				}
-				return err
-			}
-
-			err = os.MkdirAll(dpath, 0777)
-			if err != nil {
-				return err
-			}
-
-			entries, err := iio.Readdir(inode)
-			if err != nil {
-				return err
-			}
-
-			for _, entry := range entries {
-				if entry.Name == "." || entry.Name == ".." {
-					continue
-				}
-				err = recurse(entry.Inode, filepath.ToSlash(filepath.Join(rpath, entry.Name)), filepath.Join(dpath, entry.Name))
-				if err != nil {
-					return err
-				}
-			}
-
-			return nil
-		}
-
-		ino, err := iio.ResolvePathToInodeNo(fpath)
-		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
-		}
-		err = recurse(ino, filepath.ToSlash(filepath.Base(fpath)), dpath)
-		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
-		}
-
-		for _, fn := range symlinkCallbacks {
-			err = fn()
-			if err != nil {
-				log.Errorf("%v", err)
-				os.Exit(1)
-			}
-		}
-
-		if flagTouched && counter <= 1 {
-			log.Warnf("No touched files detected. Are you sure this disk has been run?")
-		}
+		decompile(srcPath, outPath)
 
 	},
 }
@@ -1722,12 +1573,12 @@ var provisionCmd = &cobra.Command{
 
 		ctx := context.TODO()
 		err = prov.Provision(&provisioners.ProvisionArgs{
-			Context:     ctx,
-			Image:       image,
-			Name:        provisionName,
-			Description: provisionDescription,
-			Force:       provisionForce,
-			Logger: log,
+			Context:         ctx,
+			Image:           image,
+			Name:            provisionName,
+			Description:     provisionDescription,
+			Force:           provisionForce,
+			Logger:          log,
 			ReadyWhenUsable: provisionReadyWhenUsable,
 		})
 		if err != nil {
@@ -2377,6 +2228,7 @@ func init() {
 	f.StringVar(&flagPlatform, "platform", defaultVirtualizer(), "run a virtual machine with appropriate hypervisor (qemu, firecracker, virtualbox, hyper-v)")
 	f.BoolVar(&flagGUI, "gui", false, "when running virtual machine show gui of hypervisor")
 	f.BoolVar(&flagShell, "shell", false, "add a busybox shell environment to the image")
+	f.StringVar(&flagRecord, "record", "", "")
 }
 
 func defaultVirtualizer() string {

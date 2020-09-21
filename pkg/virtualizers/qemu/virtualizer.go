@@ -183,7 +183,6 @@ func (v *Virtualizer) ForceStop() error {
 // Stop stops the vm and changes the status back to 'ready'
 func (v *Virtualizer) Stop() error {
 	v.logger.Debugf("Stopping VM")
-	fmt.Printf("STATE: %s", v.State())
 	if v.state != virtualizers.Ready {
 		v.state = virtualizers.Changing
 

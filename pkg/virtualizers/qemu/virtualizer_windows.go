@@ -56,6 +56,7 @@ func (v *Virtualizer) Start() error {
 					if err != nil {
 						v.logger.Errorf("Error Stopping VM: %s", err.Error())
 					}
+
 				}
 			}
 		}()

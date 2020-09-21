@@ -344,6 +344,11 @@ func (c *Compiler) Precompile(ctx context.Context, size int64) error {
 	}
 
 	c.inodesPerGroup = align(c.inodesPerGroup, InodesPerBlock)
+
+	if c.inodesPerGroup > BlockSize*8 {
+		return errors.New("minimum inodes required exceeds maximum number of inodes possible at this disk size")
+	}
+
 	c.blocksPerBGDT = divide(c.groups*BlockGroupDescriptorSize, BlockSize)
 	c.blocksPerInodeTable = c.inodesPerGroup / InodesPerBlock
 	c.overheadBlocksPerGroup = blocksPerSuperblock + c.blocksPerBGDT + blocksPerBlockBitmap + blocksPerInodeBitmap + c.blocksPerInodeTable

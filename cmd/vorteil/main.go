@@ -151,11 +151,11 @@ func initKernels() error {
 		return err
 	}
 
-	ksrc, err = vkern.Advanced(vkern.AdvancedArgs{
+	ksrc, err = vkern.CLI(vkern.CLIArgs{
 		Directory:          kernels,
 		DropPath:           watch,
 		RemoteRepositories: sources,
-	})
+	}, log)
 	if err != nil {
 		return err
 	}
@@ -186,7 +186,7 @@ func getPackageBuilder(argName, src string) (vpkg.Builder, error) {
 
 	// check if src is a url
 	if _, err := url.ParseRequestURI(src); err == nil {
-		if u, uErr := url.Parse(src); uErr == nil && u.Scheme != "" && u.Host != "" && u.Path != ""{
+		if u, uErr := url.Parse(src); uErr == nil && u.Scheme != "" && u.Host != "" && u.Path != "" {
 			isURL = true
 		}
 	}

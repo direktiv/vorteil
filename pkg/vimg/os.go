@@ -182,7 +182,6 @@ func (b *Builder) validateConfig() error {
 		case vcfg.SuperuserPrivilege:
 		case vcfg.UserPrivilege:
 		default:
-			fmt.Println(p.Privilege)
 			return fmt.Errorf("invalid privilege setting for program %d: %s (should be 'root', 'superuser', or 'user')", i, p.Privilege)
 		}
 

@@ -2322,7 +2322,6 @@ and cleaning up the instance when it's done.`,
 			log.Errorf("%v", err)
 			os.Exit(1)
 		}
-		fmt.Printf("CONFIG: %+v\n", cfg)
 		err = initKernels()
 		if err != nil {
 			log.Errorf("%v", err)

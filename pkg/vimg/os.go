@@ -422,8 +422,10 @@ func (b *Builder) processLinuxArgs() error {
 		m[strings.SplitN(s, "=", 2)[0]] = i
 	}
 
-	if _, ok := m["rw"]; !ok {
-		args = append(args, "rw")
+	_, ok1 := m["ro"]
+	_, ok2 := m["rw"]
+	if !ok1 && !ok2 {
+		args = append(args, "ro")
 	}
 
 	if _, ok := m["loglevel"]; !ok {
@@ -464,6 +466,8 @@ func (b *Builder) processLinuxArgs() error {
 		}
 	}
 	b.linuxArgs = strings.Join(x, " ")
+
+	b.log.Warnf("kernel args: %v", b.linuxArgs)
 
 	return nil
 }

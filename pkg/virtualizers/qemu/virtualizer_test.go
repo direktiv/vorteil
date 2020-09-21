@@ -7,9 +7,9 @@ import (
 
 	"github.com/vorteil/vorteil/pkg/elog"
 	"github.com/vorteil/vorteil/pkg/vcfg"
-	"github.com/vorteil/vorteil/pkg/virtualizers"
 
 	logger "github.com/vorteil/vorteil/pkg/virtualizers/logging"
+	"github.com/vorteil/vorteil/pkg/virtualizers/util"
 )
 
 func TestLoggerAndSerial(t *testing.T) {
@@ -75,7 +75,7 @@ func TestNetworkArgs(t *testing.T) {
 		logger: &elog.CLI{},
 	}
 
-	ni := virtualizers.Routes(v)
+	ni := util.Routes(vcfg.Networks)
 	v.routes = ni
 
 	args, err := v.initializeNetworkCards()
@@ -121,11 +121,8 @@ func TestRoutes(t *testing.T) {
 	vcfg := &vcfg.VCFG{
 		Networks: vcfgI,
 	}
-	v := &Virtualizer{
-		config: vcfg,
-	}
 
-	ni := virtualizers.Routes(v)
+	ni := util.Routes(vcfg.Networks)
 	for _, n := range ni {
 		for _, typep := range n.HTTP {
 			if typep.Port != "8888" {

@@ -24,8 +24,9 @@ func TestDownloadInformationDocker(t *testing.T) {
 	assert.Error(t, err)
 
 	err = r.downloadInformationDocker("hello-world", "latest")
-	assert.NoError(t, err)
-	assert.Equal(t, 1, len(r.layers))
+	if !assert.NoError(t, err) || !assert.Equal(t, 1, len(r.layers)) {
+		t.Fatal("Could not get docker info")
+	}
 
 	err = r.downloadBlobs("")
 	assert.Error(t, err)
@@ -33,7 +34,6 @@ func TestDownloadInformationDocker(t *testing.T) {
 	dir, _ := ioutil.TempDir("", "vtest")
 	err = r.downloadBlobs(dir)
 	assert.NoError(t, err)
-
 }
 
 func TestDownloadInformationContainerd(t *testing.T) {
@@ -47,8 +47,9 @@ func TestDownloadInformationContainerd(t *testing.T) {
 	assert.Error(t, err)
 
 	err = r.downloadInformationContainerd("docker.io/library/hello-world", "latest")
-	assert.NoError(t, err)
-	assert.Equal(t, 1, len(r.layers))
+	if !assert.NoError(t, err) || !assert.Equal(t, 1, len(r.layers)) {
+		t.Fatal("Could not get docker info")
+	}
 
 	err = r.downloadBlobs("")
 	assert.Error(t, err)

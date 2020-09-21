@@ -16,9 +16,12 @@ import (
 // DownloadPath is the path where we pull firecracker-vmlinux's from
 const DownloadPath = "https://storage.googleapis.com/vorteil-dl/firecracker-vmlinux/"
 
+// FetchBridgeDev fetches bridge devices currently not supported on anything other than linux
 func FetchBridgeDev() error {
 	return errors.New("bridge devices for firecracker only supported on linux")
 }
+
+// SetupBridgeAndDHCPServer initializes bridge and dhcp server for firecracker to talk to
 func SetupBridgeAndDHCPServer() error {
 	return errors.New("firecracker init not supported on this operating system")
 }

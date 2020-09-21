@@ -94,9 +94,8 @@ func LookForIP(l *logger.Logger) []string {
 	return ips
 }
 
-// Routes converts networks from the config to readable virtualizers.NetworkInterface fields.
-func Routes(cfg *vcfg.VCFG) []virtualizers.NetworkInterface {
-
+// GenerateRoutes returns a readable virtualizers.routes struct
+func GenerateRoutes(cfg *vcfg.VCFG) *virtualizers.Routes {
 	routes := virtualizers.Routes{}
 	var nics = cfg.Networks
 	for i, nic := range nics {
@@ -137,6 +136,14 @@ func Routes(cfg *vcfg.VCFG) []virtualizers.NetworkInterface {
 			routes.NIC[i].Protocol[p] = existingPorts
 		}
 	}
+	return &routes
+}
+
+// Routes converts networks from the config to readable virtualizers.NetworkInterface fields.
+func Routes(cfg *vcfg.VCFG) []virtualizers.NetworkInterface {
+
+	routes := GenerateRoutes(cfg)
+
 	apiNics := make([]virtualizers.NetworkInterface, 0)
 	for i, net := range cfg.Networks {
 		newNetwork := virtualizers.NetworkInterface{

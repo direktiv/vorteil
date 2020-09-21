@@ -79,6 +79,12 @@ func (b *Builder) calculateMinimumRootSize(ctx context.Context) error {
 
 	b.fs.SetMinimumInodes(int64(b.vcfg.VM.Inodes))
 
+	// if the user runs with shell we add all busybox commands
+	// and link them to /usr/bin and /bin so we need to increase inodes
+	if b.kernelOptions.Shell {
+		b.fs.IncreaseMinimumInodes(2000)
+	}
+
 	if b.vcfg.VM.DiskSize.IsDelta() {
 		delta := vcfg.Bytes(0)
 		delta.ApplyDelta(b.vcfg.VM.DiskSize)

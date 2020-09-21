@@ -444,7 +444,7 @@ func TarFromPackage(w io.Writer, pkg vpkg.Reader) error {
 
 		header.Name = strings.TrimPrefix(path, "./")
 		files = append(files, header.Name)
-		if header.Name == ".vorteilproject" && !vprjIncluded {
+		if header.Name == FileName && !vprjIncluded {
 
 			tf, err = ioutil.TempFile(os.TempDir(), "vorteil-unpack-")
 			if err != nil {
@@ -579,7 +579,7 @@ func TarFromPackage(w io.Writer, pkg vpkg.Reader) error {
 
 		vprjTmp := vio.CustomFile(vio.CustomFileArgs{
 			ModTime:    time.Now(),
-			Name:       ".vorteilproject",
+			Name:       FileName,
 			ReadCloser: ioutil.NopCloser(bytes.NewReader(b)),
 			Size:       len(b),
 		})
@@ -603,7 +603,7 @@ func TarFromPackage(w io.Writer, pkg vpkg.Reader) error {
 
 		for _, x := range vprj.Targets[0].VCFGs {
 			for _, s := range files {
-				if s == ".vorteilproject" {
+				if s == FileName {
 
 					for i := range vprj.Targets {
 						if vprj.Targets[i].Name == strings.TrimSuffix(x, path.Ext(x)) {
@@ -618,7 +618,7 @@ func TarFromPackage(w io.Writer, pkg vpkg.Reader) error {
 
 					vprjTmp := vio.CustomFile(vio.CustomFileArgs{
 						ModTime:    time.Now(),
-						Name:       ".vorteilproject",
+						Name:       FileName,
 						ReadCloser: ioutil.NopCloser(bytes.NewReader(b)),
 						Size:       len(b),
 					})

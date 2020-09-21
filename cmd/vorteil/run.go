@@ -37,7 +37,7 @@ func runFirecracker(pkgReader vpkg.Reader, cfg *vcfg.VCFG) error {
 		return errors.New("firecracker is not installed on your system")
 	}
 	// Check if bridge device exists
-	_, err := firecracker.FetchBridgeDev()
+	err := firecracker.FetchBridgeDev()
 	if err != nil {
 		return errors.New("try running 'sudo vorteil firecracker-setup' before using firecracker")
 	}

@@ -340,11 +340,11 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG) error {
 		if err != nil {
 			return
 		}
-		virt.Close(false)
-
 		if flagRecord != "" {
 			decompile(diskpath, flagRecord)
 		}
+		virt.Close(false)
+
 	}()
 
 	for {

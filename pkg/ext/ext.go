@@ -245,7 +245,7 @@ func (c *Compiler) calculateDirectorySize(n *vio.TreeNode) (int64, int64, error)
 	leftover = BlockSize - length
 	for i, child := range n.Children {
 		name := path.Base(child.File.Name())
-		l := int64(8 + (len(name)+1+dentryNameAlignment-1)/dentryNameAlignment)
+		l := 8 + align(int64(len(name)+1), dentryNameAlignment)
 		if leftover >= l {
 			length += l
 			leftover -= l
@@ -266,6 +266,7 @@ func (c *Compiler) calculateDirectorySize(n *vio.TreeNode) (int64, int64, error)
 		return 0, 0, err
 	}
 	fs += content
+
 	return content, fs, nil
 
 }
@@ -865,6 +866,7 @@ func (c *Compiler) generateDirectoryData(node *nodeBlocks) (io.Reader, error) {
 	}
 
 	buf.Grow(int(leftover) % int(BlockSize))
+
 	return bytes.NewReader(buf.Bytes()), nil
 
 }

@@ -308,6 +308,7 @@ func runQEMU(pkgReader vpkg.Reader, cfg *vcfg.VCFG) error {
 }
 
 func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG) error {
+	defer virt.Close(true)
 
 	// Gather home directory for firecracker storage path
 	home, err := homedir.Dir()
@@ -345,7 +346,6 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG) error {
 			decompile(diskpath, flagRecord)
 		}
 	}()
-
 	for {
 		select {
 		case <-time.After(time.Millisecond * 200):
@@ -360,14 +360,6 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG) error {
 				}
 			}
 
-			if finished && virt.State() == virtualizers.Ready {
-				err = virt.Close(true)
-				if err != nil {
-					log.Errorf(err.Error())
-					return err
-				}
-				return nil
-			}
 		case msg, more := <-s:
 			if !more {
 				return nil

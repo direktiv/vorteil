@@ -379,6 +379,11 @@ func (v *Virtualizer) Close(force bool) error {
 	return nil
 }
 
+// Details returns data to for the ConverToVM function on util
+func (v *Virtualizer) Details() (string, string, string, []virtualizers.NetworkInterface, time.Time, *vcfg.VCFG, interface{}) {
+	return v.name, v.pname, v.state, v.routes, v.created, v.config, v.source
+}
+
 // Prepare prepares the virtualizer with the appropriate fields to run the virtual machine
 func (v *Virtualizer) Prepare(args *virtualizers.PrepareArgs) *virtualizers.VirtualizeOperation {
 

@@ -214,6 +214,11 @@ func (v *Virtualizer) ForceStop() error {
 	return nil
 }
 
+// Details returns data to for the ConverToVM function on util
+func (v *Virtualizer) Details() (string, string, string, []virtualizers.NetworkInterface, time.Time, *vcfg.VCFG, interface{}) {
+	return v.name, v.pname, v.state, v.routes, v.created, v.config, v.source
+}
+
 // Close shuts down the virtual machine and cleans up the disk and folders
 func (v *Virtualizer) Close(force bool) error {
 	v.logger.Debugf("Deleting VM")

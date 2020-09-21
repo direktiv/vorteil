@@ -489,6 +489,11 @@ func (v *Virtualizer) Download() (vio.File, error) {
 	return f, nil
 }
 
+// Details returns data to for the ConverToVM function on util
+func (v *Virtualizer) Details() (string, string, string, []virtualizers.NetworkInterface, time.Time, *vcfg.VCFG, interface{}) {
+	return v.name, v.pname, v.state, v.routes, v.created, v.config, v.source
+}
+
 // prepare sets the fields and arguments to spawn the virtual machine
 func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	var returnErr error

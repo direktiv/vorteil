@@ -14,6 +14,10 @@ import (
 	"strconv"
 	"strings"
 
+	dhcp "github.com/krolaw/dhcp4"
+	conn "github.com/krolaw/dhcp4/conn"
+	dhcpHandler "github.com/vorteil/vorteil/pkg/virtualizers/dhcp"
+
 	"github.com/milosgajdos/tenus"
 	"github.com/songgao/water"
 )
@@ -56,51 +60,34 @@ func ByteCountDecimal(b int64) string {
 }
 
 // FetchBridgeDev retrieves the bridge device
-func FetchBridgeDev() (*tenus.Bridger, error) {
+func FetchBridgeDev() (tenus.Bridger, error) {
 	// Check if bridge device exists
 	bridger, err := tenus.BridgeFromName("vorteil-bridge")
 	if err != nil {
-		return errors.New("try running 'vorteil firecracker-setup' before using firecracker")
+		return nil, errors.New("try running 'vorteil firecracker-setup' before using firecracker")
 	}
 	return bridger, err
 }
 
 // CreateBridgeDevice creates a bridge device if it already exists returns with the bridge device
-func CreateBridgeDevice() (*tenus.Bridger, error) {
+func CreateBridgeDevice() (tenus.Bridger, error) {
 	// Create bridge device
 	bridger, err := tenus.NewBridgeWithName("vorteil-bridge")
 	if err != nil {
 		if !strings.Contains(err.Error(), "Interface name vorteil-bridge already assigned on the host") {
-			return err
+			return nil, err
 		}
 		// get bridge device
-		bridger, err := FetchBridgeDev()
+		bridger, err = FetchBridgeDev()
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
 	// Switch bridge up
 	if err = bridger.SetLinkUp(); err != nil {
-		return err
+		return nil, err
 	}
-	return bridger
-}
-
-// AttachIP attaches the ip range for the dhcp server onto the bridge device
-func (t *tenus.Bridger) AttachIP() error {
-	// Fetch address
-	ipv4Addr, ipv4Net, err := net.ParseCIDR("174.72.0.1/24")
-	if err != nil {
-		if !strings.Contains(err.Error(), "file exists") {
-			return err
-		}
-	}
-	// Assign bridge to device so host knows where to send requests.
-	if err = t.SetLinkIp(ipv4Addr, ipv4Net); err != nil {
-		if !strings.Contains(err.Error(), "file exists") {
-			return err
-		}
-	}
+	return bridger, nil
 }
 
 //SetupBridgeAndDHCPServer initializes the bridge device and creates a dhcp & http handler to create devices.
@@ -111,9 +98,18 @@ func SetupBridgeAndDHCPServer() error {
 	if err != nil {
 		return err
 	}
-	err = bridger.AttachIP()
+	// Fetch address
+	ipv4Addr, ipv4Net, err := net.ParseCIDR("174.72.0.1/24")
 	if err != nil {
-		return err
+		if !strings.Contains(err.Error(), "file exists") {
+			return err
+		}
+	}
+	// Assign bridge to device so host knows where to send requests.
+	if err = bridger.SetLinkIp(ipv4Addr, ipv4Net); err != nil {
+		if !strings.Contains(err.Error(), "file exists") {
+			return err
+		}
 	}
 	// create dhcp server on an interface
 	server := dhcpHandler.NewHandler()
@@ -385,7 +381,7 @@ type writeCounter struct {
 // }
 
 // CreateTapDevices creates devices required for the virtual machine to run
-func CreateTapDevices(id string, routes int) error {
+func CreateTapDevices(id string, routes int) (*Devices, error) {
 	cd := CreateDevices{
 		ID:     id,
 		Routes: routes,
@@ -393,35 +389,31 @@ func CreateTapDevices(id string, routes int) error {
 
 	cdm, err := json.Marshal(cd)
 	if err != nil {
-		returnErr = err
-		return
+		return nil, err
 	}
 	resp, err := http.Post("http://localhost:7476/", "application/json", bytes.NewBuffer(cdm))
 	if err != nil {
-		returnErr = errors.New("Run ./sudo firecracker-setup for the listener")
-		return
+		return nil, errors.New("Run ./sudo firecracker-setup for the listener")
 	}
 
 	defer resp.Body.Close()
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		returnErr = err
-		return
+		return nil, err
 	}
 
 	var ifs Devices
 	err = json.Unmarshal(body, &ifs)
 	if err != nil {
-		returnErr = err
-		return
+		return nil, err
 	}
-	return ifs
+	return &ifs, nil
 }
 
 // DeleteTapDevices delete the tap devices using the listener
 func DeleteTapDevices(devices []string) error {
 	client := &http.Client{}
-	cdm, err := json.Marshal(v.tapDevice)
+	cdm, err := json.Marshal(devices)
 	if err != nil {
 		return err
 	}

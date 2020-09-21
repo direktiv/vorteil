@@ -49,12 +49,12 @@ type Virtualizer struct {
 	gctx      context.Context    // global context used to spawn vmm
 	vmmCancel context.CancelFunc // cancel vmm
 
-	fconfig     firecracker.Config   // config for virtual machine manager
+	fconfig     *firecracker.Config  // config for virtual machine manager
 	machine     *firecracker.Machine // machine firecracker spawned
 	machineOpts []firecracker.Opt    // options provided to spawn machine
 
-	bridgeDevice tenus.Bridger // bridge device e.g vorteil-bridge
-	tapDevice    Devices       // tap device for the machine
+	bridgeDevice *tenus.Bridger // bridge device e.g vorteil-bridge
+	tapDevice    *Devices       // tap device for the machine
 
 	vmdrive string // store disks in this directory
 }
@@ -138,7 +138,7 @@ func (v *Virtualizer) Close(force bool) error {
 		return err
 	}
 
-	err = DeleteTapDevices()
+	err = DeleteTapDevices(v.tapDevice.Devices)
 	if err != nil {
 		return err
 	}
@@ -149,6 +149,11 @@ func (v *Virtualizer) Close(force bool) error {
 	virtualizers.ActiveVMs.Delete(v.name)
 
 	return nil
+}
+
+// Details returns data to for the ConverToVM function on util
+func (v *Virtualizer) Details() (string, string, string, []virtualizers.NetworkInterface, time.Time, *vcfg.VCFG, interface{}) {
+	return v.name, v.pname, v.state, v.routes, v.created, v.config, v.source
 }
 
 // Prepare prepares the virtualizer with the appropriate fields to run the virtualizer
@@ -205,7 +210,7 @@ func (v *Virtualizer) Start() error {
 
 			v.machineOpts = append(v.machineOpts, firecracker.WithProcessRunner(cmd))
 
-			v.machine, err = firecracker.NewMachine(v.vmmCtx, v.fconfig, v.machineOpts...)
+			v.machine, err = firecracker.NewMachine(v.vmmCtx, *v.fconfig, v.machineOpts...)
 			if err != nil {
 				v.logger.Errorf("Error creating machine: %s", err.Error())
 			}

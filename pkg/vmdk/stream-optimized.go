@@ -7,52 +7,27 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math/rand"
 	"strings"
-	"time"
 
 	"github.com/vorteil/vorteil/pkg/vio"
 )
 
-const (
-	Magic           = 0x564d444b
-	SectorSize      = 0x200
-	GrainSize       = 0x10000
-	SectorsPerGrain = GrainSize / SectorSize
-	TableMaxRows    = 512
-	TableRowSize    = 4
-	TableSectors    = TableMaxRows * TableRowSize / SectorSize
-)
-
-type Header struct {
-	MagicNumber        uint32 // 0
-	Version            uint32 // 4
-	Flags              uint32 // 8
-	Capacity           uint64 // 12
-	GrainSize          uint64 // 20
-	DescriptorOffset   uint64 // 28
-	DescriptorSize     uint64 // 36
-	NumGTEsPerGT       uint32 // 44
-	RGDOffset          uint64 // 48
-	GDOffset           uint64 // 56
-	OverHead           uint64 // 64
-	UncleanShutdown    byte   // 72
-	SingleEndLineChar  byte   // 73
-	NonEndLineChar     byte   // 74
-	DoubleEndLineChar1 byte   // 75
-	DoubleEndLineChar2 byte   // 76
-	CompressAlgorithm  uint16 // 77
-	Pad                [433]uint8
-}
-
-type HolePredictor interface {
+// Sizer is an interface that shouldn't exist in a vacuum, but does because our
+// other image formats follow a similar patten and need more information. A
+// Sizer should return the true and final RAW size of the image and be callable
+// before the first byte of data is written to the Writer. Note that our
+// vimg.Builder implements this interface and is the intended argument in most
+// cases.
+type Sizer interface {
 	Size() int64
-	RegionIsHole(begin, size int64) bool
 }
 
+// StreamOptimizedWriter implements io.Closer, io.Writer, and io.Seeker
+// interfaces. Creating a stream-optimized VMDK image is as simple as getting
+// one of these writers and copying a raw image into it.
 type StreamOptimizedWriter struct {
 	w io.WriteSeeker
-	h HolePredictor
+	h Sizer
 
 	hdr         *Header
 	grainBuffer *bytes.Buffer
@@ -69,13 +44,6 @@ type StreamOptimizedWriter struct {
 	totalGTSectors     int64
 	grainNo            int64
 	grainCounter       int64
-}
-
-func generateDiskUID() string {
-	rand.Seed(time.Now().UTC().UnixNano())
-	b := [4]byte{}
-	binary.LittleEndian.PutUint32(b[:], uint32(rand.Int31()))
-	return strings.ToUpper(fmt.Sprintf("%X", b))
 }
 
 func streamDescriptor(name string, totalDataGrains int64) string {
@@ -128,7 +96,6 @@ func (w *StreamOptimizedWriter) writeStreamHeader() error {
 
 	// Overhead is measured in grains, not sectors.
 	// Includes everything before the start of the disk contents.
-	// hdr.OverHead = (((uint64(2*(w.totalGDSectors+w.totalGTSectors)) + hdr.RGDOffset) + sectorsPerGrain - 1) / sectorsPerGrain) * sectorsPerGrain
 	hdr.OverHead = 128
 
 	hdr.Capacity = uint64(w.totalDataSectors)
@@ -181,14 +148,11 @@ func compress(grain []byte) ([]byte, error) {
 
 	buf := new(bytes.Buffer)
 
+	// NOTE: contrary to the spec I've seen, RFC 1950 seems to be the correct
+	// compression algorithm.
+
 	// RFC 1950
 	w, _ := zlib.NewWriterLevel(buf, zlib.NoCompression)
-
-	// RFC 1951
-	// w, _ := flate.NewWriter(buf, flate.DefaultCompression)
-
-	// RFC 1952
-	// w, _ := gzip.NewWriterLevel(buf, gzip.DefaultCompression)
 
 	_, err := w.Write(grain)
 	if err != nil {
@@ -199,9 +163,6 @@ func compress(grain []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	// // NONE
-	// return grain, nil
 
 	return buf.Bytes(), nil
 
@@ -333,11 +294,8 @@ func (w *StreamOptimizedWriter) flushGrain() error {
 	return nil
 }
 
+// Write implements io.Writer.
 func (w *StreamOptimizedWriter) Write(p []byte) (int, error) {
-
-	if len(p) == 0 {
-		return 0, nil
-	}
 
 	if w.cursor >= w.h.Size() {
 		return 0, io.EOF
@@ -367,6 +325,7 @@ func (w *StreamOptimizedWriter) Write(p []byte) (int, error) {
 	return k, err
 }
 
+// Seek implements io.Seeker.
 func (w *StreamOptimizedWriter) Seek(offset int64, whence int) (int64, error) {
 	var abs int64
 	switch whence {
@@ -388,10 +347,7 @@ func (w *StreamOptimizedWriter) Seek(offset int64, whence int) (int64, error) {
 		nextGrainStart := (w.grainNo + 1) * GrainSize
 		if abs < nextGrainStart {
 			_, err := io.CopyN(w, vio.Zeroes, abs-w.cursor)
-			if err != nil {
-				return w.cursor, err
-			}
-			return w.cursor, nil
+			return w.cursor, err
 		}
 
 		err := w.flushGrain()
@@ -404,13 +360,6 @@ func (w *StreamOptimizedWriter) Seek(offset int64, whence int) (int64, error) {
 		}
 	}
 
-}
-
-type metadataMarker struct {
-	Sectors uint64
-	Size    uint32
-	Type    uint32
-	Pad     [496]byte
 }
 
 func (w *StreamOptimizedWriter) writeFooter() error {
@@ -465,9 +414,6 @@ func (w *StreamOptimizedWriter) writeFooter() error {
 	}
 
 	// add table location to directory
-	// if len(w.streamDirectory)%512 != 0 {
-	// 	w.streamDirectory = append(w.streamDirectory, make([]uint32, 512-len(w.streamDirectory)%512)...)
-	// }
 	gdOffset := (pos + 512) / 512
 	offset = pos + 512 + 4*int64(len(w.streamDirectory))
 
@@ -496,7 +442,8 @@ func (w *StreamOptimizedWriter) writeFooter() error {
 
 }
 
-type eosMarker struct {
+// EOSMarker marks the end of the stream-optimized VMDK.
+type EOSMarker struct {
 	Val  uint64
 	Size uint32
 	Type uint32
@@ -505,7 +452,7 @@ type eosMarker struct {
 
 func (w *StreamOptimizedWriter) writeEOS() error {
 
-	marker := new(eosMarker)
+	marker := new(EOSMarker)
 	err := binary.Write(w.w, binary.LittleEndian, marker)
 	if err != nil {
 		return err
@@ -515,7 +462,9 @@ func (w *StreamOptimizedWriter) writeEOS() error {
 
 }
 
+// Close implements io.Closer.
 func (w *StreamOptimizedWriter) Close() error {
+
 	_, err := w.Seek(w.h.Size(), io.SeekStart)
 	if err != nil {
 		return err
@@ -532,9 +481,13 @@ func (w *StreamOptimizedWriter) Close() error {
 	}
 
 	return nil
+
 }
 
-func NewStreamOptimizedWriter(w io.WriteSeeker, h HolePredictor) (*StreamOptimizedWriter, error) {
+// NewStreamOptimizedWriter returns a StreamOptimizedWriter to which a RAW image
+// can be copied in order to create an XVA format disk image. The Sizer 'h' must
+// accurately return the true and final RAW size of the image.
+func NewStreamOptimizedWriter(w io.WriteSeeker, h Sizer) (*StreamOptimizedWriter, error) {
 
 	x := &StreamOptimizedWriter{
 		w: w,

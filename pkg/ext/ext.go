@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/vorteil/vorteil/pkg/elog"
 	"github.com/vorteil/vorteil/pkg/vio"
 )
 
@@ -95,17 +96,21 @@ func align(a, b int64) int64 {
 
 type CompilerArgs struct {
 	FileTree vio.FileTree
+	Logger   elog.Logger
 }
 
 type Compiler struct {
-	tree          vio.FileTree
-	minFreeInodes int64
-	minFreeSpace  int64
-	minInodes     int64
-	minDataBlocks int64
-	minSize       int64
-	inodes        int64
-	size          int64
+	log elog.Logger
+
+	tree           vio.FileTree
+	minFreeInodes  int64
+	minFreeSpace   int64
+	minInodes      int64
+	minInodesPer64 int64
+	minDataBlocks  int64
+	minSize        int64
+	inodes         int64
+	size           int64
 
 	filledDataBlocks       int64
 	blocks                 int64
@@ -134,6 +139,7 @@ type Compiler struct {
 func NewCompiler(args *CompilerArgs) *Compiler {
 	c := new(Compiler)
 	c.tree = args.FileTree
+	c.log = args.Logger
 	return c
 }
 
@@ -168,6 +174,10 @@ func (c *Compiler) IncreaseMinimumInodes(inodes int64) {
 
 func (c *Compiler) SetMinimumInodes(inodes int64) {
 	c.minInodes = inodes
+}
+
+func (c *Compiler) SetMinimumInodesPer64MiB(inodes int64) {
+	c.minInodesPer64 = inodes
 }
 
 func (c *Compiler) IncreaseMinimumFreeSpace(space int64) {
@@ -347,6 +357,12 @@ func (c *Compiler) calculateMinimalStructure(ctx context.Context) error {
 		}
 
 		inodesPerGroup = divide(c.minInodes, groups)
+
+		// each block group is 128 MiB, so we double the per64 value if it's set
+		if inodesPerGroup < c.minInodesPer64*2 {
+			inodesPerGroup = c.minInodesPer64 * 2
+		}
+
 		inodesPerGroup = align(inodesPerGroup, InodesPerBlock)
 		blocksPerBGDT = divide(groups*BlockGroupDescriptorSize, BlockSize)
 		blocksPerInodeTable = inodesPerGroup / InodesPerBlock
@@ -381,6 +397,11 @@ func (c *Compiler) Precompile(ctx context.Context, size int64) error {
 	c.blocksPerGroup = BlockSize * 8 // 8 bits per byte in the bitmap
 	c.groups = divide(c.blocks, c.blocksPerGroup)
 	c.inodesPerGroup = divide(c.minInodes, c.groups)
+
+	if c.inodesPerGroup < c.minInodesPer64*2 {
+		c.inodesPerGroup = c.minInodesPer64 * 2
+	}
+
 	c.inodesPerGroup = align(c.inodesPerGroup, InodesPerBlock)
 	c.blocksPerBGDT = divide(c.groups*BlockGroupDescriptorSize, BlockSize)
 	c.blocksPerInodeTable = c.inodesPerGroup / InodesPerBlock
@@ -466,6 +487,8 @@ func (c *Compiler) Precompile(ctx context.Context, size int64) error {
 		return err
 	}
 	c.generateBGDT()
+
+	c.log.Debugf("Total Inodes:  %v", c.inodesPerGroup*c.groups)
 
 	return nil
 

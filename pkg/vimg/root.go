@@ -77,7 +77,11 @@ func (b *Builder) validateRootArgs() error {
 
 func (b *Builder) calculateMinimumRootSize(ctx context.Context) error {
 
-	b.fs.SetMinimumInodes(int64(b.vcfg.VM.Inodes))
+	if b.vcfg.VM.Inodes == 0 {
+		b.fs.SetMinimumInodesPer64MiB(1024)
+	} else {
+		b.fs.SetMinimumInodes(int64(b.vcfg.VM.Inodes))
+	}
 
 	// if the user runs with shell we add all busybox commands
 	// and link them to /usr/bin and /bin so we need to increase inodes

@@ -26,6 +26,7 @@ import (
 const (
 	// FileName ..
 	FileName = ".vorteilproject"
+	UnpackTempPattern = "vorteil-unpack-"
 )
 
 // TargetData ..
@@ -394,7 +395,7 @@ func TarFromPackage(w io.Writer, pkg vpkg.Reader) error {
 	defer ico.Close()
 
 	iconName := "default.png"
-	iconFile, err := ioutil.TempFile(os.TempDir(), "vorteil-unpack")
+	iconFile, err := ioutil.TempFile(os.TempDir(), UnpackTempPattern)
 	if err != nil {
 		return err
 	}
@@ -446,7 +447,7 @@ func TarFromPackage(w io.Writer, pkg vpkg.Reader) error {
 		files = append(files, header.Name)
 		if header.Name == FileName && !vprjIncluded {
 
-			tf, err = ioutil.TempFile(os.TempDir(), "vorteil-unpack-")
+			tf, err = ioutil.TempFile(os.TempDir(), UnpackTempPattern)
 			if err != nil {
 				return err
 			}
@@ -600,7 +601,6 @@ func TarFromPackage(w io.Writer, pkg vpkg.Reader) error {
 			return err
 		}
 	} else {
-
 		for _, x := range vprj.Targets[0].VCFGs {
 			for _, s := range files {
 				if s == FileName {

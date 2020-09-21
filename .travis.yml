@@ -27,7 +27,7 @@ jobs:
       script: 
         - go build -o vorteil github.com/vorteil/vorteil/cmd/vorteil 
         - GOOS=windows go build -o vorteil.exe github.com/vorteil/vorteil/cmd/vorteil
-        - go test -coverprofile c.out ./...
+        - go test -timeout 30s -coverprofile c.out ./...
         - zip vorteil_windows-x86.zip vorteil.exe
         - tar -zcvf vorteil_linux-x86.tar.gz vorteil
       after_success:

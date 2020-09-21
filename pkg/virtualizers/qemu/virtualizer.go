@@ -191,7 +191,7 @@ func (v *Virtualizer) Stop() error {
 				defer os.RemoveAll(filepath.ToSlash(filepath.Join(v.folder, "monitor.sock")))
 			}
 			_, err := v.sock.Write([]byte("system_powerdown\n"))
-			if err != nil && err.Error() != fmt.Errorf("The pipe is being closed.").Error() && err.Error() != fmt.Errorf("write unix @->%s: write: broken pipe", filepath.ToSlash(filepath.Join(v.folder, "monitor.sock"))).Error() {
+			if err != nil && err.Error() != fmt.Errorf("The pipe is being closed.").Error() && err.Error() != fmt.Errorf("write unix ->%s: write: broken pipe", filepath.ToSlash(filepath.Join(v.folder, "monitor.sock"))).Error() && err.Error() != fmt.Errorf("write unix @->%s: write: broken pipe", filepath.ToSlash(filepath.Join(v.folder, "monitor.sock"))).Error() {
 				v.logger.Errorf("Error system_powerdown: %s", err.Error())
 				return err
 			}

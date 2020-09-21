@@ -40,61 +40,42 @@ func init() {
 	}
 
 	for _, arg := range args {
-		if strings.HasPrefix(arg, "--") {
-			elems := strings.Split(arg, "[")
-			if len(elems) > 1 {
-				elems[1] = strings.Split(elems[1], "]")[0]
-				switch elems[0] {
-				case "--network":
-					i, err := strconv.Atoi(elems[1])
-					if err != nil {
-						continue
-					}
-					i++
-					if i > maxNetworkFlags {
-						maxNetworkFlags = i
-					}
-				case "--program":
-					// check if root flag is being parsed
-					i, err := strconv.Atoi(elems[1])
-					if err != nil {
-						continue
-					}
-					i++
-					if i > maxProgramFlags {
-						maxProgramFlags = i
-					}
-				case "--nfs":
-					i, err := strconv.Atoi(elems[1])
-					if err != nil {
-						continue
-					}
-					i++
-					if i > maxNFSFlags {
-						maxNFSFlags = i
-					}
-				case "--logging":
-					i, err := strconv.Atoi(elems[1])
-					if err != nil {
-						continue
-					}
-					i++
-					if i > maxLoggingFlags {
-						maxLoggingFlags = i
-					}
-				case "--redirect":
-					i, err := strconv.Atoi(elems[1])
-					if err != nil {
-						continue
-					}
-					i++
-					if i > maxRedirectFlags {
-						maxRedirectFlags = i
-					}
-				}
+		setFlagArgArray(arg)
+	}
+}
+
+func setFlagArgArray(arg string) {
+	if !strings.HasPrefix(arg, "--") {
+		return
+	}
+
+	elems := strings.Split(arg, "[")
+	if len(elems) > 1 {
+		elems[1] = strings.Split(elems[1], "]")[0]
+		switch elems[0] {
+		case "--network":
+			if i, err := strconv.Atoi(elems[1]); err == nil && (i+1) > maxNetworkFlags {
+				maxNetworkFlags = i + 1
+			}
+		case "--program":
+			if i, err := strconv.Atoi(elems[1]); err == nil && (i+1) > maxProgramFlags {
+				maxProgramFlags = i + 1
+			}
+		case "--nfs":
+			if i, err := strconv.Atoi(elems[1]); err == nil && (i+1) > maxNFSFlags {
+				maxNFSFlags = i + 1
+			}
+		case "--logging":
+			if i, err := strconv.Atoi(elems[1]); err == nil && (i+1) > maxLoggingFlags {
+				maxLoggingFlags = i + 1
+			}
+		case "--redirect":
+			if i, err := strconv.Atoi(elems[1]); err == nil && (i+1) > maxRedirectFlags {
+				maxRedirectFlags = i + 1
 			}
 		}
 	}
+
 }
 
 type flag interface {

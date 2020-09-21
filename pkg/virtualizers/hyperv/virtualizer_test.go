@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/vorteil/vorteil/pkg/vcfg"
+	"github.com/vorteil/vorteil/pkg/virtualizers"
 	logger "github.com/vorteil/vorteil/pkg/virtualizers/logging"
 )
 
@@ -106,7 +107,7 @@ func TestRoutes(t *testing.T) {
 		config: vcfg,
 	}
 
-	ni := v.Routes()
+	ni := virtualizers.Routes(v)
 	for _, n := range ni {
 		for _, typep := range n.HTTP {
 			if typep.Port != "8888" {

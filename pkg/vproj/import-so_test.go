@@ -26,8 +26,7 @@ func TestSharedObjectInitializationValid(t *testing.T) {
 	assert.NoError(t, err, "Could not create tmp dir for testing")
 	defer os.RemoveAll(dir)
 	err = copyGoBinaryToDir(dir)
-	assert.NoError(t, err, "Could not copy Go binary to Temp Path: " + dir)
-
+	assert.NoError(t, err, "Could not copy Go binary to Temp Path: "+dir)
 
 	isoOp, err := NewImportSharedObject(dir, true, &elog.CLI{})
 	assert.NoError(t, err)
@@ -40,13 +39,13 @@ func TestSharedObjectInitializationStart(t *testing.T) {
 	assert.NoError(t, err, "Could not create tmp dir for testing")
 	defer os.RemoveAll(dirExclude)
 	err = copyGoBinaryToDir(dirExclude)
-	assert.NoError(t, err, "Could not copy Go binary to Temp Path: " + dirExclude)
+	assert.NoError(t, err, "Could not copy Go binary to Temp Path: "+dirExclude)
 
 	dir, err := ioutil.TempDir(os.TempDir(), "vorteil-iso-test")
 	assert.NoError(t, err, "Could not create tmp dir for testing")
 	defer os.RemoveAll(dir)
 	err = copyGoBinaryToDir(dir)
-	assert.NoError(t, err, "Could not copy Go binary to Temp Path: " + dir)
+	assert.NoError(t, err, "Could not copy Go binary to Temp Path: "+dir)
 
 	isoOp, err := NewImportSharedObject(dir, false, &elog.CLI{})
 	assert.NoError(t, err)
@@ -64,6 +63,16 @@ func TestSharedObjectInitializationStart(t *testing.T) {
 }
 
 func TestSharedObjectFindLib(t *testing.T) {
+	dir, err := ioutil.TempDir(os.TempDir(), "vorteil-iso-test")
+	assert.NoError(t, err, "Could not create tmp dir for testing")
+	defer os.RemoveAll(dir)
+	err = copyGoBinaryToDir(dir)
+	assert.NoError(t, err, "Could not copy Go binary to Temp Path: "+dir)
+
+	isoOp, err := NewImportSharedObject(dir, true, &elog.CLI{})
+	assert.NoError(t, err)
+	assert.NotNil(t, isoOp)
+
 	goPath, err := exec.LookPath("go")
 	assert.NoError(t, err, "Could not locate Go binary on system")
 
@@ -77,13 +86,13 @@ func TestSharedObjectFindLib(t *testing.T) {
 
 
 	for _, goDep := range goDeps {
-		path, err := findLib(goDep, eGo.Class)
+		path, err := isoOp.findLib(goDep, eGo.Class)
 		assert.NotEmpty(t, path)
 		assert.NoError(t, err)
 	}
 
 	// Invalid Lib
-	path, err := findLib("FAKE.LIB.NAME", elf.ELFCLASS64)
+	path, err := isoOp.findLib("FAKE.LIB.NAME", elf.ELFCLASS64)
 	assert.Empty(t, path)
 	assert.Error(t, err)
 }
@@ -95,7 +104,7 @@ func TestSharedObjectReadLink(t *testing.T) {
 	defer os.Remove(emptyFile.Name())
 
 	err = os.Symlink(emptyFile.Name(), emptyFile.Name()+".Symlink")
-	assert.NoError(t, err, "Could not create symlink: " + emptyFile.Name()+".Symlink")
+	assert.NoError(t, err, "Could not create symlink: "+emptyFile.Name()+".Symlink")
 
 	// Invalid
 	path, err := ReadLink(emptyFile.Name())
@@ -103,10 +112,9 @@ func TestSharedObjectReadLink(t *testing.T) {
 	assert.Error(t, err)
 
 	// Valid
-	targetPath, err := ReadLink(emptyFile.Name()+".Symlink")
+	targetPath, err := ReadLink(emptyFile.Name() + ".Symlink")
 	assert.Equal(t, targetPath, emptyFile.Name())
 	assert.NoError(t, err)
-
 
 }
 
@@ -120,7 +128,7 @@ func TestSharedObjectFindDeps(t *testing.T) {
 	assert.NoError(t, err, "Could not create tmp dir for testing")
 	defer os.RemoveAll(dir)
 	err = copyGoBinaryToDir(dir)
-	assert.NoError(t, err, "Could not copy Go binary to Temp Path: " + dir)
+	assert.NoError(t, err, "Could not copy Go binary to Temp Path: "+dir)
 
 	goPath, err := exec.LookPath("go")
 	assert.NoError(t, err, "Could not locate Go binary on system")
@@ -137,8 +145,8 @@ func TestSharedObjectFindDeps(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, isoOp)
 
-	soPath, err := findLib(goDeps[0], eGo.Class)
-	assert.NoError(t, err, "Could not find path of shared object: " + goDeps[0])
+	soPath, err := isoOp.findLib(goDeps[0], eGo.Class)
+	assert.NoError(t, err, "Could not find path of shared object: "+goDeps[0])
 
 	eSOPath, err := elf.Open(soPath)
 	assert.NoError(t, err)
@@ -153,7 +161,7 @@ func TestSharedObjectFindDeps(t *testing.T) {
 
 	for _, isoDep := range isoOperationSODeps {
 		var found bool
-		var isoDepName string = filepath.Base(isoDep)
+		var isoDepName = filepath.Base(isoDep)
 
 		// Check if Shared object found with listDependencies exists in slice of shared objects found with ImportedLibraries()
 		for _, soDep := range soDeps {

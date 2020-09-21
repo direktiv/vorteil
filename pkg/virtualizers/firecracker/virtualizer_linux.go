@@ -34,6 +34,7 @@ import (
 	"github.com/vorteil/vorteil/pkg/virtualizers"
 	dhcpHandler "github.com/vorteil/vorteil/pkg/virtualizers/dhcp"
 	logger "github.com/vorteil/vorteil/pkg/virtualizers/logging"
+	"github.com/vorteil/vorteil/pkg/virtualizers/util"
 )
 
 func FetchBridgeDev() error {
@@ -117,7 +118,6 @@ func OrganiseTapDevices(w http.ResponseWriter, r *http.Request) {
 		bridgeDev, err := tenus.BridgeFromName("vorteil-bridge")
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
-
 		}
 
 		// set network adapters
@@ -190,6 +190,11 @@ func OrganiseTapDevices(w http.ResponseWriter, r *http.Request) {
 
 // DownloadPath is the path where we pull firecracker-vmlinux's from
 const DownloadPath = "https://storage.googleapis.com/vorteil-dl/firecracker-vmlinux/"
+
+// Details returns data to for the ConverToVM function on util
+func (v *Virtualizer) Details() (string, string, string, []virtualizers.NetworkInterface, time.Time, *vcfg.VCFG, interface{}) {
+	return v.name, v.pname, v.state, v.routes, v.created, v.config, v.source
+}
 
 // Virtualizer is a struct which will implement the interface so the manager can control it
 type Virtualizer struct {
@@ -684,8 +689,7 @@ func (v *Virtualizer) Prepare(args *virtualizers.PrepareArgs) *virtualizers.Virt
 	v.logger = args.Logger
 	v.serialLogger = logger.NewLogger(2048 * 10)
 	v.logger.Debugf("Preparing VM")
-	v.routes = v.Routes()
-
+	v.routes = util.Routes(args.Config.Networks)
 	op.Logs = make(chan string, 128)
 	op.Error = make(chan error, 1)
 	op.Status = make(chan string, 10)
@@ -831,7 +835,6 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 		returnErr = err
 		return
 	}
-
 	resp, err := http.Post("http://localhost:7476/", "application/json", bytes.NewBuffer(cdm))
 	if err != nil {
 		returnErr = errors.New("Run ./sudo firecracker-setup for the listener")
@@ -844,7 +847,6 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 		returnErr = err
 		return
 	}
-
 	var ifs Devices
 	err = json.Unmarshal(body, &ifs)
 	if err != nil {
@@ -947,121 +949,4 @@ func (v *Virtualizer) Start() error {
 		}()
 	}
 	return nil
-}
-
-// Routes converts the VCFG.routes to the apiNetworkInterface which allows
-// us to easiler return to currently written graphql APIs
-func (v *Virtualizer) Routes() []virtualizers.NetworkInterface {
-
-	routes := virtualizers.Routes{}
-	var nics = v.config.Networks
-	for i, nic := range nics {
-		if nic.IP == "" {
-			continue
-		}
-		protocols := []string{
-			"udp",
-			"tcp",
-			"http",
-			"https",
-		}
-		portLists := [][]string{
-			nic.UDP,
-			nic.TCP,
-			nic.HTTP,
-			nic.HTTPS,
-		}
-		for j := 0; j < len(protocols); j++ {
-			protocol := protocols[j]
-			ports := portLists[j]
-			if routes.NIC[i].Protocol == nil {
-				routes.NIC[i].Protocol = make(map[virtualizers.NetworkProtocol]*virtualizers.NetworkProtocolPorts)
-			}
-			if protocol == "" {
-				protocol = "http"
-			}
-			p := virtualizers.NetworkProtocol(protocol)
-			existingPorts, ok := routes.NIC[i].Protocol[p]
-			if !ok {
-				existingPorts = &virtualizers.NetworkProtocolPorts{
-					Port: make(map[string]*virtualizers.NetworkRoute),
-				}
-			}
-			for _, port := range ports {
-				existingPorts.Port[port] = new(virtualizers.NetworkRoute)
-			}
-			routes.NIC[i].Protocol[p] = existingPorts
-		}
-	}
-	apiNics := make([]virtualizers.NetworkInterface, 0)
-	for i, net := range v.config.Networks {
-		newNetwork := virtualizers.NetworkInterface{
-			Name:    "",
-			IP:      net.IP,
-			Mask:    net.Mask,
-			Gateway: net.Gateway,
-		}
-		for _, port := range net.UDP {
-			var addr string
-			if len(routes.NIC) > i {
-				nic := routes.NIC[i]
-				if proto, ok := nic.Protocol["udp"]; ok {
-					if pmap, ok := proto.Port[port]; ok {
-						addr = pmap.Address
-					}
-				}
-			}
-			newNetwork.UDP = append(newNetwork.UDP, virtualizers.RouteMap{
-				Port:    port,
-				Address: addr,
-			})
-		}
-		for _, port := range net.TCP {
-			var addr string
-			if len(routes.NIC) > i {
-				nic := routes.NIC[i]
-				if proto, ok := nic.Protocol["tcp"]; ok {
-					if pmap, ok := proto.Port[port]; ok {
-						addr = pmap.Address
-					}
-				}
-			}
-			newNetwork.TCP = append(newNetwork.TCP, virtualizers.RouteMap{
-				Port:    port,
-				Address: addr,
-			})
-		}
-		for _, port := range net.HTTP {
-			var addr string
-			if len(routes.NIC) > i {
-				nic := routes.NIC[i]
-				if proto, ok := nic.Protocol["http"]; ok {
-					if pmap, ok := proto.Port[port]; ok {
-						addr = pmap.Address
-					}
-				}
-			}
-			newNetwork.HTTP = append(newNetwork.HTTP, virtualizers.RouteMap{
-				Port:    port,
-				Address: addr,
-			})
-		}
-		for _, port := range net.HTTPS {
-			var addr string
-			if len(routes.NIC) > i {
-				nic := routes.NIC[i]
-				if proto, ok := nic.Protocol["https"]; ok {
-					if pmap, ok := proto.Port[port]; ok {
-						addr = pmap.Address
-					}
-				}
-			}
-			newNetwork.HTTPS = append(newNetwork.HTTPS, virtualizers.RouteMap{
-				Port:    port,
-				Address: addr,
-			})
-		}
-		apiNics = append(apiNics, newNetwork)
-	}
-	return apiNics
 }

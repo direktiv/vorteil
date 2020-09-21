@@ -24,6 +24,7 @@ import (
 	"github.com/vorteil/vorteil/pkg/virtualizers/firecracker"
 	"github.com/vorteil/vorteil/pkg/virtualizers/hyperv"
 	"github.com/vorteil/vorteil/pkg/virtualizers/qemu"
+	"github.com/vorteil/vorteil/pkg/virtualizers/util"
 	"github.com/vorteil/vorteil/pkg/virtualizers/virtualbox"
 	"github.com/vorteil/vorteil/pkg/vpkg"
 )
@@ -38,7 +39,7 @@ func runFirecracker(pkgReader vpkg.Reader, cfg *vcfg.VCFG) error {
 	// Check if bridge device exists
 	err := firecracker.FetchBridgeDev()
 	if err != nil {
-		return errors.New("try running 'vorteil firecracker-setup' before using firecracker")
+		return errors.New("try running 'sudo vorteil firecracker-setup' before using firecracker")
 	}
 
 	// Create base folder to store virtualbox vms so the socket can be grouped
@@ -315,7 +316,6 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG) error {
 	if err != nil {
 		return err
 	}
-
 	_ = virt.Prepare(&virtualizers.PrepareArgs{
 		Name:      "vorteil-vm",
 		PName:     virt.Type(),
@@ -351,7 +351,7 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG) error {
 		case <-time.After(time.Millisecond * 200):
 			if virt.State() == virtualizers.Alive && !routesChecked {
 				routesChecked = true
-				lines := gatherNetworkDetails(virt.ConvertToVM().(*virtualizers.VirtualMachine))
+				lines := gatherNetworkDetails(util.ConvertToVM(virt.Details()).(*virtualizers.VirtualMachine))
 				if len(lines) > 0 {
 					log.Warnf("Network settings")
 					for _, line := range lines {

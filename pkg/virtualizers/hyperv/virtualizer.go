@@ -18,6 +18,7 @@ import (
 	"github.com/vorteil/vorteil/pkg/vio"
 	"github.com/vorteil/vorteil/pkg/virtualizers"
 	logger "github.com/vorteil/vorteil/pkg/virtualizers/logging"
+	"github.com/vorteil/vorteil/pkg/virtualizers/util"
 )
 
 // Virtualizer is a struct which will implement the interface so the manager can create one
@@ -130,7 +131,25 @@ func (v *Virtualizer) Start() error {
 		v.state = virtualizers.Alive
 
 		go v.checkState()
-		go v.lookForIP()
+		go func() {
+			ips := util.LookForIP(v.serialLogger)
+			if len(ips) > 0 {
+				for i, route := range v.routes {
+					for j, port := range route.HTTP {
+						v.routes[i].HTTP[j].Address = fmt.Sprintf("%s:%s", ips[i], port.Port)
+					}
+					for j, port := range route.HTTPS {
+						v.routes[i].HTTPS[j].Address = fmt.Sprintf("%s:%s", ips[i], port.Port)
+					}
+					for j, port := range route.TCP {
+						v.routes[i].TCP[j].Address = fmt.Sprintf("%s:%s", ips[i], port.Port)
+					}
+					for j, port := range route.UDP {
+						v.routes[i].UDP[j].Address = fmt.Sprintf("%s:%s", ips[i], port.Port)
+					}
+				}
+			}
+		}()
 		// go v.checkVMList()
 
 		if !v.headless {
@@ -153,69 +172,6 @@ func (v *Virtualizer) Start() error {
 	return nil
 }
 
-// lookForIp is a function that screen reads the logs to get the ip address the app is spawned on
-func (v *Virtualizer) lookForIP() {
-	sub := v.serialLogger.Subscribe()
-	inbox := sub.Inbox()
-	var msg string
-	timer := false
-	msgWrote := false
-	ticker := time.NewTicker(time.Second)
-	defer ticker.Stop()
-	for {
-		select {
-		case logdata, _ := <-inbox:
-			msg += string(logdata)
-			if strings.TrimSpace(msg) != "" && strings.Contains(msg, "ip") {
-				msgWrote = true
-			}
-		case <-ticker.C:
-			if msgWrote {
-				// sleep slightly so we get all the IPS
-				time.Sleep(time.Second * 1)
-				timer = true
-			}
-		// after 30 seconds break out of for loop for memory resolving
-		case <-time.After(time.Second * 30):
-			timer = true
-		}
-		if timer {
-			break
-		}
-	}
-	var ips []string
-	lines := strings.Split(msg, "\r\n")
-	for _, line := range lines {
-		if virtualizers.IPRegex.MatchString(line) {
-			if strings.Contains(line, "ip") {
-				split := strings.Split(line, ":")
-				if len(split) > 1 {
-					ips = append(ips, strings.TrimSpace(split[1]))
-				}
-			}
-
-		}
-	}
-
-	if len(ips) > 0 {
-		for i, route := range v.routes {
-			for j, port := range route.HTTP {
-				v.routes[i].HTTP[j].Address = fmt.Sprintf("%s:%s", ips[i], port.Port)
-			}
-			for j, port := range route.HTTPS {
-				v.routes[i].HTTPS[j].Address = fmt.Sprintf("%s:%s", ips[i], port.Port)
-			}
-			for j, port := range route.TCP {
-				v.routes[i].TCP[j].Address = fmt.Sprintf("%s:%s", ips[i], port.Port)
-			}
-			for j, port := range route.UDP {
-				v.routes[i].UDP[j].Address = fmt.Sprintf("%s:%s", ips[i], port.Port)
-			}
-		}
-	}
-
-}
-
 // Download returns the disk as a vio.File
 func (v *Virtualizer) Download() (vio.File, error) {
 	if !(v.state == virtualizers.Ready) {
@@ -229,43 +185,9 @@ func (v *Virtualizer) Download() (vio.File, error) {
 	return f, nil
 }
 
-// ConvertToVM is a wrapper function that provides us to use the old APIs
-func (v *Virtualizer) ConvertToVM() interface{} {
-	info := v.config.Info
-	vm := v.config.VM
-	system := v.config.System
-	programs := make([]virtualizers.ProgramSummaries, 0)
-
-	for _, p := range v.config.Programs {
-		programs = append(programs, virtualizers.ProgramSummaries{
-			Binary: p.Binary,
-			Args:   string(p.Args),
-			Env:    p.Env,
-		})
-	}
-
-	machine := &virtualizers.VirtualMachine{
-		ID:       v.name,
-		Author:   info.Author,
-		CPUs:     int(vm.CPUs),
-		RAM:      vm.RAM,
-		Disk:     vm.DiskSize,
-		Created:  v.created,
-		Date:     info.Date.Time(),
-		Networks: v.routes,
-		Kernel:   vm.Kernel,
-		Name:     info.Name,
-		Summary:  info.Summary,
-		URL:      string(info.URL),
-		Version:  info.Version,
-		Programs: programs,
-		// Source:   v.source.(virtualizers.Source),
-		Hostname: system.Hostname,
-		Platform: v.pname,
-		Status:   v.state,
-	}
-
-	return machine
+// Details returns data to for the ConverToVM function on util
+func (v *Virtualizer) Details() (string, string, string, []virtualizers.NetworkInterface, time.Time, *vcfg.VCFG, interface{}) {
+	return v.name, v.pname, v.state, v.routes, v.created, v.config, v.source
 }
 
 // Close shuts down the virtual machine and cleans up the disk and folders
@@ -511,7 +433,7 @@ func (v *Virtualizer) Prepare(args *virtualizers.PrepareArgs) *virtualizers.Virt
 	v.config = args.Config
 	v.pname = args.PName
 	// v.source = args.Source
-	v.routes = v.Routes()
+	v.routes = util.Routes(args.Config.Networks)
 	v.state = virtualizers.Changing
 	v.vmdrive = args.VMDrive
 	v.created = time.Now()
@@ -621,121 +543,4 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 		}
 	}
 
-}
-
-// Routes converts the VCFG.routes to the apiNetworkInterface which allows
-// us to easiler return to currently written graphql APIs
-func (v *Virtualizer) Routes() []virtualizers.NetworkInterface {
-
-	routes := virtualizers.Routes{}
-	var nics = v.config.Networks
-	for i, nic := range nics {
-		if nic.IP == "" {
-			continue
-		}
-		protocols := []string{
-			"udp",
-			"tcp",
-			"http",
-			"https",
-		}
-		portLists := [][]string{
-			nic.UDP,
-			nic.TCP,
-			nic.HTTP,
-			nic.HTTPS,
-		}
-		for j := 0; j < len(protocols); j++ {
-			protocol := protocols[j]
-			ports := portLists[j]
-			if routes.NIC[i].Protocol == nil {
-				routes.NIC[i].Protocol = make(map[virtualizers.NetworkProtocol]*virtualizers.NetworkProtocolPorts)
-			}
-			if protocol == "" {
-				protocol = "http"
-			}
-			p := virtualizers.NetworkProtocol(protocol)
-			existingPorts, ok := routes.NIC[i].Protocol[p]
-			if !ok {
-				existingPorts = &virtualizers.NetworkProtocolPorts{
-					Port: make(map[string]*virtualizers.NetworkRoute),
-				}
-			}
-			for _, port := range ports {
-				existingPorts.Port[port] = new(virtualizers.NetworkRoute)
-			}
-			routes.NIC[i].Protocol[p] = existingPorts
-		}
-	}
-	apiNics := make([]virtualizers.NetworkInterface, 0)
-	for i, net := range v.config.Networks {
-		newNetwork := virtualizers.NetworkInterface{
-			Name:    "",
-			IP:      net.IP,
-			Mask:    net.Mask,
-			Gateway: net.Gateway,
-		}
-		for _, port := range net.UDP {
-			var addr string
-			if len(routes.NIC) > i {
-				nic := routes.NIC[i]
-				if proto, ok := nic.Protocol["udp"]; ok {
-					if pmap, ok := proto.Port[port]; ok {
-						addr = pmap.Address
-					}
-				}
-			}
-			newNetwork.UDP = append(newNetwork.UDP, virtualizers.RouteMap{
-				Port:    port,
-				Address: addr,
-			})
-		}
-		for _, port := range net.TCP {
-			var addr string
-			if len(routes.NIC) > i {
-				nic := routes.NIC[i]
-				if proto, ok := nic.Protocol["tcp"]; ok {
-					if pmap, ok := proto.Port[port]; ok {
-						addr = pmap.Address
-					}
-				}
-			}
-			newNetwork.TCP = append(newNetwork.TCP, virtualizers.RouteMap{
-				Port:    port,
-				Address: addr,
-			})
-		}
-		for _, port := range net.HTTP {
-			var addr string
-			if len(routes.NIC) > i {
-				nic := routes.NIC[i]
-				if proto, ok := nic.Protocol["http"]; ok {
-					if pmap, ok := proto.Port[port]; ok {
-						addr = pmap.Address
-					}
-				}
-			}
-			newNetwork.HTTP = append(newNetwork.HTTP, virtualizers.RouteMap{
-				Port:    port,
-				Address: addr,
-			})
-		}
-		for _, port := range net.HTTPS {
-			var addr string
-			if len(routes.NIC) > i {
-				nic := routes.NIC[i]
-				if proto, ok := nic.Protocol["https"]; ok {
-					if pmap, ok := proto.Port[port]; ok {
-						addr = pmap.Address
-					}
-				}
-			}
-			newNetwork.HTTPS = append(newNetwork.HTTPS, virtualizers.RouteMap{
-				Port:    port,
-				Address: addr,
-			})
-		}
-		apiNics = append(apiNics, newNetwork)
-	}
-	return apiNics
 }

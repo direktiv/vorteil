@@ -29,11 +29,16 @@ type VCFG struct {
 	modtime  time.Time
 }
 
+//Privilege: The privilege level that the machine user will bet set with.
+//	Additional information can be found @ https://support.vorteil.io/docs/VCFG-Reference/program/privilege
 type Privilege string
 
 var (
+	//RootPrivilege: root privilege level, has full rights to everything and will run as the 'root' suer
 	RootPrivilege      = Privilege("root")
+	//SuperuserPrivilege: sudo user level privileges, and will run as the configured user
 	SuperuserPrivilege = Privilege("superuser")
+	//SuperuserPrivilege: non-root level privileges, and will run as the configured user
 	UserPrivilege      = Privilege("user")
 )
 
@@ -619,3 +624,4 @@ func Merge(a, b *VCFG) (*VCFG, error) {
 
 	return a, nil
 }
+

@@ -7,7 +7,9 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 
+	"github.com/vorteil/vorteil/pkg/vcfg"
 	"github.com/vorteil/vorteil/pkg/vio"
 	"github.com/vorteil/vorteil/pkg/virtualizers"
 	logger "github.com/vorteil/vorteil/pkg/virtualizers/logging"
@@ -30,6 +32,11 @@ type Virtualizer struct {
 // Type returns the type of virtualizer
 func (v *Virtualizer) Type() string {
 	return VirtualizerID
+}
+
+// Details returns data to for the ConverToVM function on util
+func (v *Virtualizer) Details() (string, string, string, []virtualizers.NetworkInterface, time.Time, *vcfg.VCFG, interface{}) {
+	return "", "", "", nil, time.Now(), nil, nil
 }
 
 // Initialize passes the arguments from creation to create a virtualizer. No arguments apart from name so no need to do anything
@@ -121,16 +128,5 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 
 // Start create the virtualmachine and runs it
 func (v *Virtualizer) Start() error {
-	return nil
-}
-
-// Routes converts the VCFG.routes to the apiNetworkInterface which allows
-// us to easiler return to currently written graphql APIs
-func (v *Virtualizer) Routes() []virtualizers.NetworkInterface {
-	return nil
-}
-
-// Detach ...
-func (v *Virtualizer) Detach(source string) error {
 	return nil
 }

@@ -467,7 +467,7 @@ func (b *Builder) processLinuxArgs() error {
 	}
 	b.linuxArgs = strings.Join(x, " ")
 
-	b.log.Warnf("kernel args: %v", b.linuxArgs)
+	b.log.Debugf("kernel args: %v", b.linuxArgs)
 
 	return nil
 }

@@ -25,17 +25,17 @@ type VirtualizerAllocator interface {
 
 // Virtualizer is an interface which each virtualzier needs to implement
 type Virtualizer interface {
-	Type() string                                   // Returns what type of virtualizer it is as each virtualizer is actually a VM. I still need the type
-	Initialize(data []byte) error                   // Initialize the virtualizer using the data provided from the alloc
-	Prepare(args *PrepareArgs) *VirtualizeOperation // Prepare the vm setup args etc
-	State() string                                  // Return the state the vm is currently in
-	Download() (vio.File, error)                    // Download the disk of the vm
-	ConvertToVM() interface{}                       // A simple helper function to convert the new virtualizer details to a vm object that was previously used for some backwards compat on apis
-	Detach(string) error                            // removes the vm from the active vms section and moves vm contents to different location
-	Start() error                                   // Start the vm
-	Stop() error                                    // Stop the vm
-	Serial() *logger.Logger                         // Return the serial output of the vm
-	Close(bool) error                               // Close the vm is deleting the vm and removing its contents as its not needed anymore.
+	Type() string                                                                              // Returns what type of virtualizer it is as each virtualizer is actually a VM. I still need the type
+	Initialize(data []byte) error                                                              // Initialize the virtualizer using the data provided from the alloc
+	Prepare(args *PrepareArgs) *VirtualizeOperation                                            // Prepare the vm setup args etc
+	State() string                                                                             // Return the state the vm is currently in
+	Download() (vio.File, error)                                                               // Download the disk of the vm
+	Details() (string, string, string, []NetworkInterface, time.Time, *vcfg.VCFG, interface{}) // fetch details relating to the machine
+	// Detach(string) error                            // removes the vm from the active vms section and moves vm contents to different location
+	Start() error           // Start the vm
+	Stop() error            // Stop the vm
+	Serial() *logger.Logger // Return the serial output of the vm
+	Close(bool) error       // Close the vm is deleting the vm and removing its contents as its not needed anymore.
 }
 
 // Create two maps one for the virtualizers that get registered the other to track the vms that are currently created

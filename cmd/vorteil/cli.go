@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -32,8 +33,8 @@ import (
 	"github.com/vorteil/vorteil/pkg/vconvert"
 	"github.com/vorteil/vorteil/pkg/vdecompiler"
 	"github.com/vorteil/vorteil/pkg/vdisk"
-	"github.com/vorteil/vorteil/pkg/virtualizers"
 	"github.com/vorteil/vorteil/pkg/vio"
+	"github.com/vorteil/vorteil/pkg/virtualizers"
 	"github.com/vorteil/vorteil/pkg/virtualizers/firecracker"
 	"github.com/vorteil/vorteil/pkg/vpkg"
 	"github.com/vorteil/vorteil/pkg/vproj"
@@ -53,6 +54,7 @@ var (
 	flagPlatform         string
 	flagGUI              bool
 	flagOS               bool
+	flagRecord           string
 	flagShell            bool
 	flagTouched          bool
 )
@@ -302,157 +304,7 @@ var decompileCmd = &cobra.Command{
 
 		srcPath := args[0]
 		outPath := args[1]
-
-		iio, err := vdecompiler.Open(srcPath)
-		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
-		}
-		defer iio.Close()
-
-		fi, err := os.Stat(outPath)
-		if err != nil && !os.IsNotExist(err) {
-			log.Errorf("%v", err)
-			os.Exit(1)
-		}
-		var into bool
-		if !os.IsNotExist(err) && fi.IsDir() {
-			into = true
-		}
-
-		fpath := "/"
-		dpath := outPath
-		if into {
-			dpath = filepath.ToSlash(filepath.Join(outPath, filepath.Base(fpath)))
-		}
-
-		var counter int
-
-		symlinkCallbacks := make([]func() error, 0)
-
-		var recurse func(int, string, string) error
-		recurse = func(ino int, rpath string, dpath string) error {
-
-			inode, err := iio.ResolveInode(ino)
-			if err != nil {
-				return err
-			}
-
-			if flagTouched && inode.LastAccessTime == 0 && !inode.IsDirectory() && rpath != "/" {
-				log.Printf("skipping untouched object: %s", rpath)
-				return nil
-			}
-
-			counter++
-
-			log.Printf("copying %s", rpath)
-
-			if inode.IsRegularFile() {
-				fi, err = os.Stat(dpath)
-				if !os.IsNotExist(err) {
-					if err == nil {
-						return fmt.Errorf("file already exists: %s", dpath)
-					}
-					return err
-				}
-
-				f, err := os.Create(dpath)
-				if err != nil {
-					return err
-				}
-				defer f.Close()
-
-				rdr, err := iio.InodeReader(inode)
-				if err != nil {
-					return err
-				}
-
-				_, err = io.CopyN(f, rdr, int64(inode.Fullsize()))
-				if err != nil {
-					return err
-				}
-				return nil
-			}
-
-			if inode.IsSymlink() {
-
-				symlinkCallbacks = append(symlinkCallbacks, func() error {
-					rdr, err := iio.InodeReader(inode)
-					if err != nil {
-						return err
-					}
-					data, err := ioutil.ReadAll(rdr)
-					if err != nil {
-						return err
-					}
-
-					err = os.Symlink(string(string(data)), dpath)
-					if err != nil {
-						return err
-					}
-					return nil
-				})
-				return nil
-			}
-
-			if !inode.IsDirectory() {
-				log.Warnf("skipping abnormal file: %s", rpath)
-				return nil
-			}
-
-			fi, err = os.Stat(dpath)
-			if !os.IsNotExist(err) {
-				if err == nil {
-					return fmt.Errorf("file already exists: %s", dpath)
-				}
-				return err
-			}
-
-			err = os.MkdirAll(dpath, 0777)
-			if err != nil {
-				return err
-			}
-
-			entries, err := iio.Readdir(inode)
-			if err != nil {
-				return err
-			}
-
-			for _, entry := range entries {
-				if entry.Name == "." || entry.Name == ".." {
-					continue
-				}
-				err = recurse(entry.Inode, filepath.ToSlash(filepath.Join(rpath, entry.Name)), filepath.Join(dpath, entry.Name))
-				if err != nil {
-					return err
-				}
-			}
-
-			return nil
-		}
-
-		ino, err := iio.ResolvePathToInodeNo(fpath)
-		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
-		}
-		err = recurse(ino, filepath.ToSlash(filepath.Base(fpath)), dpath)
-		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
-		}
-
-		for _, fn := range symlinkCallbacks {
-			err = fn()
-			if err != nil {
-				log.Errorf("%v", err)
-				os.Exit(1)
-			}
-		}
-
-		if flagTouched && counter <= 1 {
-			log.Warnf("No touched files detected. Are you sure this disk has been run?")
-		}
+		decompile(srcPath, outPath)
 
 	},
 }
@@ -1722,12 +1574,12 @@ var provisionCmd = &cobra.Command{
 
 		ctx := context.TODO()
 		err = prov.Provision(&provisioners.ProvisionArgs{
-			Context:     ctx,
-			Image:       image,
-			Name:        provisionName,
-			Description: provisionDescription,
-			Force:       provisionForce,
-			Logger: log,
+			Context:         ctx,
+			Image:           image,
+			Name:            provisionName,
+			Description:     provisionDescription,
+			Force:           provisionForce,
+			Logger:          log,
 			ReadyWhenUsable: provisionReadyWhenUsable,
 		})
 		if err != nil {
@@ -1910,7 +1762,7 @@ func init() {
 }
 
 var unpackCmd = &cobra.Command{
-	Use:     "unpack PACKAGE [DEST]",
+	Use:     "unpack PACKAGE DEST",
 	Aliases: []string{"extract"},
 	Short:   "Unpack a Vorteil package",
 	Long: `Unpack the contents of a Vorteil package into a directory. To simplify
@@ -1921,13 +1773,19 @@ The PACKAGE argument must be a path to a Vorteil package. If DEST is
 provided it must be a path to a directory that is not already a Vorteil project,
 or path to a file that does not exist and could be created without deleting any
 other files. If the DEST argument is omitted it will default to ".".`,
-	Args: cobra.RangeArgs(1, 2),
+	Args: cobra.ExactArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
 
 		pkgPath := args[0]
-		prjPath := "."
-		if len(args) >= 2 {
-			prjPath = args[1]
+		prjPath := args[1]
+
+		// Create project path 'prjPath' if it does not exist
+		if _, err := os.Stat(prjPath); os.IsNotExist(err) {
+			if err = os.Mkdir(prjPath, 0777); err != nil {
+				log.Errorf("could not create DEST path \"%s\", err: %v", prjPath, err)
+			} else {
+				log.Debugf("created DEST path \"%s\"", prjPath)
+			}
 		}
 
 		err := checkValidNewDirOutput(prjPath, flagForce, "DEST", "-f")
@@ -2290,6 +2148,30 @@ and cleaning up the instance when it's done.`,
 			buildablePath = args[0]
 		}
 
+		// Fetch name of the app from path
+
+		var name string
+		_, err := os.Stat(buildablePath)
+		if err != nil {
+			// If stat errors assume its a url
+			u, errParse := url.Parse(buildablePath)
+			if errParse == nil {
+				// Check if its a url i can handle otherwise default to vorteil-vm
+				if u.Hostname() == "apps.vorteil.io" {
+					name = u.Path
+					name = strings.ReplaceAll(name, "/file/", "")
+					name = strings.ReplaceAll(name, "/", "-")
+				} else {
+					name = "vorteil-vm"
+				}
+			} else {
+				log.Errorf("%v", err)
+				os.Exit(1)
+			}
+		} else {
+			name = strings.ReplaceAll(filepath.Base(buildablePath), ".vorteil", "")
+		}
+
 		pkgBuilder, err := getPackageBuilder("BUILDABLE", buildablePath)
 		if err != nil {
 			log.Errorf("%v", err)
@@ -2322,34 +2204,32 @@ and cleaning up the instance when it's done.`,
 			log.Errorf("%v", err)
 			os.Exit(1)
 		}
-
 		err = initKernels()
 		if err != nil {
 			log.Errorf("%v", err)
 			os.Exit(1)
 		}
-
 		switch flagPlatform {
 		case platformQEMU:
-			err = runQEMU(pkgReader, cfg)
+			err = runQEMU(pkgReader, cfg, name)
 			if err != nil {
 				log.Errorf("%v", err)
 				os.Exit(1)
 			}
 		case platformVirtualBox:
-			err = runVirtualBox(pkgReader, cfg)
+			err = runVirtualBox(pkgReader, cfg, name)
 			if err != nil {
 				log.Errorf("%v", err)
 				os.Exit(1)
 			}
 		case platformHyperV:
-			err = runHyperV(pkgReader, cfg)
+			err = runHyperV(pkgReader, cfg, name)
 			if err != nil {
 				log.Errorf("%v", err)
 				os.Exit(1)
 			}
 		case platformFirecracker:
-			err = runFirecracker(pkgReader, cfg)
+			err = runFirecracker(pkgReader, cfg, name)
 			if err != nil {
 				log.Errorf("%v", err)
 				os.Exit(1)
@@ -2371,6 +2251,7 @@ func init() {
 	f.StringVar(&flagPlatform, "platform", defaultVirtualizer(), "run a virtual machine with appropriate hypervisor (qemu, firecracker, virtualbox, hyper-v)")
 	f.BoolVar(&flagGUI, "gui", false, "when running virtual machine show gui of hypervisor")
 	f.BoolVar(&flagShell, "shell", false, "add a busybox shell environment to the image")
+	f.StringVar(&flagRecord, "record", "", "")
 }
 
 func defaultVirtualizer() string {

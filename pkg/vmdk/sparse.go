@@ -7,6 +7,11 @@ import (
 	"strings"
 )
 
+type HolePredictor interface {
+	Size() int64
+	RegionIsHole(begin, size int64) bool
+}
+
 type SparseWriter struct {
 	w io.WriteSeeker
 	h HolePredictor

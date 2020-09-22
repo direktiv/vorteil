@@ -5,9 +5,11 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/vorteil/vorteil/pkg/elog"
 	"github.com/vorteil/vorteil/pkg/vcfg"
 
 	logger "github.com/vorteil/vorteil/pkg/virtualizers/logging"
+	"github.com/vorteil/vorteil/pkg/virtualizers/util"
 )
 
 func TestLoggerAndSerial(t *testing.T) {
@@ -70,9 +72,10 @@ func TestNetworkArgs(t *testing.T) {
 	}
 	v := &Virtualizer{
 		config: vcfg,
+		logger: &elog.CLI{},
 	}
 
-	ni := v.Routes()
+	ni := util.Routes(vcfg.Networks)
 	v.routes = ni
 
 	args, err := v.initializeNetworkCards()
@@ -87,15 +90,6 @@ func TestNetworkArgs(t *testing.T) {
 	}
 }
 
-func TestCreateArgs(t *testing.T) {
-	// args := createArgs(uint(1), int(1000), true, filepath.Join(os.TempDir(), "disk.raw"), "raw")
-	// expectedArgs := fmt.Sprintf("%s -no-reboot -machine q35 -smp 1 -m 1000 -serial stdio -display none -device virtio-scsi-pci,id=scsi -device scsi-hd,drive=hd0 -drive if=none,file=\"C:\\Users\\trent\\AppData\\Local\\Temp\\disk.raw\",format=raw,id=hd0", osFlags)
-	//
-	// if args != expectedArgs {
-	// 	t.Errorf("createArgs failed, expected %s but got %s", expectedArgs, args)
-	// }
-}
-
 func TestDownload(t *testing.T) {
 	f, err := os.Create(filepath.Join(os.TempDir(), "disk.vmdk"))
 	if err != nil {
@@ -103,8 +97,9 @@ func TestDownload(t *testing.T) {
 	}
 	defer f.Close()
 	v := &Virtualizer{
-		disk:  f,
-		state: "ready",
+		disk:   f,
+		logger: &elog.CLI{},
+		state:  "ready",
 	}
 
 	file, err := v.Download()
@@ -126,11 +121,8 @@ func TestRoutes(t *testing.T) {
 	vcfg := &vcfg.VCFG{
 		Networks: vcfgI,
 	}
-	v := &Virtualizer{
-		config: vcfg,
-	}
 
-	ni := v.Routes()
+	ni := util.Routes(vcfg.Networks)
 	for _, n := range ni {
 		for _, typep := range n.HTTP {
 			if typep.Port != "8888" {

@@ -8,6 +8,7 @@ import (
 
 	"github.com/vorteil/vorteil/pkg/vcfg"
 	logger "github.com/vorteil/vorteil/pkg/virtualizers/logging"
+	"github.com/vorteil/vorteil/pkg/virtualizers/util"
 )
 
 var codeBlockToLookIP = `
@@ -81,21 +82,21 @@ func TestCreateVM(t *testing.T) {
 
 }
 
-func TestModifyVM(t *testing.T) {
-	exactArgs := []string{"modifyvm", "helloworld",
-		"--memory", "1024", "--acpi", "on",
-		"--ioapic", "on", "--cpus", "1",
-		"--longmode", "on", "--largepages", "on", "--chipset", "ich9",
-		"--bioslogofadein", "off", "--bioslogofadeout", "off",
-		"--bioslogodisplaytime", "1", "--biosbootmenu", "disabled",
-		"--rtcuseutc", "on", "--uart1", "0x3F8", "4", "--uartmode1",
-		"server", "/tmp/test/socket"}
+// func TestModifyVM(t *testing.T) {
+// 	exactArgs := []string{"modifyvm", "helloworld",
+// 		"--memory", "1024", "--acpi", "on",
+// 		"--ioapic", "on", "--cpus", "1",
+// 		"--longmode", "on", "--largepages", "on", "--chipset", "ich9",
+// 		"--bioslogofadein", "off", "--bioslogofadeout", "off",
+// 		"--bioslogodisplaytime", "1", "--biosbootmenu", "disabled",
+// 		"--rtcuseutc", "on", "--uart1", "0x3F8", "4", "--uartmode1",
+// 		"server", "/tmp/test/socket"}
 
-	argTest := modifyVM("helloworld", "1024", "1", "/tmp/test/socket")
-	if strings.Join(exactArgs, " ") != strings.Join(argTest, " ") {
-		t.Errorf("args do not match, expected %v but got %v", exactArgs, argTest)
-	}
-}
+// 	argTest := modifyVM("helloworld", "1024", "1", "/tmp/test/socket")
+// 	if strings.Join(exactArgs, " ") != strings.Join(argTest, " ") {
+// 		t.Errorf("args do not match, expected %v but got %v", exactArgs, argTest)
+// 	}
+// }
 
 func TestDownload(t *testing.T) {
 	f, err := os.Create(filepath.Join(os.TempDir(), "disk.vmdk"))
@@ -127,11 +128,8 @@ func TestRoutes(t *testing.T) {
 	vcfg := &vcfg.VCFG{
 		Networks: vcfgI,
 	}
-	v := &Virtualizer{
-		config: vcfg,
-	}
 
-	ni := v.Routes()
+	ni := util.Routes(vcfg.Networks)
 	for _, n := range ni {
 		for _, typep := range n.HTTP {
 			if typep.Port != "8888" {

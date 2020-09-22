@@ -8,7 +8,6 @@ import (
 
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
-	"github.com/vorteil/vorteil/pkg/elog"
 )
 
 func TestConfigNotInit(t *testing.T) {
@@ -37,47 +36,47 @@ func TestWriteFile(t *testing.T) {
 
 }
 
-func TestFindBinary(t *testing.T) {
+// func TestFindBinary(t *testing.T) {
 
-	log := &elog.CLI{}
+// 	log := &elog.CLI{}
 
-	s, _ := findBinary("/find/bin", []string{}, "/", "../../test/vconvert", log)
-	assert.NotNil(t, s)
+// 	s, _ := findBinary("/find/bin", []string{}, "/", "../../test/vconvert", log)
+// 	assert.NotNil(t, s)
 
-	_, err := findBinary("does/not/exist", []string{}, "/", "../../test/vconvert", log)
-	assert.Error(t, err)
+// 	_, err := findBinary("does/not/exist", []string{}, "/", "../../test/vconvert", log)
+// 	assert.Error(t, err)
 
-	s, _ = findBinary("bin", []string{}, "/find", "../../test/vconvert", log)
-	assert.NotNil(t, s)
+// 	s, _ = findBinary("bin", []string{}, "/find", "../../test/vconvert", log)
+// 	assert.NotNil(t, s)
 
-	_, err = findBinary("bin", []string{}, "/findDont", "../../test/vconvert", log)
-	assert.Error(t, err)
+// 	_, err = findBinary("bin", []string{}, "/findDont", "../../test/vconvert", log)
+// 	assert.Error(t, err)
 
-	s, _ = findBinary("./bin", []string{}, "/find", "../../test/vconvert", log)
-	assert.NotNil(t, s)
+// 	s, _ = findBinary("./bin", []string{}, "/find", "../../test/vconvert", log)
+// 	assert.NotNil(t, s)
 
-	_, err = findBinary("/find/bin", []string{}, "/", "../../test/vconvert", log)
-	assert.NoError(t, err)
+// 	_, err = findBinary("/find/bin", []string{}, "/", "../../test/vconvert", log)
+// 	assert.NoError(t, err)
 
-	_, err = findBinary("/notfind/bin", []string{}, "/", "../../test/vconvert", log)
-	assert.Error(t, err)
+// 	_, err = findBinary("/notfind/bin", []string{}, "/", "../../test/vconvert", log)
+// 	assert.Error(t, err)
 
-	s, _ = findBinary("bin", []string{"PATH=/find"}, "/", "../../test/vconvert", log)
-	assert.NotNil(t, s)
+// 	s, _ = findBinary("bin", []string{"PATH=/find"}, "/", "../../test/vconvert", log)
+// 	assert.NotNil(t, s)
 
-}
+// }
 
-func TestPrepDirs(t *testing.T) {
+// func TestPrepDirs(t *testing.T) {
 
-	err := checkDirectory("../../test/vconvert")
-	assert.Error(t, err)
+// 	err := checkDirectory("../../test/vconvert")
+// 	assert.Error(t, err)
 
-	prepDir := "../../test/vconvert/prep"
-	os.Remove(prepDir)
+// 	prepDir := "../../test/vconvert/prep"
+// 	os.Remove(prepDir)
 
-	err = checkDirectory(prepDir)
-	assert.NoError(t, err)
+// 	err = checkDirectory(prepDir)
+// 	assert.NoError(t, err)
 
-	os.Remove(prepDir)
+// 	os.Remove(prepDir)
 
-}
+// }

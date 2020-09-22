@@ -7,6 +7,7 @@ import (
 	"io"
 
 	"github.com/natefinch/npipe"
+	"github.com/vorteil/vorteil/pkg/virtualizers/util"
 )
 
 // initLogs sets the logger up and attaches to the socket
@@ -18,7 +19,26 @@ func (v *Virtualizer) initLogs() error {
 	}
 	v.sock = conn
 	go io.Copy(v.serialLogger, conn)
-	go v.lookForIP()
+
+	go func() {
+		ips := util.LookForIP(v.serialLogger)
+		if len(ips) > 0 {
+			for i, route := range v.routes {
+				for j, port := range route.HTTP {
+					v.routes[i].HTTP[j].Address = fmt.Sprintf("%s:%s", ips[i], port.Port)
+				}
+				for j, port := range route.HTTPS {
+					v.routes[i].HTTPS[j].Address = fmt.Sprintf("%s:%s", ips[i], port.Port)
+				}
+				for j, port := range route.TCP {
+					v.routes[i].TCP[j].Address = fmt.Sprintf("%s:%s", ips[i], port.Port)
+				}
+				for j, port := range route.UDP {
+					v.routes[i].UDP[j].Address = fmt.Sprintf("%s:%s", ips[i], port.Port)
+				}
+			}
+		}
+	}()
 
 	return nil
 }

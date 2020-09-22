@@ -12,6 +12,7 @@ import (
 	"io/ioutil"
 	"os"
 	"regexp"
+	"runtime"
 	"strings"
 
 	"github.com/vorteil/vorteil/pkg/elog"
@@ -21,6 +22,7 @@ import (
 	"github.com/containerd/containerd/archive/compression"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 
+	clog "github.com/containerd/containerd/log"
 	"github.com/heroku/docker-registry-client/registry"
 	parser "github.com/novln/docker-parser"
 )
@@ -311,6 +313,9 @@ func (cc *ContainerConverter) untarLayers(targetDir string) error {
 			return err
 		}
 
+		// supressing containerd logs
+		clog.L.Logger.SetOutput(ioutil.Discard)
+
 		r, err := compression.DecompressStream(fn)
 		if err != nil {
 			return err
@@ -318,9 +323,17 @@ func (cc *ContainerConverter) untarLayers(targetDir string) error {
 
 		if _, err := archive.Apply(context.TODO(), targetDir, r, archive.WithFilter(func(hdr *tar.Header) (bool, error) {
 
-			// we set everything to 1000, not important on windows
+			// default values for gui, uid if fetching them fails
 			hdr.Uid = 1000
 			hdr.Gid = 1000
+
+			// golang user.Current is not worth it to use here
+			// on windows it is not required and on linux it gives a GID 1001
+			// which leads to lchown in the containerd tar package
+			if runtime.GOOS == "darwin" {
+				hdr.Uid = 501
+				hdr.Gid = 20
+			}
 
 			// check if in our skip list
 			for _, f := range folders {

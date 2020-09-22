@@ -10,102 +10,30 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/vorteil/vorteil/pkg/elog"
 	"github.com/vorteil/vorteil/pkg/vio"
 )
 
-const (
-	SectorSize               = 512
-	BlockSize                = 0x1000
-	InodeSize                = 128
-	InodesPerBlock           = BlockSize / InodeSize
-	BlockGroupDescriptorSize = 32
-	blocksPerSuperblock      = 1
-	blocksPerBlockBitmap     = 1
-	blocksPerInodeBitmap     = 1
-
-	pointerSize         = 4
-	maxDirectPointers   = 12
-	dentryNameAlignment = 4
-
-	SuperUID                    = 1000
-	SuperGID                    = 1000
-	inodeDirectoryPermissions   = 0x4000 | 0700
-	inodeRegularFilePermissions = 0x8000 | 0700
-	inodeSymlinkPermissions     = 0xA000 | 0700
-)
-
-type Superblock struct {
-	TotalInodes         uint32
-	TotalBlocks         uint32
-	ReservedBlocks      uint32
-	UnallocatedBlocks   uint32
-	UnallocatedInodes   uint32
-	SuperblockNumber    uint32
-	BlockSize           uint32
-	FragmentSize        uint32
-	BlocksPerGroup      uint32
-	FragmentsPerGroup   uint32
-	InodesPerGroup      uint32
-	LastMountTime       uint32
-	LastWrittenTime     uint32
-	MountsSinceCheck    uint16
-	MountsCheckInterval uint16
-	Signature           uint16
-	State               uint16
-	ErrorProtocol       uint16
-	VersionMinor        uint16
-	TimeLastCheck       uint32
-	TimeCheckInterval   uint32
-	OS                  uint32
-	VersionMajor        uint32
-	SuperUser           uint16
-	SuperGroup          uint16
-}
-
-type Inode struct {
-	Permissions      uint16
-	UID              uint16
-	SizeLower        uint32
-	LastAccessTime   uint32
-	CreationTime     uint32
-	ModificationTime uint32
-	DeletionTime     uint32
-	GID              uint16
-	Links            uint16
-	Sectors          uint32
-	Flags            uint32
-	OSV              uint32
-	DirectPointer    [12]uint32
-	SinglyIndirect   uint32
-	DoublyIndirect   uint32
-	TriplyIndirect   uint32
-	GenNo            uint32
-	Reserved         [2]uint32
-	FragAddr         uint32
-	OSStuff          [12]byte
-}
-
-func divide(a, b int64) int64 {
-	return (a + b - 1) / b
-}
-
-func align(a, b int64) int64 {
-	return divide(a, b) * b
-}
-
+// CompilerArgs organizes all inputs necessary to create a new Compiler. Because
+// the compiler is designed to be configured in stages by the caller very little
+// goes here.
 type CompilerArgs struct {
 	FileTree vio.FileTree
+	Logger   elog.Logger
 }
 
 type Compiler struct {
-	tree          vio.FileTree
-	minFreeInodes int64
-	minFreeSpace  int64
-	minInodes     int64
-	minDataBlocks int64
-	minSize       int64
-	inodes        int64
-	size          int64
+	log elog.Logger
+
+	tree           vio.FileTree
+	minFreeInodes  int64
+	minFreeSpace   int64
+	minInodes      int64
+	minInodesPer64 int64
+	minDataBlocks  int64
+	minSize        int64
+	inodes         int64
+	size           int64
 
 	filledDataBlocks       int64
 	blocks                 int64
@@ -134,10 +62,15 @@ type Compiler struct {
 func NewCompiler(args *CompilerArgs) *Compiler {
 	c := new(Compiler)
 	c.tree = args.FileTree
+	c.log = args.Logger
 	return c
 }
 
+// Mkdir allows the caller to add an empty directory to the file-system at
+// 'path' if no file or directory is already mapped there. This function must
+// be called before calling Commit, otherwise the behaviour is undefined.
 func (c *Compiler) Mkdir(path string) error {
+
 	_, base := filepath.Split(path)
 	err := c.tree.Map(path, vio.CustomFile(vio.CustomFileArgs{
 		Name:  base,
@@ -146,10 +79,16 @@ func (c *Compiler) Mkdir(path string) error {
 	if err != nil {
 		return err
 	}
+
 	return nil
 }
 
+// AddFile allows the caller to add a file to the file-system at 'path',
+// resolving any collisions by overwriting them if 'force' is true. This
+// function must be called before calling Commit, otherwise the behaviour is
+// undefined.
 func (c *Compiler) AddFile(path string, r io.ReadCloser, size int64, force bool) error {
+
 	_, base := filepath.Split(path)
 	err := c.tree.Map(path, vio.CustomFile(vio.CustomFileArgs{
 		Name:       base,
@@ -159,15 +98,26 @@ func (c *Compiler) AddFile(path string, r io.ReadCloser, size int64, force bool)
 	if err != nil {
 		return err
 	}
+
 	return nil
 }
 
+// IncreaseMinimumInodes allows the caller to force in some extra empty inodes
+// on top of whatever would have otherwise been there. This function must be
+// called before calling Commit, otherwise the behaviour is undefined.
 func (c *Compiler) IncreaseMinimumInodes(inodes int64) {
 	c.minFreeInodes += inodes
 }
 
+// SetMinimumInodes allows the caller to specify the minimum number of inodes
+// that should be built onto the file-system. This function must be called
+// before calling Commit, otherwise the behaviour is undefined.
 func (c *Compiler) SetMinimumInodes(inodes int64) {
 	c.minInodes = inodes
+}
+
+func (c *Compiler) SetMinimumInodesPer64MiB(inodes int64) {
+	c.minInodesPer64 = inodes
 }
 
 func (c *Compiler) IncreaseMinimumFreeSpace(space int64) {
@@ -235,7 +185,7 @@ func (c *Compiler) calculateDirectorySize(n *vio.TreeNode) (int64, int64, error)
 	leftover = BlockSize - length
 	for i, child := range n.Children {
 		name := path.Base(child.File.Name())
-		l := int64(8 + (len(name)+1+dentryNameAlignment-1)/dentryNameAlignment)
+		l := 8 + align(int64(len(name)+1), dentryNameAlignment)
 		if leftover >= l {
 			length += l
 			leftover -= l
@@ -256,6 +206,7 @@ func (c *Compiler) calculateDirectorySize(n *vio.TreeNode) (int64, int64, error)
 		return 0, 0, err
 	}
 	fs += content
+
 	return content, fs, nil
 
 }
@@ -347,6 +298,12 @@ func (c *Compiler) calculateMinimalStructure(ctx context.Context) error {
 		}
 
 		inodesPerGroup = divide(c.minInodes, groups)
+
+		// each block group is 128 MiB, so we double the per64 value if it's set
+		if inodesPerGroup < c.minInodesPer64*2 {
+			inodesPerGroup = c.minInodesPer64 * 2
+		}
+
 		inodesPerGroup = align(inodesPerGroup, InodesPerBlock)
 		blocksPerBGDT = divide(groups*BlockGroupDescriptorSize, BlockSize)
 		blocksPerInodeTable = inodesPerGroup / InodesPerBlock
@@ -381,7 +338,17 @@ func (c *Compiler) Precompile(ctx context.Context, size int64) error {
 	c.blocksPerGroup = BlockSize * 8 // 8 bits per byte in the bitmap
 	c.groups = divide(c.blocks, c.blocksPerGroup)
 	c.inodesPerGroup = divide(c.minInodes, c.groups)
+
+	if c.inodesPerGroup < c.minInodesPer64*2 {
+		c.inodesPerGroup = c.minInodesPer64 * 2
+	}
+
 	c.inodesPerGroup = align(c.inodesPerGroup, InodesPerBlock)
+
+	if c.inodesPerGroup > BlockSize*8 {
+		return errors.New("minimum inodes required exceeds maximum number of inodes possible at this disk size")
+	}
+
 	c.blocksPerBGDT = divide(c.groups*BlockGroupDescriptorSize, BlockSize)
 	c.blocksPerInodeTable = c.inodesPerGroup / InodesPerBlock
 	c.overheadBlocksPerGroup = blocksPerSuperblock + c.blocksPerBGDT + blocksPerBlockBitmap + blocksPerInodeBitmap + c.blocksPerInodeTable
@@ -466,6 +433,8 @@ func (c *Compiler) Precompile(ctx context.Context, size int64) error {
 		return err
 	}
 	c.generateBGDT()
+
+	c.log.Debugf("Total Inodes:  %v", c.inodesPerGroup*c.groups)
 
 	return nil
 
@@ -842,6 +811,7 @@ func (c *Compiler) generateDirectoryData(node *nodeBlocks) (io.Reader, error) {
 	}
 
 	buf.Grow(int(leftover) % int(BlockSize))
+
 	return bytes.NewReader(buf.Bytes()), nil
 
 }

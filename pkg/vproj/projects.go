@@ -20,12 +20,13 @@ import (
 	"github.com/vorteil/vorteil/pkg/vio"
 	"github.com/vorteil/vorteil/pkg/vpkg"
 
-	toml "github.com/sisatech/toml"
+	"github.com/sisatech/toml"
 )
 
 const (
 	// FileName ..
-	FileName = ".vorteilproject"
+	FileName          = ".vorteilproject"
+	UnpackTempPattern = "vorteil-unpack-"
 )
 
 // TargetData ..
@@ -238,6 +239,10 @@ func (t *Target) NewBuilder() (vpkg.Builder, error) {
 		ignore = append(ignore, ip)
 	}
 
+	t.Dir, err = filepath.Abs(t.Dir)
+	if err != nil {
+		return nil, err
+	}
 	t.Dir = filepath.ToSlash(t.Dir)
 
 	err = filepath.Walk(t.Dir, func(path string, info os.FileInfo, err error) error {
@@ -394,7 +399,7 @@ func TarFromPackage(w io.Writer, pkg vpkg.Reader) error {
 	defer ico.Close()
 
 	iconName := "default.png"
-	iconFile, err := ioutil.TempFile(os.TempDir(), "vorteil-unpack")
+	iconFile, err := ioutil.TempFile(os.TempDir(), UnpackTempPattern)
 	if err != nil {
 		return err
 	}
@@ -444,9 +449,9 @@ func TarFromPackage(w io.Writer, pkg vpkg.Reader) error {
 
 		header.Name = strings.TrimPrefix(path, "./")
 		files = append(files, header.Name)
-		if header.Name == ".vorteilproject" && !vprjIncluded {
+		if header.Name == FileName && !vprjIncluded {
 
-			tf, err = ioutil.TempFile(os.TempDir(), "vorteil-unpack-")
+			tf, err = ioutil.TempFile(os.TempDir(), UnpackTempPattern)
 			if err != nil {
 				return err
 			}
@@ -579,7 +584,7 @@ func TarFromPackage(w io.Writer, pkg vpkg.Reader) error {
 
 		vprjTmp := vio.CustomFile(vio.CustomFileArgs{
 			ModTime:    time.Now(),
-			Name:       ".vorteilproject",
+			Name:       FileName,
 			ReadCloser: ioutil.NopCloser(bytes.NewReader(b)),
 			Size:       len(b),
 		})
@@ -600,10 +605,9 @@ func TarFromPackage(w io.Writer, pkg vpkg.Reader) error {
 			return err
 		}
 	} else {
-
 		for _, x := range vprj.Targets[0].VCFGs {
 			for _, s := range files {
-				if s == ".vorteilproject" {
+				if s == FileName {
 
 					for i := range vprj.Targets {
 						if vprj.Targets[i].Name == strings.TrimSuffix(x, path.Ext(x)) {
@@ -618,7 +622,7 @@ func TarFromPackage(w io.Writer, pkg vpkg.Reader) error {
 
 					vprjTmp := vio.CustomFile(vio.CustomFileArgs{
 						ModTime:    time.Now(),
-						Name:       ".vorteilproject",
+						Name:       FileName,
 						ReadCloser: ioutil.NopCloser(bytes.NewReader(b)),
 						Size:       len(b),
 					})

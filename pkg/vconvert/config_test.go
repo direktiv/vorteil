@@ -8,20 +8,20 @@ import (
 	"github.com/vorteil/vorteil/pkg/elog"
 )
 
-func TestConfig(t *testing.T) {
+// func TestConfig(t *testing.T) {
 
-	log := &elog.CLI{}
+// 	log := &elog.CLI{}
 
-	viper.Reset()
-	initConfig("../../test/vconvert/config.yml", log)
+// 	viper.Reset()
+// 	initConfig("../../test/vconvert/config.yml", log)
 
-	v, err := fetchRepoConfig("value1")
-	assert.NoError(t, err)
-	assert.NotNil(t, v)
-	assert.NotNil(t, v["url"])
-	assert.Equal(t, v["url"], "https://myurl")
+// 	v, err := fetchRepoConfig("value1")
+// 	assert.NoError(t, err)
+// 	assert.NotNil(t, v)
+// 	assert.NotNil(t, v["url"])
+// 	assert.Equal(t, v["url"], "https://myurl")
 
-}
+// }
 
 func TestConfigNotExist(t *testing.T) {
 

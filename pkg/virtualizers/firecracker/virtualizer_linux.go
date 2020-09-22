@@ -812,12 +812,12 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	devices = append(devices, rootDrive)
 
 	progress := o.logger.NewProgress("Fetching VMLinux", "", 0)
-	defer progress.Finish(false)
 	o.kip, err = o.fetchVMLinux(o.config.VM.Kernel)
 	if err != nil {
 		returnErr = err
 		return
 	}
+	progress.Finish(false)
 
 	cd := CreateDevices{
 		Id:     o.id,

@@ -17,7 +17,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/davecgh/go-spew/spew"
 	"github.com/vorteil/vorteil/pkg/elog"
 )
 
@@ -129,10 +128,14 @@ func loadPathsFromFile(path string) ([]string, error) {
 		}
 		lines := strings.Split(string(data), "\n")
 		for _, line := range lines {
+
 			if strings.HasPrefix(line, "/") {
-				paths = append(paths, line)
+				if info, err := os.Stat(line); err == nil && info.IsDir() {
+					paths = append(paths, line)
+				}
 				continue
 			}
+
 			if strings.HasPrefix(line, "include") {
 				line = strings.TrimPrefix(line, "include ")
 				line = strings.TrimSpace(line)
@@ -163,6 +166,53 @@ func loadPathsFromFile(path string) ([]string, error) {
 	err := fn(path)
 
 	return paths, err
+}
+
+func locateDependency(lib string, libClass elf.Class, filePath string, depList []string) (string, error) {
+	for _, sp := range depList {
+		if strings.HasPrefix(sp, "$ORIGIN") {
+			sp = filepath.Join(filepath.Dir(filePath), "."+strings.TrimPrefix(sp, "$ORIGIN"))
+		}
+
+		sp = filepath.Join(sp, lib)
+		_, err := os.Stat(sp)
+		if err != nil {
+			if !os.IsNotExist(err) {
+				return "", fmt.Errorf("unable to stat candidate dependency: %w", err)
+			}
+			continue
+		}
+
+		l, err := elf.Open(sp)
+		if err != nil {
+			if strings.Contains(err.Error(), "The name of the file cannot be resolved by the system.") {
+				// symlink reopen elf at point
+				linuxPath := filepath.ToSlash(sp)
+				target, err := ReadLink(linuxPath)
+				if err != nil {
+					return "", errorDependencyReadlink(err)
+				}
+
+				if !filepath.IsAbs(target) {
+					target = filepath.Join(filepath.Dir(linuxPath), target)
+				}
+
+				l, err = elf.Open(target)
+				if err != nil {
+					return "", errorDependencyScan(err)
+				}
+			} else {
+				return "", errorDependencyScan(err)
+			}
+		}
+		defer l.Close()
+
+		if libClass == l.FileHeader.Class {
+			return sp, nil
+		}
+	}
+
+	return "", fmt.Errorf("unable to locate dependency: %s", lib)
 }
 
 //listDependencies: Given a file path 'fpath' locate the files dependencies.
@@ -206,59 +256,9 @@ func (isoOp *importSharedObjectsOperation) listDependencies(fpath string) ([]str
 	if err != nil {
 		return nil, nil, err
 	}
-	spew.Dump(filePaths)
 	paths = append(paths, filePaths...)
 	paths = append(paths, DefaultLinuxLibPath)
 	paths = append(paths, DefaultLinuxUserLibPath)
-
-	fn := func(lib string) (string, error) {
-		spew.Dump(lib)
-		for _, sp := range paths {
-			if strings.HasPrefix(sp, "$ORIGIN") {
-				sp = filepath.Join(filepath.Dir(fpath), "."+strings.TrimPrefix(sp, "$ORIGIN"))
-			}
-
-			sp = filepath.Join(sp, lib)
-			if err != nil {
-				if !os.IsNotExist(err) {
-					return "", fmt.Errorf("unable to stat candidate dependency: %w", err)
-				}
-				continue
-			}
-
-			l, err := elf.Open(sp)
-			if err != nil {
-				if strings.Contains(err.Error(), "The name of the file cannot be resolved by the system.") {
-					// symlink reopen elf at point
-					linuxPath := filepath.ToSlash(sp)
-					target, err := ReadLink(linuxPath)
-					if err != nil {
-						return "", errorDependencyReadlink(err)
-					}
-
-					if !filepath.IsAbs(target) {
-						target = filepath.Join(filepath.Dir(linuxPath), target)
-					}
-
-					l, err = elf.Open(target)
-					if err != nil {
-						fmt.Println("jon1")
-						return "", errorDependencyScan(err)
-					}
-				} else {
-					fmt.Println("jon2")
-					return "", errorDependencyScan(err)
-				}
-			}
-			defer l.Close()
-
-			if e.FileHeader.Class == l.FileHeader.Class {
-				return sp, nil
-			}
-		}
-
-		return "", fmt.Errorf("unable to locate dependency: %s", lib)
-	}
 
 	var deps []string
 	var errs []error
@@ -285,7 +285,7 @@ func (isoOp *importSharedObjectsOperation) listDependencies(fpath string) ([]str
 	noLocates := make([]string, 0)
 
 	for _, lib := range libs {
-		dep, lerr := fn(lib)
+		dep, lerr := locateDependency(lib, e.FileHeader.Class, fpath, paths)
 		if lerr != nil {
 			locationErrPrefix := "unable to locate dependency: "
 			if strings.HasPrefix(lerr.Error(), locationErrPrefix) {
@@ -419,13 +419,9 @@ func (isoOp *importSharedObjectsOperation) findLib(name string, class elf.Class)
 
 				l, err = elf.Open(target)
 				if err != nil {
-					fmt.Println("jon3")
-
 					return "", errorDependencyScan(err)
 				}
 			} else {
-				fmt.Println("jon4")
-
 				return "", errorDependencyScan(err)
 			}
 		}

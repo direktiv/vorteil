@@ -503,81 +503,70 @@ func (v *Virtualizer) prepareVM(diskpath string) error {
 	return nil
 }
 
-func (v *Virtualizer) createAndConfigure(diskpath string) error {
-	cVMArgs := createVM(v.folder, v.name)
-	cmd := exec.Command("VBoxManage", cVMArgs...)
-	err := v.execute(cmd)
-	if err != nil {
-		return err
+func (v *Virtualizer) handlePorts(args []string, route virtualizers.NetworkInterface, protocol string, i int) ([]string, bool, error) {
+	var hasDefinedPorts bool
+	for j, port := range route.HTTP {
+		bind, nr, err := virtualizers.BindPort(v.networkType, protocol, port.Port)
+		if err != nil {
+			return nil, false, err
+		}
+		v.routes[i].HTTP[j].Address = nr
+		hasDefinedPorts = true
+		args = append(args, fmt.Sprintf("--natpf%s", strconv.Itoa(i+1)))
+		args = append(args, fmt.Sprintf("nat%s%s,%s,,%s,,%s", bind, "http", protocol, bind, port.Port))
 	}
+	for j, port := range route.HTTPS {
+		bind, nr, err := virtualizers.BindPort(v.networkType, protocol, port.Port)
+		if err != nil {
+			return nil, false, err
+		}
+		v.routes[i].HTTPS[j].Address = nr
+		hasDefinedPorts = true
+		args = append(args, fmt.Sprintf("--natpf%s", strconv.Itoa(i+1)))
+		args = append(args, fmt.Sprintf("nat%s%s,%s,,%s,,%s", bind, "https", protocol, bind, port.Port))
 
-	err = v.prepareVM(diskpath)
-	if err != nil {
-		return err
 	}
+	for j, port := range route.TCP {
+		bind, nr, err := virtualizers.BindPort(v.networkType, protocol, port.Port)
+		if err != nil {
+			return nil, false, err
+		}
+		v.routes[i].TCP[j].Address = nr
+		hasDefinedPorts = true
+		args = append(args, fmt.Sprintf("--natpf%s", strconv.Itoa(i+1)))
+		args = append(args, fmt.Sprintf("nat%s%s,%s,,%s,,%s", bind, "tcp", protocol, bind, port.Port))
 
-	cmd = exec.Command("VBoxManage", "setextradata", v.name,
-		"VBoxInternal/Devices/serial/0/Config/YieldOnLSRRead", "1")
-	err = v.execute(cmd)
-	if err != nil {
-		return err
 	}
+	for j, port := range route.UDP {
+		bind, nr, err := virtualizers.BindPort(v.networkType, protocol, port.Port)
+		if err != nil {
+			return nil, false, err
+		}
+		v.routes[i].UDP[j].Address = nr
+		hasDefinedPorts = true
+		args = append(args, fmt.Sprintf("--natpf%s", strconv.Itoa(i+1)))
+		args = append(args, fmt.Sprintf("nat%s%s,%s,,%s,,%s", bind, "udp", protocol, bind, port.Port))
+	}
+	return args, hasDefinedPorts, nil
+}
 
+func (v *Virtualizer) gatherNetworkDetails() error {
 	hasDefinedPorts := false
 	var noNic int
-
+	var err error
 	for i, route := range v.routes {
 		args := make([]string, 0)
 		args = append(args, "modifyvm", v.name)
 		noNic++
 		protocol := "tcp"
-		var j int
 		if v.networkType == "nat" {
-			for j, port := range route.HTTP {
-				bind, nr, err := virtualizers.BindPort(v.networkType, protocol, port.Port)
-				if err != nil {
-					return err
-				}
-				v.routes[i].HTTP[j].Address = nr
-				hasDefinedPorts = true
-				args = append(args, fmt.Sprintf("--natpf%s", strconv.Itoa(i+1)))
-				args = append(args, fmt.Sprintf("nat%s%s,%s,,%s,,%s", bind, "http", protocol, bind, port.Port))
-			}
-			for _, port := range route.HTTPS {
-				bind, nr, err := virtualizers.BindPort(v.networkType, protocol, port.Port)
-				if err != nil {
-					return err
-				}
-				v.routes[i].HTTPS[j].Address = nr
-				hasDefinedPorts = true
-				args = append(args, fmt.Sprintf("--natpf%s", strconv.Itoa(i+1)))
-				args = append(args, fmt.Sprintf("nat%s%s,%s,,%s,,%s", bind, "https", protocol, bind, port.Port))
-
-			}
-			for _, port := range route.TCP {
-				bind, nr, err := virtualizers.BindPort(v.networkType, protocol, port.Port)
-				if err != nil {
-					return err
-				}
-				v.routes[i].TCP[j].Address = nr
-				hasDefinedPorts = true
-				args = append(args, fmt.Sprintf("--natpf%s", strconv.Itoa(i+1)))
-				args = append(args, fmt.Sprintf("nat%s%s,%s,,%s,,%s", bind, "tcp", protocol, bind, port.Port))
-
-			}
-			for _, port := range route.UDP {
-				bind, nr, err := virtualizers.BindPort(v.networkType, protocol, port.Port)
-				if err != nil {
-					return err
-				}
-				v.routes[i].UDP[j].Address = nr
-				hasDefinedPorts = true
-				args = append(args, fmt.Sprintf("--natpf%s", strconv.Itoa(i+1)))
-				args = append(args, fmt.Sprintf("nat%s%s,%s,,%s,,%s", bind, "udp", protocol, bind, port.Port))
+			nargs, hasDefinedPorts, err := v.handlePorts(args, route, protocol, i)
+			if err != nil {
+				return err
 			}
 			if hasDefinedPorts {
-				cmd = exec.Command("VBoxManage", args...)
-				err = v.execute(cmd)
+				cmd := exec.Command("VBoxManage", nargs...)
+				err := v.execute(cmd)
 				if err != nil {
 					return err
 				}
@@ -604,8 +593,36 @@ func (v *Virtualizer) createAndConfigure(diskpath string) error {
 		args = append(args, "--nictype"+strconv.Itoa(i), "virtio", "--cableconnected"+strconv.Itoa(i), "on")
 	}
 
-	cmd = exec.Command("VBoxManage", args...)
+	cmd := exec.Command("VBoxManage", args...)
 	err = v.execute(cmd)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (v *Virtualizer) createAndConfigure(diskpath string) error {
+	cVMArgs := createVM(v.folder, v.name)
+	cmd := exec.Command("VBoxManage", cVMArgs...)
+	err := v.execute(cmd)
+	if err != nil {
+		return err
+	}
+
+	err = v.prepareVM(diskpath)
+	if err != nil {
+		return err
+	}
+
+	cmd = exec.Command("VBoxManage", "setextradata", v.name,
+		"VBoxInternal/Devices/serial/0/Config/YieldOnLSRRead", "1")
+	err = v.execute(cmd)
+	if err != nil {
+		return err
+	}
+
+	err = v.gatherNetworkDetails()
 	if err != nil {
 		return err
 	}

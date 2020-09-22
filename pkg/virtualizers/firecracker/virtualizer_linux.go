@@ -463,13 +463,11 @@ func (o *operation) fetchVMLinux(kernel string) (string, error) {
 		defer resp.Body.Close()
 		p := o.logger.NewProgress("Downloading VMLinux", "Bytes", int64(length))
 		defer p.Finish(false)
-		fmt.Printf("length: %v\n", length)
 		// pipe stream
+		var pDownloaded = 0
 		body := io.TeeReader(resp.Body, newWriter(int64(length), func(downloaded, total int64) {
-			fmt.Printf("total: %v\n", total)
-			initial := total - downloaded
-			fmt.Printf("initial: %v\n", initial)
-			p.Increment(total - initial)
+			p.Increment(downloaded - pDownloaded)
+			pDownloaded = downloaded
 		}))
 		_, err = io.Copy(file, body)
 		if err != nil {

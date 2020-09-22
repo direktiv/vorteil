@@ -25,7 +25,6 @@ func (v *Virtualizer) Start() error {
 	v.command.SysProcAttr = &syscall.SysProcAttr{
 		Setpgid: true,
 	}
-	var socketFound bool
 	switch v.State() {
 
 	case "ready":
@@ -50,12 +49,10 @@ func (v *Virtualizer) Start() error {
 				}
 				if count == 10 {
 					v.logger.Errorf("Error: unable to start QEMU as socket wasn't created in time")
-					socketFound = false
 					break
 				}
 				v.sock, err = net.Dial("unix", filepath.ToSlash(filepath.Join(v.folder, "monitor.sock")))
 				if err == nil {
-					socketFound = true
 					polling = false
 					v.logger.Infof("Connected to socket at '%s'", filepath.ToSlash(filepath.Join(v.folder, "monitor.sock")))
 				} else {

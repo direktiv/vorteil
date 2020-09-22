@@ -68,7 +68,7 @@ jobs:
         - if [ "$TRAVIS_EVENT_TYPE" != "pull_request" ]; then rm -fr *.p12; fi;
       script:
         - if [ ! -z "$TRAVIS_TAG" ]; then export BUILD_TAG=$TRAVIS_TAG; else export BUILD_TAG=0.0.0; fi;
-        - export BUILD_DATE=$(shell date -R)
+        - export BUILD_DATE=$(date '+%a, %d %b %Y %H:%M:%S %z')
         - export BUILD_REF=$(git rev-parse --short HEAD)
         - echo "$BUILD_TAG-$BUILD_REF ($BUILD_DATE)"
         - go build -o vorteil -ldflags '-X main.release=$BUILD_TAG -X main.commit=$BUILD_REF -X "main.date=$BUILD_DATE"' github.com/vorteil/vorteil/cmd/vorteil

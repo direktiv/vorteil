@@ -347,6 +347,7 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG, name st
 		}
 	}()
 
+	var hasBeenAlive bool
 	for {
 		select {
 		case <-time.After(time.Millisecond * 200):
@@ -360,8 +361,12 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG, name st
 					}
 				}
 			}
-			// vm has been stopped
-			if virt.State() == virtualizers.Ready {
+			// Check when vm has become alive
+			if virt.State() == virtualizers.Alive && !hasBeenAlive {
+				hasBeenAlive = true
+			}
+			// vm has been stopped and has been alive before
+			if virt.State() == virtualizers.Ready && hasBeenAlive {
 				return nil
 			}
 		case msg, more := <-s:

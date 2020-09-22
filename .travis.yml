@@ -26,7 +26,7 @@ jobs:
         - ./cc-test-reporter before-build
       script: 
         - if [ ! -z "$TRAVIS_TAG" ]; then export BUILD_TAG=$TRAVIS_TAG; else export BUILD_TAG=0.0.0; fi;
-        - export BUILD_DATE=$(shell date -R)
+        - export BUILD_DATE=$(date -R)
         - export BUILD_REF=$(git rev-parse --short HEAD)
         - echo "$BUILD_TAG-$BUILD_REF ($BUILD_DATE)"
         - docker pull hello-world

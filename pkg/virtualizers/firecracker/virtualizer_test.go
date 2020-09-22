@@ -26,6 +26,7 @@ func TestInitialize(t *testing.T) {
 	}
 
 }
+
 func TestType(t *testing.T) {
 	v := &Virtualizer{}
 

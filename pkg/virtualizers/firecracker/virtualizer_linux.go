@@ -430,6 +430,7 @@ func newWriter(size int64, onProgress func(downloaded, total int64)) io.Writer {
 func (o *operation) fetchVMLinux(kernel string) (string, error) {
 	o.updateStatus(fmt.Sprintf("Fetching VMLinux searching %s for %s", o.firecrackerPath, kernel))
 	// check if vmlinux is on system at valid path
+	o.logger.Infof("FETCHING")
 	_, err := os.Stat(filepath.Join(o.firecrackerPath, kernel))
 	if err != nil {
 		// file doesn't exist must download from bucket
@@ -443,6 +444,7 @@ func (o *operation) fetchVMLinux(kernel string) (string, error) {
 			return "", err
 		}
 		defer file.Close()
+		o.logger.Infof("FETCHING3")
 
 		// Determinate the file size
 		resp, err := client.Head(url)
@@ -460,6 +462,7 @@ func (o *operation) fetchVMLinux(kernel string) (string, error) {
 			os.Remove(file.Name())
 			return "", err
 		}
+		o.logger.Infof("FETCHING2")
 
 		// Make request
 		resp, err = client.Get(url)
@@ -477,6 +480,8 @@ func (o *operation) fetchVMLinux(kernel string) (string, error) {
 			os.Remove(file.Name())
 			return "", err
 		}
+		o.logger.Infof("FETCHING4")
+
 	}
 
 	return filepath.Join(o.firecrackerPath, kernel), nil

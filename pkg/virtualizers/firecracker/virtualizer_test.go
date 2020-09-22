@@ -2,8 +2,6 @@ package firecracker
 
 import (
 	"testing"
-
-	logger "github.com/vorteil/vorteil/pkg/virtualizers/logging"
 )
 
 var codeBlockToLookIP = `
@@ -36,14 +34,15 @@ func TestType(t *testing.T) {
 		t.Errorf("expected %s but got %s", "firecracker", typeSt)
 	}
 }
-func TestLoggerAndSerial(t *testing.T) {
-	v := &Virtualizer{
-		serialLogger: logger.NewLogger(2048),
-	}
 
-	seriall := v.Serial()
+// func TestLoggerAndSerial(t *testing.T) {
+// 	v := &Virtualizer{
+// 		serialLogger: logger.NewLogger(2048),
+// 	}
 
-	if seriall == nil {
-		t.Errorf("unable to get loggers from virtualizer")
-	}
-}
+// 	seriall := v.Serial()
+
+// 	if seriall == nil {
+// 		t.Errorf("unable to get loggers from virtualizer")
+// 	}
+// }

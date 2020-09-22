@@ -790,7 +790,7 @@ func (c *Compiler) nextDataBlock(w io.Writer) error {
 
 	// write next block
 	buffer := new(bytes.Buffer)
-	btype := c.blockType(c.activeNodeBlock)
+	btype := blockType(c.activeNodeBlock)
 
 	refsPerBlock := int64(BlockSize / pointerSize)
 	var j int64

@@ -1,6 +1,13 @@
 package ext
 
-import "testing"
+import (
+	"io"
+	"io/ioutil"
+	"strings"
+	"testing"
+
+	"github.com/vorteil/vorteil/pkg/vio"
+)
 
 func TestIndirectBlocksCalculation(t *testing.T) {
 
@@ -99,4 +106,186 @@ func TestBlockTypeCalculation(t *testing.T) {
 	if blockType(1037) != 2 {
 		t.Fatalf("blockType calculates block 1037 incorrectly")
 	}
+
+	if blockType(1038) != 1 {
+		t.Fatalf("blockType calculates block 1038 incorrectly")
+	}
+
+	if blockType(1039) != 0 {
+		t.Fatalf("blockType calculates block 1039 incorrectly")
+	}
+
+	if blockType(2062) != 0 {
+		t.Fatalf("blockType calculates block 2062 incorrectly")
+	}
+
+	if blockType(2063) != 1 {
+		t.Fatalf("blockType calculates block 2063 incorrectly")
+	}
+
+	if blockType(2064) != 0 {
+		t.Fatalf("blockType calculates block 2064 incorrectly")
+	}
+
+	// Moving into the third indirect region
+	if blockType(1050637) != 0 {
+		t.Fatalf("blockType calculates block 1050637 incorrectly")
+	}
+
+	if blockType(1050638) != 3 {
+		t.Fatalf("blockType calculates block 1050638 incorrectly")
+	}
+
+	if blockType(1050639) != 2 {
+		t.Fatalf("blockType calculates block 1050639 incorrectly")
+	}
+
+	if blockType(1050640) != 1 {
+		t.Fatalf("blockType calculates block 1050640 incorrectly")
+	}
+
+	if blockType(1050641) != 0 {
+		t.Fatalf("blockType calculates block 1050641 incorrectly")
+	}
+
+	if blockType(1051664) != 0 {
+		t.Fatalf("blockType calculates block 1051664 incorrectly")
+	}
+
+	if blockType(1051665) != 1 {
+		t.Fatalf("blockType calculates block 1051665 incorrectly")
+	}
+
+	if blockType(1051666) != 0 {
+		t.Fatalf("blockType calculates block 1051666 incorrectly")
+	}
+
+	if blockType(2100239) != 0 {
+		t.Fatalf("blockType calculates block 2100239 incorrectly")
+	}
+
+	if blockType(2100240) != 2 {
+		t.Fatalf("blockType calculates block 2100240 incorrectly")
+	}
+
+	if blockType(2100241) != 1 {
+		t.Fatalf("blockType calculates block 2100241 incorrectly")
+	}
+
+	if blockType(2100242) != 0 {
+		t.Fatalf("blockType calculates block 2100242 incorrectly")
+	}
+
+}
+
+func TestSymlinkSizeCalculation(t *testing.T) {
+
+	var name string
+	var f vio.File
+	var content, fs int64
+
+	name = "Vorteil"
+	f = vio.CustomFile(vio.CustomFileArgs{
+		Size:       len(name),
+		IsSymlink:  true,
+		ReadCloser: ioutil.NopCloser(strings.NewReader(name)),
+	})
+	defer f.Close()
+
+	content, fs = calculateSymlinkSize(f)
+	if content != 1 || fs != 1 {
+		t.Fatalf("calculateSymlinkSize calculates small symlink sizes incorrectly")
+	}
+
+	name = ""
+	f = vio.CustomFile(vio.CustomFileArgs{
+		Size:       len(name),
+		IsSymlink:  true,
+		ReadCloser: ioutil.NopCloser(strings.NewReader(name)),
+	})
+	defer f.Close()
+
+	content, fs = calculateSymlinkSize(f)
+	if content != 0 || fs != 0 {
+		t.Fatalf("calculateSymlinkSize calculates zero-length symlink sizes incorrectly")
+	}
+
+}
+
+func TestFileSizeCalculation(t *testing.T) {
+
+	var f vio.File
+	var size int64
+	var content, fs int64
+
+	size = 0
+	f = vio.CustomFile(vio.CustomFileArgs{
+		Size:       int(size),
+		ReadCloser: ioutil.NopCloser(io.LimitReader(vio.Zeroes, size)),
+	})
+	defer f.Close()
+
+	content, fs = calculateRegularFileSize(f)
+	if content != 0 || fs != 0 {
+		t.Fatalf("calculateRegularFileSize calculates zero-length file sizes incorrectly")
+	}
+
+	size = 1234
+	f = vio.CustomFile(vio.CustomFileArgs{
+		Size:       int(size),
+		ReadCloser: ioutil.NopCloser(io.LimitReader(vio.Zeroes, size)),
+	})
+	defer f.Close()
+
+	content, fs = calculateRegularFileSize(f)
+	if content != 1 || fs != 1 {
+		t.Fatalf("calculateRegularFileSize calculates tiny file sizes incorrectly")
+	}
+
+	size = 20480
+	f = vio.CustomFile(vio.CustomFileArgs{
+		Size:       int(size),
+		ReadCloser: ioutil.NopCloser(io.LimitReader(vio.Zeroes, size)),
+	})
+	defer f.Close()
+
+	content, fs = calculateRegularFileSize(f)
+	if content != 5 || fs != 5 {
+		t.Fatalf("calculateRegularFileSize calculates small file sizes incorrectly")
+	}
+
+	size = 53248
+	f = vio.CustomFile(vio.CustomFileArgs{
+		Size:       int(size),
+		ReadCloser: ioutil.NopCloser(io.LimitReader(vio.Zeroes, size)),
+	})
+	defer f.Close()
+
+	content, fs = calculateRegularFileSize(f)
+	if content != 13 || fs != 14 {
+		t.Fatalf("calculateRegularFileSize calculates medium file sizes incorrectly")
+	}
+
+}
+
+func TestDirectorySizeCalculation(t *testing.T) {
+
+	var content, fs int64
+	var n *vio.TreeNode
+
+	n = &vio.TreeNode{
+		Parent:   n,
+		Children: []*vio.TreeNode{},
+	}
+
+	content, fs = calculateDirectorySize(n)
+	if content != 1 || fs != 1 {
+		t.Fatalf("calculateDirectorySize calculates empty directory sizes incorrectly")
+	}
+
+	// n.Children = append(n.Children, &vio.TreeNode{
+	// 	Parent: n,
+	// 	File: ,
+	// })
+
 }

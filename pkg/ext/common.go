@@ -92,6 +92,7 @@ func align(a, b int64) int64 {
 func calculateNumberOfIndirectBlocks(b int64) int64 {
 
 	var single, double, triple, p int64
+	p = BlockSize / pointerSize
 	single = maxDirectPointers
 	double = single + p
 	triple = double + p*p
@@ -177,54 +178,6 @@ func blockType(i int64) int {
 	// it must be a data block from the third indirect
 	return 0
 
-	/*
-
-		var singly, singlySpan, doubly, doublySpan, triply, p int64
-
-		singly = maxDirectPointers
-		singlySpan = 1 + p
-		doubly = singly + singlySpan
-		doublySpan = 1 + p*(p+1)
-		triply = doubly + doublySpan
-
-		// if single indirect block
-		if i == singly {
-			return 1
-		}
-
-		// if double indirect first-level block
-		if i == doubly {
-			return 2
-		}
-
-		// if double indirect second-level block
-		if i > doubly && i < triply && (i-doubly-1)%singlySpan == 0 {
-			return 1
-		}
-
-		// if triple indirect first-level block
-		if i == triply {
-			return 3
-		}
-
-		// if triple indirect third-level block
-		if i > triply {
-			i -= (triply + 1)
-			if i%doublySpan == 0 {
-				return 2
-			}
-			for ; i > doublySpan; i -= doublySpan {
-
-			}
-			i--
-			if i%singlySpan == 0 {
-				return 1
-			}
-		}
-
-		return 0
-
-	*/
 }
 
 func calculateSymlinkSize(f vio.File) (content int64, fs int64) {

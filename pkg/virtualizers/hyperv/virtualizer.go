@@ -215,10 +215,10 @@ func (v *Virtualizer) Close(force bool) error {
 		v.sock.Close()
 	}
 	virtualizers.ActiveVMs.Delete(v.name)
-	err = os.RemoveAll(v.folder)
-	if err != nil {
-		return err
-	}
+	// err = os.RemoveAll(v.folder)
+	// if err != nil {
+	// 	return err
+	// }
 
 	return nil
 }

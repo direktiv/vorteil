@@ -256,13 +256,6 @@ func (v *Virtualizer) Detach(source string) error {
 		return err
 	}
 
-	// sleep for shutdown signal
-	// time.Sleep(time.Second * 4)
-	// delete tap device as vmm has been stopped don't worry about catching error as its not found
-	// for _, device := range v.tapDevice {
-	// device.DeleteLink()
-	// }
-
 	v.state = virtualizers.Deleted
 
 	cleanup, err := os.Create(filepath.Join(source, name, "cleanup.sh"))
@@ -470,9 +463,12 @@ func (o *operation) fetchVMLinux(kernel string) (string, error) {
 		defer resp.Body.Close()
 		p := o.logger.NewProgress("Downloading VMLinux", "Bytes", int64(length))
 		defer p.Finish(false)
+		fmt.Printf("length: %v\n", length)
 		// pipe stream
 		body := io.TeeReader(resp.Body, newWriter(int64(length), func(downloaded, total int64) {
+			fmt.Printf("total: %v\n", total)
 			initial := total - downloaded
+			fmt.Printf("initial: %v\n", initial)
 			p.Increment(total - initial)
 		}))
 		_, err = io.Copy(file, body)
@@ -765,7 +761,7 @@ func (v *Virtualizer) lookForIP() string {
 // Cant use logger interface as it duplicates
 func (v *Virtualizer) Write(d []byte) (n int, err error) {
 	n = len(d)
-	v.logger.Infof(string(d))
+	fmt.Print(string(d))
 	return
 }
 

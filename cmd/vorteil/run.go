@@ -29,7 +29,7 @@ import (
 	"github.com/vorteil/vorteil/pkg/vpkg"
 )
 
-func runFirecracker(pkgReader vpkg.Reader, cfg *vcfg.VCFG) error {
+func runFirecracker(pkgReader vpkg.Reader, cfg *vcfg.VCFG, name string) error {
 	if runtime.GOOS != "linux" {
 		return errors.New("firecracker is only available on linux")
 	}
@@ -102,10 +102,10 @@ func runFirecracker(pkgReader vpkg.Reader, cfg *vcfg.VCFG) error {
 		return err
 	}
 
-	return run(virt, f.Name(), cfg)
+	return run(virt, f.Name(), cfg, name)
 }
 
-func runHyperV(pkgReader vpkg.Reader, cfg *vcfg.VCFG) error {
+func runHyperV(pkgReader vpkg.Reader, cfg *vcfg.VCFG, name string) error {
 	if runtime.GOOS != "windows" {
 		return errors.New("hyper-v is only available on windows system")
 	}
@@ -173,10 +173,10 @@ func runHyperV(pkgReader vpkg.Reader, cfg *vcfg.VCFG) error {
 		return err
 	}
 
-	return run(virt, f.Name(), cfg)
+	return run(virt, f.Name(), cfg, name)
 }
 
-func runVirtualBox(pkgReader vpkg.Reader, cfg *vcfg.VCFG) error {
+func runVirtualBox(pkgReader vpkg.Reader, cfg *vcfg.VCFG, name string) error {
 	if !virtualbox.Allocator.IsAvailable() {
 		return errors.New("virtualbox not found installed on system")
 	}
@@ -239,10 +239,10 @@ func runVirtualBox(pkgReader vpkg.Reader, cfg *vcfg.VCFG) error {
 		return err
 	}
 
-	return run(virt, f.Name(), cfg)
+	return run(virt, f.Name(), cfg, name)
 }
 
-func runQEMU(pkgReader vpkg.Reader, cfg *vcfg.VCFG) error {
+func runQEMU(pkgReader vpkg.Reader, cfg *vcfg.VCFG, name string) error {
 
 	if !qemu.Allocator.IsAvailable() {
 		return errors.New("qemu not installed on system")
@@ -257,7 +257,6 @@ func runQEMU(pkgReader vpkg.Reader, cfg *vcfg.VCFG) error {
 		log.Errorf("%v", err)
 		os.Exit(1)
 	}
-
 	f, err := ioutil.TempFile(parent, "vorteil.disk")
 	if err != nil {
 		log.Errorf("%v", err)
@@ -304,19 +303,20 @@ func runQEMU(pkgReader vpkg.Reader, cfg *vcfg.VCFG) error {
 		return err
 	}
 
-	return run(virt, f.Name(), cfg)
+	return run(virt, f.Name(), cfg, name)
 
 }
 
-func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG) error {
+func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG, name string) error {
 
 	// Gather home directory for firecracker storage path
 	home, err := homedir.Dir()
 	if err != nil {
 		return err
 	}
+
 	_ = virt.Prepare(&virtualizers.PrepareArgs{
-		Name:      "vorteil-vm",
+		Name:      fmt.Sprintf("%s-%s", name, randstr.Hex(4)),
 		PName:     virt.Type(),
 		Start:     true,
 		Config:    cfg,
@@ -347,6 +347,7 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG) error {
 		}
 	}()
 
+	var hasBeenAlive bool
 	for {
 		select {
 		case <-time.After(time.Millisecond * 200):
@@ -360,8 +361,12 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG) error {
 					}
 				}
 			}
-			// vm has been stopped
-			if virt.State() == virtualizers.Ready {
+			// Check when vm has become alive
+			if virt.State() == virtualizers.Alive && !hasBeenAlive {
+				hasBeenAlive = true
+			}
+			// vm has been stopped and has been alive before
+			if virt.State() == virtualizers.Ready && hasBeenAlive {
 				return nil
 			}
 		case msg, more := <-s:

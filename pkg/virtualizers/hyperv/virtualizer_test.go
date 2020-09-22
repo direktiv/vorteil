@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	"github.com/vorteil/vorteil/pkg/vcfg"
-	"github.com/vorteil/vorteil/pkg/virtualizers"
 	logger "github.com/vorteil/vorteil/pkg/virtualizers/logging"
+	"github.com/vorteil/vorteil/pkg/virtualizers/util"
 )
 
 var codeBlockToLookIP = `
@@ -103,11 +103,8 @@ func TestRoutes(t *testing.T) {
 	vcfg := &vcfg.VCFG{
 		Networks: vcfgI,
 	}
-	v := &Virtualizer{
-		config: vcfg,
-	}
 
-	ni := virtualizers.Routes(v)
+	ni := util.Routes(vcfg.Networks)
 	for _, n := range ni {
 		for _, typep := range n.HTTP {
 			if typep.Port != "8888" {

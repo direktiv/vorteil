@@ -3,9 +3,13 @@ package vconvert
 import (
 	"io/ioutil"
 	"os"
+	"path/filepath"
 	"testing"
 
+	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/stretchr/testify/assert"
+	"github.com/vorteil/vorteil/pkg/elog"
+	"github.com/vorteil/vorteil/pkg/vcfg"
 )
 
 func TestNewContainerConverter(t *testing.T) {
@@ -79,59 +83,59 @@ func TestBlobDownloadWorker(t *testing.T) {
 
 }
 
-// func TestCreateVCFG(t *testing.T) {
+func TestCreateVCFG(t *testing.T) {
 
-// 	var config v1.Config
-// 	config.WorkingDir = "/"
+	var config v1.Config
+	config.WorkingDir = "/"
 
-// 	r := &ContainerConverter{
-// 		logger: &elog.CLI{},
-// 	}
-// 	err := r.createVCFG(config, "/does/not/exist")
-// 	assert.Error(t, err)
+	r := &ContainerConverter{
+		logger: &elog.CLI{},
+	}
+	err := r.createVCFG(config, "/does/not/exist")
+	assert.Error(t, err)
 
-// 	// no command error
-// 	err = r.createVCFG(config, "../../test/vconvert/")
-// 	assert.Error(t, err)
+	// no command error
+	err = r.createVCFG(config, "../../test/vconvert/")
+	assert.Error(t, err)
 
-// 	config.Cmd = []string{"bin", "run", "smooth"}
+	config.Cmd = []string{"bin", "run", "smooth"}
 
-// 	// can not find binary
-// 	err = r.createVCFG(config, "../../test/vconvert/")
-// 	assert.Error(t, err)
+	// can not find binary
+	err = r.createVCFG(config, "../../test/vconvert/")
+	assert.Error(t, err)
 
-// 	// cwd works
-// 	config.WorkingDir = "/find"
-// 	err = r.createVCFG(config, "../../test/vconvert/")
-// 	assert.NoError(t, err)
-// 	defer os.Remove("../../test/vconvert/default.vcfg")
-// 	defer os.Remove("../../test/vconvert/.vorteilproject")
+	// cwd works
+	config.WorkingDir = "/find"
+	err = r.createVCFG(config, "../../test/vconvert/")
+	assert.NoError(t, err)
+	defer os.Remove("../../test/vconvert/default.vcfg")
+	defer os.Remove("../../test/vconvert/.vorteilproject")
 
-// 	// pathy works
-// 	config.WorkingDir = "/"
-// 	config.Env = []string{"PATH=/find"}
+	// pathy works
+	config.WorkingDir = "/"
+	config.Env = []string{"PATH=/find"}
 
-// 	type dummy struct{}
-// 	ep := make(map[string]struct{})
-// 	ep["8080/tcp"] = dummy{}
-// 	ep["9090/udp"] = dummy{}
-// 	ep["6969"] = dummy{}
+	type dummy struct{}
+	ep := make(map[string]struct{})
+	ep["8080/tcp"] = dummy{}
+	ep["9090/udp"] = dummy{}
+	ep["6969"] = dummy{}
 
-// 	config.ExposedPorts = ep
+	config.ExposedPorts = ep
 
-// 	err = r.createVCFG(config, "../../test/vconvert/")
-// 	assert.NoError(t, err)
+	err = r.createVCFG(config, "../../test/vconvert/")
+	assert.NoError(t, err)
 
-// 	v, _ := ioutil.ReadFile("../../test/vconvert/default.vcfg")
-// 	vf := new(vcfg.VCFG)
-// 	vf.Load(v)
+	v, _ := ioutil.ReadFile("../../test/vconvert/default.vcfg")
+	vf := new(vcfg.VCFG)
+	vf.Load(v)
 
-// 	assert.Equal(t, len(vf.Networks[0].TCP), 2)
-// 	assert.Equal(t, "9090", vf.Networks[0].UDP[0])
+	assert.Equal(t, len(vf.Networks[0].TCP), 2)
+	assert.Equal(t, "9090", vf.Networks[0].UDP[0])
 
-// 	assert.Equal(t, vf.Programs[0].Args, "/find/bin run smooth")
-// 	assert.Equal(t, len(vf.Programs[0].Env), 1)
-// }
+	assert.Equal(t, vf.Programs[0].Args, "/find/bin run smooth")
+	assert.Equal(t, len(vf.Programs[0].Env), 1)
+}
 
 func TestDownloadBlobs(t *testing.T) {
 
@@ -152,56 +156,56 @@ func TestDownloadBlobs(t *testing.T) {
 
 }
 
-// func TestUntarLayers(t *testing.T) {
+func TestUntarLayers(t *testing.T) {
 
-// 	r, _ := NewContainerConverter("hello-world", "", nil)
+	r, _ := NewContainerConverter("hello-world", "", nil)
 
-// 	// not allowed
-// 	err := r.untarLayers("/dev")
-// 	assert.Error(t, err)
+	// not allowed
+	err := r.untarLayers("/dev")
+	assert.Error(t, err)
 
-// 	// not empty test
-// 	err = r.untarLayers("../../test/vconvert")
-// 	assert.Error(t, err)
+	// not empty test
+	err = r.untarLayers("../../test/vconvert")
+	assert.Error(t, err)
 
-// 	r.layers = make([]*layer, 1)
-// 	r.layers[0] = &layer{
-// 		file: "",
-// 	}
+	r.layers = make([]*layer, 1)
+	r.layers[0] = &layer{
+		file: "",
+	}
 
-// 	dir, _ := ioutil.TempDir("", "vtest")
-// 	defer os.RemoveAll(dir)
+	dir, _ := ioutil.TempDir("", "vtest")
+	defer os.RemoveAll(dir)
 
-// 	err = r.untarLayers(dir)
-// 	assert.Error(t, err)
+	err = r.untarLayers(dir)
+	assert.Error(t, err)
 
-// 	r.layers[0] = &layer{
-// 		file: "../../test/vconvert/123layer.tar",
-// 	}
+	r.layers[0] = &layer{
+		file: "../../test/vconvert/123layer.tar",
+	}
 
-// 	err = r.untarLayers(dir)
-// 	assert.NoError(t, err)
+	err = r.untarLayers(dir)
+	assert.NoError(t, err)
 
-// 	// there should be only one file in the dir
-// 	files, _ := ioutil.ReadDir(dir)
-// 	assert.Equal(t, 1, len(files))
+	// there should be only one file in the dir
+	files, _ := ioutil.ReadDir(dir)
+	assert.Equal(t, 1, len(files))
 
-// }
+}
 
-// func TestConvertToProject(t *testing.T) {
+func TestConvertToProject(t *testing.T) {
 
-// 	r, _ := NewContainerConverter("hello-world", "", nil)
+	r, _ := NewContainerConverter("hello-world", "", nil)
 
-// 	err := r.ConvertToProject("../../test/vconvert", "", "")
-// 	assert.Error(t, err)
+	err := r.ConvertToProject("../../test/vconvert", "", "")
+	assert.Error(t, err)
 
-// 	dir, _ := ioutil.TempDir("", "vtest")
-// 	defer os.RemoveAll(dir)
+	dir, _ := ioutil.TempDir("", "vtest")
+	defer os.RemoveAll(dir)
 
-// 	err = r.ConvertToProject(dir, "", "")
-// 	assert.NoError(t, err)
+	err = r.ConvertToProject(dir, "", "")
+	assert.NoError(t, err)
 
-// 	assert.FileExists(t, filepath.Join(dir, "default.vcfg"))
-// 	assert.FileExists(t, filepath.Join(dir, ".vorteilproject"))
+	assert.FileExists(t, filepath.Join(dir, "default.vcfg"))
+	assert.FileExists(t, filepath.Join(dir, ".vorteilproject"))
 
-// }
+}

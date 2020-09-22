@@ -29,7 +29,7 @@ jobs:
         - GOOS=windows go build -o vorteil.exe github.com/vorteil/vorteil/cmd/vorteil
         - docker pull hello-world
         - sudo apt install containerd
-        - ctr images pull docker.io/library/hello-world:latest
+        - sudo ctr images pull docker.io/library/hello-world:latest
         - sudo usermod -a -G root,docker $(whoami)
         - go test -timeout 30s -coverprofile c.out ./...
         - zip vorteil_windows-x86.zip vorteil.exe

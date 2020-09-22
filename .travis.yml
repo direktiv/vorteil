@@ -25,13 +25,17 @@ jobs:
         - chmod +x ./cc-test-reporter
         - ./cc-test-reporter before-build
       script: 
+        - if [ ! -z "$TRAVIS_TAG" ]; then export BUILD_TAG=$TRAVIS_TAG; else export BUILD_TAG=0.0.0; fi;
+        - export BUILD_DATE=$(shell date -R)
+        - export BUILD_REF=$(git rev-parse --short HEAD)
+        - echo $BUILD_TAG-$BUILD_REF ($BUILD_DATE)
         - docker pull hello-world
         - sudo apt install containerd
         - sudo ctr images pull docker.io/library/hello-world:latest
         - sudo chmod 0777 /run/containerd/containerd.sock
         - go test -timeout 30s -coverprofile c.out ./...
-        - go build -o vorteil github.com/vorteil/vorteil/cmd/vorteil 
-        - GOOS=windows go build -o vorteil.exe github.com/vorteil/vorteil/cmd/vorteil
+        - go build -o vorteil -ldflags '-X main.release=$BUILD_TAG -X main.commit=$BUILD_REF -X "main.date=$BUILD_DATE"' github.com/vorteil/vorteil/cmd/vorteil 
+        - GOOS=windows go build -o vorteil.exe -ldflags '-X main.release=$BUILD_TAG -X main.commit=$BUILD_REF -X "main.date=$BUILD_DATE"' github.com/vorteil/vorteil/cmd/vorteil
         - zip vorteil_windows-x86.zip vorteil.exe
         - tar -zcvf vorteil_linux-x86.tar.gz vorteil
       after_success:

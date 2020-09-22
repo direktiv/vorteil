@@ -471,7 +471,7 @@ func (o *operation) fetchVMLinux(kernel string) (string, error) {
 			return "", err
 		}
 		defer resp.Body.Close()
-		p := o.logger.NewProgress("Downloading VMLinux", "Bytes", length)
+		p := o.logger.NewProgress("Downloading VMLinux", "Bytes", int64(length))
 		defer p.Finish(false)
 		// pipe stream
 		body := io.TeeReader(resp.Body, newWriter(int64(length), func(downloaded, total int64) {

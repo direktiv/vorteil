@@ -256,13 +256,6 @@ func (v *Virtualizer) Detach(source string) error {
 		return err
 	}
 
-	// sleep for shutdown signal
-	time.Sleep(time.Second * 4)
-	// delete tap device as vmm has been stopped don't worry about catching error as its not found
-	// for _, device := range v.tapDevice {
-	// device.DeleteLink()
-	// }
-
 	v.state = virtualizers.Deleted
 
 	cleanup, err := os.Create(filepath.Join(source, name, "cleanup.sh"))
@@ -468,15 +461,20 @@ func (o *operation) fetchVMLinux(kernel string) (string, error) {
 			return "", err
 		}
 		defer resp.Body.Close()
+		p := o.logger.NewProgress("Downloading VMLinux", "Bytes", int64(length))
+		defer p.Finish(false)
 		// pipe stream
+		var pDownloaded = int64(0)
 		body := io.TeeReader(resp.Body, newWriter(int64(length), func(downloaded, total int64) {
-			o.updateStatus(fmt.Sprintf("Downloading VMLinux(%s/%s)", ByteCountDecimal(downloaded), ByteCountDecimal(total)))
+			p.Increment(downloaded - pDownloaded)
+			pDownloaded = downloaded
 		}))
 		_, err = io.Copy(file, body)
 		if err != nil {
 			os.Remove(file.Name())
 			return "", err
 		}
+
 	}
 
 	return filepath.Join(o.firecrackerPath, kernel), nil
@@ -535,27 +533,16 @@ func (v *Virtualizer) Serial() *logger.Logger {
 	return v.serialLogger
 }
 
-// Dial unix
-// func (v *Virtualizer) Dial(proto, addr string) (conn net.Conn, err error) {
-// 	return net.Dial("unix", v.fconfig.SocketPath)
-// }
-
 // Stop stops the vm and changes it back to ready
 func (v *Virtualizer) Stop() error {
 	v.logger.Debugf("Stopping VM")
 	if v.state != virtualizers.Ready {
 		v.state = virtualizers.Changing
 
-		// API way of shutting down vm seems bugged going to send request myself for now.
 		err := v.machine.Shutdown(v.vmmCtx)
 		if err != nil {
 			return err
 		}
-
-		// Sleep to handle shutdown logs doesn't affect anything makes the output nicer
-		time.Sleep(time.Second * 2)
-
-		v.state = virtualizers.Ready
 
 	} else {
 		return errors.New("vm is already stopped")
@@ -709,7 +696,7 @@ func (v *Virtualizer) Prepare(args *virtualizers.PrepareArgs) *virtualizers.Virt
 // Cant use logger interface as it duplicates
 func (v *Virtualizer) Write(d []byte) (n int, err error) {
 	n = len(d)
-	v.logger.Infof(string(d))
+	fmt.Print(string(d))
 	return
 }
 
@@ -754,8 +741,6 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 
 	devices = append(devices, rootDrive)
 
-	progress := o.logger.NewProgress("Fetching VMLinux", "", 0)
-	defer progress.Finish(false)
 	o.kip, err = o.fetchVMLinux(o.config.VM.Kernel)
 	if err != nil {
 		returnErr = err
@@ -885,6 +870,8 @@ func (v *Virtualizer) Start() error {
 					v.logger.Errorf("Wait returned an error: %s", err.Error())
 				}
 			}
+			v.state = virtualizers.Ready
+
 		}()
 	}
 	return nil

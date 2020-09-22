@@ -343,6 +343,7 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG, name st
 			return
 		}
 		virt.Close(false)
+
 		if flagRecord != "" {
 			decompile(diskpath, flagRecord)
 		}

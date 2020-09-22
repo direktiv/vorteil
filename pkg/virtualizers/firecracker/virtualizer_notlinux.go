@@ -117,11 +117,6 @@ func (v *Virtualizer) Prepare(args *virtualizers.PrepareArgs) *virtualizers.Virt
 	return nil
 }
 
-// lookForIp looks for IP via the screen output as firecracker spawns on different IPs
-func (v *Virtualizer) lookForIP() string {
-	return ""
-}
-
 // prepare sets the fields and arguments to spawn the virtual machine
 func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 

@@ -57,21 +57,8 @@ func isNotExist(path string) bool {
 }
 
 func checkValidNewDirOutput(path string, force bool, dest, flag string) error {
-	if !isEmptyDir(path) && !isNotExist(path) {
-		if force {
-			err := os.RemoveAll(path)
-			if err != nil {
-				return fmt.Errorf("failed to delete existing %s '%s': %w", dest, path, err)
-			}
-
-			dir := filepath.Dir(path)
-			err = os.MkdirAll(dir, 0777)
-			if err != nil {
-				return fmt.Errorf("failed to create parent directory for %s '%s': %w", dest, path, err)
-			}
-		} else {
-			return fmt.Errorf("%s '%s' already exists (you can use '%s' to force an overwrite)", dest, path, flag)
-		}
+	if !isEmptyDir(path) {
+		return checkValidNewFileOutput(path, force, dest, flag)
 	}
 
 	return nil

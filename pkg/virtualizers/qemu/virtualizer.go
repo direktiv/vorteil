@@ -361,10 +361,10 @@ func (v *Virtualizer) Close(force bool) error {
 	}
 
 	// remove contents when closing
-	// err := os.RemoveAll(v.folder)
-	// if err != nil {
-	// 	return err
-	// }
+	err := os.RemoveAll(v.folder)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 

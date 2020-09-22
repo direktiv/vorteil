@@ -472,7 +472,8 @@ func (o *operation) fetchVMLinux(kernel string) (string, error) {
 		defer p.Finish(false)
 		// pipe stream
 		body := io.TeeReader(resp.Body, newWriter(int64(length), func(downloaded, total int64) {
-			p.Increment(downloaded)
+			initial := total - downloaded
+			p.Increment(total - initial)
 		}))
 		_, err = io.Copy(file, body)
 		if err != nil {

@@ -13,3 +13,8 @@
 # Unignore specific files
 !assets/images/vlogo.png
 !.travis.yml
+
+# test files
+!test/vconvert/find/bin
+!test/vconvert/123layer.tar
+!test/vconvert/config.yml

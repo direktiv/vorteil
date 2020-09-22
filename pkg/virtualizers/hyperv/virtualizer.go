@@ -193,7 +193,6 @@ func (v *Virtualizer) Details() (string, string, string, []virtualizers.NetworkI
 // Close shuts down the virtual machine and cleans up the disk and folders
 func (v *Virtualizer) Close(force bool) error {
 	v.logger.Debugf("Deleting VM")
-	// if !(force) {
 	if !(v.state == virtualizers.Ready) {
 		err := v.Stop()
 		if err != nil {
@@ -203,7 +202,6 @@ func (v *Virtualizer) Close(force bool) error {
 			}
 		}
 	}
-	// }
 	v.state = virtualizers.Changing
 
 	cmd := exec.Command(virtualizers.Powershell, "Remove-VM", "-Name", v.name, "-Force")

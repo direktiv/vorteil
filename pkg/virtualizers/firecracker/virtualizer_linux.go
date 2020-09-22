@@ -535,27 +535,16 @@ func (v *Virtualizer) Serial() *logger.Logger {
 	return v.serialLogger
 }
 
-// Dial unix
-// func (v *Virtualizer) Dial(proto, addr string) (conn net.Conn, err error) {
-// 	return net.Dial("unix", v.fconfig.SocketPath)
-// }
-
 // Stop stops the vm and changes it back to ready
 func (v *Virtualizer) Stop() error {
 	v.logger.Debugf("Stopping VM")
 	if v.state != virtualizers.Ready {
 		v.state = virtualizers.Changing
 
-		// API way of shutting down vm seems bugged going to send request myself for now.
 		err := v.machine.Shutdown(v.vmmCtx)
 		if err != nil {
 			return err
 		}
-
-		// Sleep to handle shutdown logs doesn't affect anything makes the output nicer
-		// time.Sleep(time.Second * 2)
-
-		v.state = virtualizers.Ready
 
 	} else {
 		return errors.New("vm is already stopped")
@@ -946,6 +935,8 @@ func (v *Virtualizer) Start() error {
 					v.logger.Errorf("Wait returned an error: %s", err.Error())
 				}
 			}
+			v.state = virtualizers.Ready
+
 		}()
 	}
 	return nil

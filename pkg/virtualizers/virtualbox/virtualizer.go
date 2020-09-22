@@ -560,7 +560,9 @@ func (v *Virtualizer) gatherNetworkDetails() error {
 		noNic++
 		protocol := "tcp"
 		if v.networkType == "nat" {
-			nargs, hasDefinedPorts, err := v.handlePorts(args, route, protocol, i)
+			var nargs []string
+
+			nargs, hasDefinedPorts, err = v.handlePorts(args, route, protocol, i)
 			if err != nil {
 				return err
 			}

@@ -131,86 +131,6 @@ type nodeBlocks struct {
 	fs      uint32
 }
 
-func (c *Compiler) calculateNumberofIndirectBlocks(blocks int64) (int64, error) {
-	var single, double, triple, x int64
-	x = BlockSize / pointerSize
-	single = maxDirectPointers
-	double = single + x
-	triple = double + x*x
-	bounds := triple + x*x*x
-
-	switch {
-	case blocks <= single:
-		return 0, nil
-	case blocks <= double:
-		return 1, nil
-	case blocks <= triple:
-		return 1 + 1 + divide(blocks-double, x), nil
-	case blocks <= bounds:
-		return 1 + 1 + x + 1 + divide(divide(blocks-triple, x), x) + divide(blocks-triple, x), nil
-	default:
-		return 0, errors.New("file too large for ext2")
-	}
-
-}
-
-func (c *Compiler) calculateSymlinkSize(f vio.File) (int64, int64, error) {
-	l := int64(f.Size())
-	content := divide(l, BlockSize)
-	fs, err := c.calculateNumberofIndirectBlocks(content)
-	if err != nil {
-		return 0, 0, err
-	}
-	fs += content
-	return content, fs, nil
-}
-
-func (c *Compiler) calculateRegularFileSize(f vio.File) (int64, int64, error) {
-	l := int64(f.Size())
-	content := divide(l, BlockSize)
-	fs, err := c.calculateNumberofIndirectBlocks(content)
-	if err != nil {
-		return 0, 0, err
-	}
-	fs += content
-	return content, fs, nil
-}
-
-func (c *Compiler) calculateDirectorySize(n *vio.TreeNode) (int64, int64, error) {
-
-	var length, leftover int64
-
-	// '.' entry + ".." entry
-	length = 24
-	leftover = BlockSize - length
-	for i, child := range n.Children {
-		name := path.Base(child.File.Name())
-		l := 8 + align(int64(len(name)+1), dentryNameAlignment)
-		if leftover >= l {
-			length += l
-			leftover -= l
-		} else {
-			length += leftover
-			length += l
-			leftover = BlockSize - l
-		}
-		if leftover < 8 || i == len(n.Children)-1 {
-			length += leftover
-			leftover = BlockSize
-		}
-	}
-
-	content := divide(length, BlockSize)
-	fs, err := c.calculateNumberofIndirectBlocks(content)
-	if err != nil {
-		return 0, 0, err
-	}
-	fs += content
-
-	return content, fs, nil
-
-}
-
 func (c *Compiler) Commit(ctx context.Context) error {
 
 	// minimum size & inode calculations happen here
@@ -230,20 +150,11 @@ func (c *Compiler) Commit(ctx context.Context) error {
 		ino++
 
 		if n.File.IsSymlink() {
-			contentDelta, fsDelta, err = c.calculateSymlinkSize(n.File)
-			if err != nil {
-				return err
-			}
+			contentDelta, fsDelta = calculateSymlinkSize(n.File)
 		} else if n.File.IsDir() {
-			contentDelta, fsDelta, err = c.calculateDirectorySize(n)
-			if err != nil {
-				return err
-			}
+			contentDelta, fsDelta = calculateDirectorySize(n)
 		} else {
-			contentDelta, fsDelta, err = c.calculateRegularFileSize(n.File)
-			if err != nil {
-				return err
-			}
+			contentDelta, fsDelta = calculateRegularFileSize(n.File)
 		}
 
 		c.inodeBlocks[ino].start = c.filledDataBlocks
@@ -838,54 +749,6 @@ func (c *Compiler) getNextNode() *nodeBlocks {
 		return &c.inodeBlocks[c.activeNode]
 	}
 
-}
-
-func (c *Compiler) blockType(i int64) int {
-
-	refsPerBlock := int64(BlockSize / pointerSize)
-
-	singly := int64(12)
-	singlySpan := 1 + refsPerBlock
-	doubly := singly + singlySpan
-	doublySpan := 1 + refsPerBlock*(refsPerBlock+1)
-	triply := doubly + doublySpan
-
-	// if single indirect block
-	if i == singly {
-		return 1
-	}
-
-	// if double indirect first-level block
-	if i == doubly {
-		return 2
-	}
-
-	// if double indirect second-level block
-	if i > doubly && i < triply && (i-doubly-1)%singlySpan == 0 {
-		return 1
-	}
-
-	// if triple indirect first-level block
-	if i == triply {
-		return 3
-	}
-
-	// if triple indirect third-level block
-	if i > triply {
-		i -= (triply + 1)
-		if i%doublySpan == 0 {
-			return 2
-		}
-		for ; i > doublySpan; i -= doublySpan {
-
-		}
-		i--
-		if i%singlySpan == 0 {
-			return 1
-		}
-	}
-
-	return 0
 }
 
 func (c *Compiler) nextDataBlock(w io.Writer) error {

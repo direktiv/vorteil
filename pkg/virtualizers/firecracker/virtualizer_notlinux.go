@@ -27,6 +27,7 @@ func SetupBridgeAndDHCPServer() error {
 
 // Virtualizer is a struct which will implement the interface so the manager can control it
 type Virtualizer struct {
+	serialLogger *logger.Logger
 }
 
 // Type returns the type of virtualizer

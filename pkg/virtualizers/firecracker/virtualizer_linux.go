@@ -464,7 +464,7 @@ func (o *operation) fetchVMLinux(kernel string) (string, error) {
 		p := o.logger.NewProgress("Downloading VMLinux", "Bytes", int64(length))
 		defer p.Finish(false)
 		// pipe stream
-		var pDownloaded = 0
+		var pDownloaded = int64(0)
 		body := io.TeeReader(resp.Body, newWriter(int64(length), func(downloaded, total int64) {
 			p.Increment(downloaded - pDownloaded)
 			pDownloaded = downloaded

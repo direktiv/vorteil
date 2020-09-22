@@ -1714,46 +1714,6 @@ identify it and explain its purpose and its use.`,
 	},
 }
 
-func handleFileInjections(builder vpkg.Builder) error {
-	for src, v := range filesMap {
-		for _, dst := range v {
-
-			stat, err := os.Stat(src)
-			if err != nil {
-				return err
-			}
-
-			if stat.IsDir() {
-				// create subtree
-				tree, err := vio.FileTreeFromDirectory(src)
-				if err != nil {
-					return err
-				}
-
-				x := strings.Split(strings.TrimSuffix(filepath.ToSlash(src), "/"), "/")
-				err = builder.AddSubTreeToFS(filepath.Join(dst, x[len(x)-1]), tree)
-				if err != nil {
-					return err
-				}
-
-			} else {
-				// create file object
-				f, err := vio.LazyOpen(src)
-				if err != nil {
-					return err
-				}
-
-				err = builder.AddToFS(filepath.Join(dst, filepath.Base(f.Name())), f)
-				if err != nil {
-					return err
-				}
-			}
-		}
-	}
-
-	return nil
-}
-
 func init() {
 	f := packCmd.Flags()
 	f.BoolVarP(&flagForce, "force", "f", false, "force overwrite of existing files")

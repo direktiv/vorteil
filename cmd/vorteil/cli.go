@@ -2255,20 +2255,22 @@ func init() {
 }
 
 func defaultVirtualizer() string {
+	defaultP := "not installed"
 	backends, _ := virtualizers.Backends()
 	for _, installed := range backends {
 		if installed == "vmware" {
 			continue
 		}
 		if installed == "qemu" {
-			return "qemu"
+			defaultP = "qemu"
 		} else if installed == "hyperv" {
-			return "hyper-v"
+			defaultP = "hyperv"
 		} else if installed == "virtualbox" {
-			return "virtualbox"
+			defaultP = "virtualbox"
 		} else if installed == "firecracker" {
-			return "firecracker"
+			defaultP = "firecracker"
 		}
+		break
 	}
-	return "not installed"
+	return defaultP
 }

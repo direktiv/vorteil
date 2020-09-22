@@ -8,10 +8,6 @@ go:
 services:
   - docker
 
-stages:
-  - name: release
-    if: branch = master
-
 jobs:
   include:
     - stage: release

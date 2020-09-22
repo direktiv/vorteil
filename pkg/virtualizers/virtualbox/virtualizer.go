@@ -238,7 +238,7 @@ func (v *Virtualizer) Close(force bool) error {
 	v.state = virtualizers.Deleted
 
 	stopVM := func() error {
-		err := v.execute(exec.Command("VBoxManage", "unregistervm", v.name, "--delete"))
+		err := v.execute(exec.Command("VBoxManage", "unregistervm", v.name))
 		if err != nil {
 			return err
 		}
@@ -259,10 +259,10 @@ func (v *Virtualizer) Close(force bool) error {
 	}
 	v.disk.Close()
 	virtualizers.ActiveVMs.Delete(v.name)
-	err = os.RemoveAll(v.folder)
-	if err != nil {
-		return err
-	}
+	// err = os.RemoveAll(v.folder)
+	// if err != nil {
+	// 	return err
+	// }
 
 	return nil
 }
@@ -492,9 +492,13 @@ func (v *Virtualizer) createAndConfigure(diskpath string) error {
 		return err
 	}
 
-	mVMArgs := modifyVM(v.name, strconv.Itoa(v.config.VM.RAM.Units(vcfg.MiB)), strconv.Itoa(int(v.config.VM.CPUs)), filepath.ToSlash(filepath.Join(v.folder, "monitor.sock")))
+	cpus := int(v.config.VM.CPUs)
+	if cpus == 0 {
+		cpus = 1
+	}
+	mVMArgs := modifyVM(v.name, strconv.Itoa(v.config.VM.RAM.Units(vcfg.MiB)), strconv.Itoa(cpus), filepath.ToSlash(filepath.Join(v.folder, "monitor.sock")))
 	if runtime.GOOS == "windows" {
-		mVMArgs = modifyVM(v.name, strconv.Itoa(v.config.VM.RAM.Units(vcfg.MiB)), strconv.Itoa(int(v.config.VM.CPUs)), fmt.Sprintf("\\\\.\\pipe\\%s", v.id))
+		mVMArgs = modifyVM(v.name, strconv.Itoa(v.config.VM.RAM.Units(vcfg.MiB)), strconv.Itoa(cpus), fmt.Sprintf("\\\\.\\pipe\\%s", v.id))
 	}
 	cmd = exec.Command("VBoxManage", mVMArgs...)
 	err = v.execute(cmd)

@@ -31,11 +31,10 @@ type Virtualizer interface {
 	State() string                                                                             // Return the state the vm is currently in
 	Download() (vio.File, error)                                                               // Download the disk of the vm
 	Details() (string, string, string, []NetworkInterface, time.Time, *vcfg.VCFG, interface{}) // fetch details relating to the machine
-	// Detach(string) error                            // removes the vm from the active vms section and moves vm contents to different location
-	Start() error           // Start the vm
-	Stop() error            // Stop the vm
-	Serial() *logger.Logger // Return the serial output of the vm
-	Close(bool) error       // Close the vm is deleting the vm and removing its contents as its not needed anymore.
+	Start() error                                                                              // Start the vm
+	Stop() error                                                                               // Stop the vm
+	Serial() *logger.Logger                                                                    // Return the serial output of the vm
+	Close(bool) error                                                                          // Close the vm is deleting the vm and removing its contents as its not needed anymore.
 }
 
 // Create two maps one for the virtualizers that get registered the other to track the vms that are currently created

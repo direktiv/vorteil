@@ -161,23 +161,7 @@ func (v *Virtualizer) Start() error {
 			}
 			if v.networkType != "nat" {
 				go func() {
-					ips := util.LookForIP(v.serialLogger)
-					if len(ips) > 0 {
-						for i, route := range v.routes {
-							for j, port := range route.HTTP {
-								v.routes[i].HTTP[j].Address = fmt.Sprintf("%s:%s", ips[i], port.Port)
-							}
-							for j, port := range route.HTTPS {
-								v.routes[i].HTTPS[j].Address = fmt.Sprintf("%s:%s", ips[i], port.Port)
-							}
-							for j, port := range route.TCP {
-								v.routes[i].TCP[j].Address = fmt.Sprintf("%s:%s", ips[i], port.Port)
-							}
-							for j, port := range route.UDP {
-								v.routes[i].UDP[j].Address = fmt.Sprintf("%s:%s", ips[i], port.Port)
-							}
-						}
-					}
+					v.routes = util.LookForIP(v.serialLogger, v.routes)
 				}()
 			}
 
@@ -362,52 +346,52 @@ func (v *Virtualizer) Prepare(args *virtualizers.PrepareArgs) *virtualizers.Virt
 }
 
 // Detach ... removes vm from active vms list and moves content to source directory
-func (v *Virtualizer) Detach(source string) error {
-	if v.state != virtualizers.Ready {
-		return errors.New("virtual machine must be in a ready state to detach")
-	}
+// func (v *Virtualizer) Detach(source string) error {
+// 	if v.state != virtualizers.Ready {
+// 		return errors.New("virtual machine must be in a ready state to detach")
+// 	}
 
-	// remove "-" from the source directory as clonevm doesn't seem to work with it replace with space
-	source = strings.ReplaceAll(source, "-", " ")
-	// make directory to put it in as it doesn't exist anymore
-	err := os.MkdirAll(source, 0777)
-	if err != nil {
-		return err
-	}
-	_, err = os.Stat(filepath.Join(filepath.ToSlash(source), fmt.Sprintf("%s Clone", v.name)))
-	if err == nil {
-		return errors.New("source directory where you want to copy already exists")
-	} else if !os.IsNotExist(err) {
-		return err
-	}
-	// clone vm from temp directory to source
-	cmd := exec.Command("VBoxManage", "clonevm", v.name, fmt.Sprintf("--basefolder=%s", filepath.ToSlash(source)), "--register")
-	err = v.execute(cmd)
-	if err != nil {
-		if !strings.Contains(err.Error(), "100%") {
-			return err
-		}
-	}
+// 	// remove "-" from the source directory as clonevm doesn't seem to work with it replace with space
+// 	source = strings.ReplaceAll(source, "-", " ")
+// 	// make directory to put it in as it doesn't exist anymore
+// 	err := os.MkdirAll(source, 0777)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	_, err = os.Stat(filepath.Join(filepath.ToSlash(source), fmt.Sprintf("%s Clone", v.name)))
+// 	if err == nil {
+// 		return errors.New("source directory where you want to copy already exists")
+// 	} else if !os.IsNotExist(err) {
+// 		return err
+// 	}
+// 	// clone vm from temp directory to source
+// 	cmd := exec.Command("VBoxManage", "clonevm", v.name, fmt.Sprintf("--basefolder=%s", filepath.ToSlash(source)), "--register")
+// 	err = v.execute(cmd)
+// 	if err != nil {
+// 		if !strings.Contains(err.Error(), "100%") {
+// 			return err
+// 		}
+// 	}
 
-	time.Sleep(time.Second * 5)
-	// remove vm entirely from here might as well force it as the cloned vm has a non corrupt disk
-	err = v.Close(true)
-	if err != nil {
-		return err
-	}
+// 	time.Sleep(time.Second * 5)
+// 	// remove vm entirely from here might as well force it as the cloned vm has a non corrupt disk
+// 	err = v.Close(true)
+// 	if err != nil {
+// 		return err
+// 	}
 
-	if runtime.GOOS != "windows" {
-		cmd := exec.Command("VBoxManage", "modifyvm", fmt.Sprintf("%s Clone", v.name), "--uartmode1", "server", filepath.Join(filepath.ToSlash(source), fmt.Sprintf("%s Clone", v.name), "monitor.sock"))
-		err = v.execute(cmd)
-		if err != nil {
-			if !strings.Contains(err.Error(), "100%") {
-				return err
-			}
-		}
-	}
+// 	if runtime.GOOS != "windows" {
+// 		cmd := exec.Command("VBoxManage", "modifyvm", fmt.Sprintf("%s Clone", v.name), "--uartmode1", "server", filepath.Join(filepath.ToSlash(source), fmt.Sprintf("%s Clone", v.name), "monitor.sock"))
+// 		err = v.execute(cmd)
+// 		if err != nil {
+// 			if !strings.Contains(err.Error(), "100%") {
+// 				return err
+// 			}
+// 		}
+// 	}
 
-	return nil
-}
+// 	return nil
+// }
 
 // execute is generic wrapping function to run command execs
 func (v *Virtualizer) execute(cmd *exec.Cmd) error {
@@ -484,14 +468,8 @@ func modifyVM(name string, ram, cpus, sock string) []string {
 	return vboxArgs
 }
 
-func (v *Virtualizer) createAndConfigure(diskpath string) error {
-	cVMArgs := createVM(v.folder, v.name)
-	cmd := exec.Command("VBoxManage", cVMArgs...)
-	err := v.execute(cmd)
-	if err != nil {
-		return err
-	}
-
+// prepareVM executes the modify function with appropriate arguments for storage
+func (v *Virtualizer) prepareVM(diskpath string) error {
 	cpus := int(v.config.VM.CPUs)
 	if cpus == 0 {
 		cpus = 1
@@ -500,8 +478,8 @@ func (v *Virtualizer) createAndConfigure(diskpath string) error {
 	if runtime.GOOS == "windows" {
 		mVMArgs = modifyVM(v.name, strconv.Itoa(v.config.VM.RAM.Units(vcfg.MiB)), strconv.Itoa(cpus), fmt.Sprintf("\\\\.\\pipe\\%s", v.id))
 	}
-	cmd = exec.Command("VBoxManage", mVMArgs...)
-	err = v.execute(cmd)
+	cmd := exec.Command("VBoxManage", mVMArgs...)
+	err := v.execute(cmd)
 	if err != nil {
 		return err
 	}
@@ -522,68 +500,75 @@ func (v *Virtualizer) createAndConfigure(diskpath string) error {
 		return err
 	}
 
-	cmd = exec.Command("VBoxManage", "setextradata", v.name,
-		"VBoxInternal/Devices/serial/0/Config/YieldOnLSRRead", "1")
-	err = v.execute(cmd)
-	if err != nil {
-		return err
-	}
+	return nil
+}
 
+func (v *Virtualizer) handlePorts(args []string, route virtualizers.NetworkInterface, protocol string, i int) ([]string, bool, error) {
+	var hasDefinedPorts bool
+	for j, port := range route.HTTP {
+		bind, nr, err := virtualizers.BindPort(v.networkType, protocol, port.Port)
+		if err != nil {
+			return nil, false, err
+		}
+		v.routes[i].HTTP[j].Address = nr
+		hasDefinedPorts = true
+		args = append(args, fmt.Sprintf("--natpf%s", strconv.Itoa(i+1)))
+		args = append(args, fmt.Sprintf("nat%s%s,%s,,%s,,%s", bind, "http", protocol, bind, port.Port))
+	}
+	for j, port := range route.HTTPS {
+		bind, nr, err := virtualizers.BindPort(v.networkType, protocol, port.Port)
+		if err != nil {
+			return nil, false, err
+		}
+		v.routes[i].HTTPS[j].Address = nr
+		hasDefinedPorts = true
+		args = append(args, fmt.Sprintf("--natpf%s", strconv.Itoa(i+1)))
+		args = append(args, fmt.Sprintf("nat%s%s,%s,,%s,,%s", bind, "https", protocol, bind, port.Port))
+
+	}
+	for j, port := range route.TCP {
+		bind, nr, err := virtualizers.BindPort(v.networkType, protocol, port.Port)
+		if err != nil {
+			return nil, false, err
+		}
+		v.routes[i].TCP[j].Address = nr
+		hasDefinedPorts = true
+		args = append(args, fmt.Sprintf("--natpf%s", strconv.Itoa(i+1)))
+		args = append(args, fmt.Sprintf("nat%s%s,%s,,%s,,%s", bind, "tcp", protocol, bind, port.Port))
+
+	}
+	for j, port := range route.UDP {
+		bind, nr, err := virtualizers.BindPort(v.networkType, protocol, port.Port)
+		if err != nil {
+			return nil, false, err
+		}
+		v.routes[i].UDP[j].Address = nr
+		hasDefinedPorts = true
+		args = append(args, fmt.Sprintf("--natpf%s", strconv.Itoa(i+1)))
+		args = append(args, fmt.Sprintf("nat%s%s,%s,,%s,,%s", bind, "udp", protocol, bind, port.Port))
+	}
+	return args, hasDefinedPorts, nil
+}
+
+func (v *Virtualizer) gatherNetworkDetails() error {
 	hasDefinedPorts := false
 	var noNic int
-
+	var err error
 	for i, route := range v.routes {
 		args := make([]string, 0)
 		args = append(args, "modifyvm", v.name)
 		noNic++
 		protocol := "tcp"
-		var j int
 		if v.networkType == "nat" {
-			for j, port := range route.HTTP {
-				bind, nr, err := virtualizers.BindPort(v.networkType, protocol, port.Port)
-				if err != nil {
-					return err
-				}
-				v.routes[i].HTTP[j].Address = nr
-				hasDefinedPorts = true
-				args = append(args, fmt.Sprintf("--natpf%s", strconv.Itoa(i+1)))
-				args = append(args, fmt.Sprintf("nat%s%s,%s,,%s,,%s", bind, "http", protocol, bind, port.Port))
-			}
-			for _, port := range route.HTTPS {
-				bind, nr, err := virtualizers.BindPort(v.networkType, protocol, port.Port)
-				if err != nil {
-					return err
-				}
-				v.routes[i].HTTPS[j].Address = nr
-				hasDefinedPorts = true
-				args = append(args, fmt.Sprintf("--natpf%s", strconv.Itoa(i+1)))
-				args = append(args, fmt.Sprintf("nat%s%s,%s,,%s,,%s", bind, "https", protocol, bind, port.Port))
+			var nargs []string
 
-			}
-			for _, port := range route.TCP {
-				bind, nr, err := virtualizers.BindPort(v.networkType, protocol, port.Port)
-				if err != nil {
-					return err
-				}
-				v.routes[i].TCP[j].Address = nr
-				hasDefinedPorts = true
-				args = append(args, fmt.Sprintf("--natpf%s", strconv.Itoa(i+1)))
-				args = append(args, fmt.Sprintf("nat%s%s,%s,,%s,,%s", bind, "tcp", protocol, bind, port.Port))
-
-			}
-			for _, port := range route.UDP {
-				bind, nr, err := virtualizers.BindPort(v.networkType, protocol, port.Port)
-				if err != nil {
-					return err
-				}
-				v.routes[i].UDP[j].Address = nr
-				hasDefinedPorts = true
-				args = append(args, fmt.Sprintf("--natpf%s", strconv.Itoa(i+1)))
-				args = append(args, fmt.Sprintf("nat%s%s,%s,,%s,,%s", bind, "udp", protocol, bind, port.Port))
+			nargs, hasDefinedPorts, err = v.handlePorts(args, route, protocol, i)
+			if err != nil {
+				return err
 			}
 			if hasDefinedPorts {
-				cmd = exec.Command("VBoxManage", args...)
-				err = v.execute(cmd)
+				cmd := exec.Command("VBoxManage", nargs...)
+				err := v.execute(cmd)
 				if err != nil {
 					return err
 				}
@@ -610,36 +595,50 @@ func (v *Virtualizer) createAndConfigure(diskpath string) error {
 		args = append(args, "--nictype"+strconv.Itoa(i), "virtio", "--cableconnected"+strconv.Itoa(i), "on")
 	}
 
-	cmd = exec.Command("VBoxManage", args...)
+	cmd := exec.Command("VBoxManage", args...)
 	err = v.execute(cmd)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (v *Virtualizer) createAndConfigure(diskpath string) error {
+	cVMArgs := createVM(v.folder, v.name)
+	cmd := exec.Command("VBoxManage", cVMArgs...)
+	err := v.execute(cmd)
+	if err != nil {
+		return err
+	}
+
+	err = v.prepareVM(diskpath)
+	if err != nil {
+		return err
+	}
+
+	cmd = exec.Command("VBoxManage", "setextradata", v.name,
+		"VBoxInternal/Devices/serial/0/Config/YieldOnLSRRead", "1")
+	err = v.execute(cmd)
+	if err != nil {
+		return err
+	}
+
+	err = v.gatherNetworkDetails()
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-// prepare sets the fields and arguments to spawn the virtual machine
-func (o *operation) prepare(args *virtualizers.PrepareArgs) {
-	var returnErr error
-	var err error
-	o.updateStatus(fmt.Sprintf("Preparing virtualbox files..."))
-	defer func() {
-		o.finished(returnErr)
-	}()
-	o.name = args.Name
-	o.id = randstr.Hex(5)
-	o.folder = filepath.Dir(args.ImagePath)
-	// o.folder = filepath.Join(o.vmdrive, fmt.Sprintf("%s-%s", o.id, o.Type()))
-	// err := os.MkdirAll(o.folder, os.ModePerm)
-	// if err != nil {
-	// 	returnErr = err
-	// }
+// checkIfBridged checks if bridged device exists on virtualbox
+func (o *operation) checkIfBridged() (bool, error) {
+	var deviceIsBridged bool
 	if o.networkType == "bridged" {
 		devices, err := virtualizers.BridgedDevices()
 		if err != nil {
-			returnErr = err
+			return false, err
 		}
-		deviceIsBridged := false
 		for _, device := range devices {
 			if device == o.networkDevice {
 				deviceIsBridged = true
@@ -647,17 +646,20 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 			}
 		}
 		if !deviceIsBridged {
-			returnErr = fmt.Errorf("error: network device '%s' is not a valid bridge interface", o.networkDevice)
-			return
+			return false, fmt.Errorf("error: network device '%s' is not a valid bridge interface", o.networkDevice)
 		}
 	}
+	return deviceIsBridged, nil
+}
 
+// checkIfHost checks if host device exists on virtualbox
+func (o *operation) checkIfHost() (bool, error) {
+	var deviceIsHost bool
 	if o.networkType == "hostonly" {
 		devices, err := virtualizers.HostDevices()
 		if err != nil {
-			returnErr = err
+			return false, err
 		}
-		deviceIsHost := false
 		for _, device := range devices {
 			if device == o.networkDevice {
 				deviceIsHost = true
@@ -665,9 +667,37 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 			}
 		}
 		if !deviceIsHost {
-			returnErr = fmt.Errorf("error: network device '%s' is not a valid host interface", o.networkDevice)
-			return
+			return false, fmt.Errorf("error: network device '%s' is not a valid host interface", o.networkDevice)
+
 		}
+	}
+	return deviceIsHost, nil
+}
+
+// prepare sets the fields and arguments to spawn the virtual machine
+func (o *operation) prepare(args *virtualizers.PrepareArgs) {
+	var returnErr error
+	var err error
+
+	o.updateStatus(fmt.Sprintf("Preparing virtualbox files..."))
+	defer func() {
+		o.finished(returnErr)
+	}()
+
+	o.name = args.Name
+	o.id = randstr.Hex(5)
+	o.folder = filepath.Dir(args.ImagePath)
+
+	_, err = o.checkIfBridged()
+	if err != nil {
+		returnErr = err
+		return
+	}
+
+	_, err = o.checkIfHost()
+	if err != nil {
+		returnErr = err
+		return
 	}
 
 	_, loaded := virtualizers.ActiveVMs.LoadOrStore(o.name, o.Virtualizer)
@@ -676,10 +706,18 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 		return
 	}
 
-	err = o.createAndConfigure(args.ImagePath)
+	err = o.startupVM(args.ImagePath, args.Start)
 	if err != nil {
-		returnErr = fmt.Errorf("Error configuring vm: %s", err.Error())
+		returnErr = err
 		return
+	}
+
+}
+
+func (o *operation) startupVM(path string, start bool) error {
+	err := o.createAndConfigure(path)
+	if err != nil {
+		return fmt.Errorf("Error configuring vm: %s", err.Error())
 	}
 
 	o.state = "ready"
@@ -687,12 +725,11 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	// This needs to be routined as its waiting for the pipe to start
 	go o.initLogging()
 
-	if args.Start {
+	if start {
 		err = o.Start()
 		if err != nil {
-			returnErr = fmt.Errorf("Error starting vm: %s", err.Error())
-			return
+			return fmt.Errorf("Error starting vm: %s", err.Error())
 		}
 	}
-
+	return nil
 }

@@ -41,6 +41,7 @@ func TestMarshalAndUnmarshal(t *testing.T) {
 	}
 }
 
+// TODO needs hyper-v to be tested properly
 // func TestValidateArgs(t *testing.T) {
 // 	data := c.Marshal()
 // 	err := Allocator.ValidateArgs(data)

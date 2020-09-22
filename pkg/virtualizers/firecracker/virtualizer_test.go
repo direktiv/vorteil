@@ -32,30 +32,13 @@ func TestType(t *testing.T) {
 
 	typeSt := v.Type()
 	if typeSt != "firecracker" {
-		t.Errorf("expected %s but got %s", "vmware", typeSt)
+		t.Errorf("expected %s but got %s", "firecracker", typeSt)
 	}
 }
 
-// func TestLoggerAndSerial(t *testing.T) {
-// 	v := &Virtualizer{
-// 		serialLogger: logger.NewLogger(2048),
-// 	}
+	seriall := v.Serial()
 
-// 	seriall := v.Serial()
-
-// 	if seriall == nil {
-// 		t.Errorf("unable to get loggers from virtualizer")
-// 	}
-// }
-// func TestLookForIp(t *testing.T) {
-// 	v := &Virtualizer{
-// 		serialLogger: logger.NewLogger(2048),
-// 	}
-
-// 	v.serialLogger.Write([]byte(codeBlockToLookIP))
-
-// 	address := v.lookForIP()
-// 	if address != "10.0.2.15" {
-// 		t.Errorf("unable to retrieve correct IP was expecting %s but got %s", "10.0.2.15", address)
-// 	}
-// }
+	if seriall == nil {
+		t.Errorf("unable to get loggers from virtualizer")
+	}
+}

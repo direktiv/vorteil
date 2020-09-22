@@ -71,18 +71,16 @@ func (v *Virtualizer) Start() error {
 				if err != nil {
 					v.logger.Errorf("Error Wait Command: %s", err.Error())
 				}
-				if v.state == virtualizers.Alive {
-					if !socketFound {
-						v.state = virtualizers.Broken
-					} else {
-						err = v.Stop()
-						if err != nil {
-							v.logger.Errorf("Error Stopping VM: %s", err.Error())
-						}
-					}
-
-				}
 			}
+
+			v.state = virtualizers.Ready
+
+			v.sock.Close()
+
+			// vm should be stopped by now so close the pipes
+			v.errPipe.Close()
+			v.outPipe.Close()
+			v.disk.Close()
 		}()
 	}
 	return nil

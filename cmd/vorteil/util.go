@@ -5,7 +5,6 @@
 package main
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -46,7 +45,6 @@ func handleFile(src string, dst string, builder vpkg.Builder) error {
 func handleFileInjections(builder vpkg.Builder) error {
 	for src, v := range filesMap {
 		for _, dst := range v {
-			fmt.Printf("SRC: %s\n", src)
 			stat, err := os.Stat(src)
 			if err != nil {
 				return err

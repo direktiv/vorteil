@@ -453,47 +453,13 @@ func Merge(a, b *VCFG) (*VCFG, error) {
 	}
 
 	// Logging
-	if a.Logging == nil {
-		a.Logging = b.Logging
-	} else if b.Logging != nil {
-
-		for k, p := range a.Logging {
-			if len(b.Logging) > k {
-				cfgs := mergeStringArray(p.Config, b.Logging[k].Config)
-
-				err = mergo.Merge(&p, &b.Logging[k], mergo.WithOverride)
-				if err != nil {
-					return nil, err
-				}
-
-				p.Config = cfgs
-				a.Logging[k] = p
-			}
-		}
-
-		if len(b.Logging) > len(a.Logging) {
-			a.Logging = append(a.Logging, b.Logging[len(a.Logging):]...)
-		}
+	if err := a.mergeLogging(b); err != nil {
+		return nil, err
 	}
 
 	// Networks
 	if err := a.mergeNetworks(b); err != nil {
 		return nil, err
-	}
-
-	if a.Logging == nil {
-		a.Logging = b.Logging
-	} else if b.Logging != nil {
-		for k, r := range a.Logging {
-			err = mergo.Merge(&r, &b.Logging[k], mergo.WithOverride)
-			if err != nil {
-				return nil, err
-			}
-		}
-
-		if len(b.Logging) > len(a.Logging) {
-			a.Logging = append(a.Logging, b.Logging[len(a.Logging):]...)
-		}
 	}
 
 	// System.DNS
@@ -653,6 +619,44 @@ func (vcfg *VCFG) mergeNFS(b *VCFG) error {
 			vcfg.NFS = append(vcfg.NFS, b.NFS[len(vcfg.NFS):]...)
 		}
 
+	}
+
+	return nil
+}
+
+func (vcfg *VCFG) mergeLogging(b *VCFG) error {
+	if vcfg.Logging == nil {
+		vcfg.Logging = b.Logging
+	} else if b.Logging != nil {
+
+		for k, p := range vcfg.Logging {
+			if len(b.Logging) > k {
+				cfgs := mergeStringArray(p.Config, b.Logging[k].Config)
+
+				err := mergo.Merge(&p, &b.Logging[k], mergo.WithOverride)
+				if err != nil {
+					return err
+				}
+
+				p.Config = cfgs
+				vcfg.Logging[k] = p
+			}
+		}
+
+		if len(b.Logging) > len(vcfg.Logging) {
+			vcfg.Logging = append(vcfg.Logging, b.Logging[len(vcfg.Logging):]...)
+		}
+
+		for k, r := range vcfg.Logging {
+			err := mergo.Merge(&r, &b.Logging[k], mergo.WithOverride)
+			if err != nil {
+				return err
+			}
+		}
+
+		if len(b.Logging) > len(vcfg.Logging) {
+			vcfg.Logging = append(vcfg.Logging, b.Logging[len(vcfg.Logging):]...)
+		}
 	}
 
 	return nil

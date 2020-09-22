@@ -1,6 +1,7 @@
 package util
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
@@ -49,7 +50,7 @@ func ConvertToVM(name string, pname string, state string, routes []virtualizers.
 }
 
 // LookForIP screen scrapes the IP from a virtual machine output mainly used for bridge/hosted machines
-func LookForIP(l *logger.Logger) []string {
+func LookForIP(l *logger.Logger, routes []virtualizers.NetworkInterface) []virtualizers.NetworkInterface {
 
 	sub := l.Subscribe()
 	inbox := sub.Inbox()
@@ -91,7 +92,23 @@ func LookForIP(l *logger.Logger) []string {
 			}
 		}
 	}
-	return ips
+	if len(ips) > 0 {
+		for i, route := range routes {
+			for j, port := range route.HTTP {
+				routes[i].HTTP[j].Address = fmt.Sprintf("%s:%s", ips[i], port.Port)
+			}
+			for j, port := range route.HTTPS {
+				routes[i].HTTPS[j].Address = fmt.Sprintf("%s:%s", ips[i], port.Port)
+			}
+			for j, port := range route.TCP {
+				routes[i].TCP[j].Address = fmt.Sprintf("%s:%s", ips[i], port.Port)
+			}
+			for j, port := range route.UDP {
+				routes[i].UDP[j].Address = fmt.Sprintf("%s:%s", ips[i], port.Port)
+			}
+		}
+	}
+	return routes
 }
 
 // Routes generates api friendly routes for the machine

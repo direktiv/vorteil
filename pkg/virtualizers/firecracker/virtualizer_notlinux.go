@@ -27,7 +27,7 @@ func SetupBridgeAndDHCPServer() error {
 
 // Virtualizer is a struct which will implement the interface so the manager can control it
 type Virtualizer struct {
-	serialLogger *logger.Logger // logs for the serial of the vm
+	serialLogger *logger.Logger
 }
 
 // Type returns the type of virtualizer
@@ -115,11 +115,6 @@ func (v *Virtualizer) ConvertToVM() interface{} {
 // Prepare prepares the virtualizer with the appropriate fields to run the virtualizer
 func (v *Virtualizer) Prepare(args *virtualizers.PrepareArgs) *virtualizers.VirtualizeOperation {
 	return nil
-}
-
-// lookForIp looks for IP via the screen output as firecracker spawns on different IPs
-func (v *Virtualizer) lookForIP() string {
-	return ""
 }
 
 // prepare sets the fields and arguments to spawn the virtual machine

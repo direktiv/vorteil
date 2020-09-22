@@ -14,7 +14,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 
@@ -27,8 +26,6 @@ const (
 	DefaultLinuxUserLibPath = "/usr/lib"
 	DefaultLinuxLibPath     = "/lib"
 )
-
-var prefix = ""
 
 var DefaultLibs = []string{"libnss_dns.so.2", "libnss_files.so.2", "libresolv.so.2"}
 
@@ -120,91 +117,36 @@ func ReadLink(path string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-//listDependencies: Given a file path 'fpath' locate the files dependencies.
-//	Return a list of paths to dependencies found on system, and a list names of dependencies who are missing from system.
-func (isoOp *importSharedObjectsOperation) listDependencies(fpath string) ([]string, []string, error) {
-	e, err := elf.Open(fpath)
-	if err != nil {
-		if strings.HasPrefix(err.Error(), "bad magic number") {
-			return []string{}, nil, nil
-		}
-		if errors.Is(err, io.EOF) {
-			return []string{}, []string{}, nil
-		}
-		if strings.Contains(err.Error(), "The name of the file cannot be resolved by the system.") {
-			// symlink reopen elf at point
-			linuxPath := filepath.ToSlash(strings.TrimPrefix(fpath, prefix))
-			target, err := ReadLink(linuxPath)
-			if err != nil {
-				return nil, nil, fmt.Errorf("unable to read link : %w", err)
-			}
-			if strings.HasPrefix(target, "/") {
-				target = filepath.Join(prefix, target)
-			} else {
-				target = filepath.Join(prefix, filepath.Dir(linuxPath), target)
-			}
+func loadPathsFromFile(path string) ([]string, error) {
+	paths := make([]string, 0)
+	var fn func(path string) error
 
-			e, err = elf.Open(target)
-			if err != nil {
-				return nil, nil, fmt.Errorf("unable to scan file : %w", err)
-			}
-		} else {
-			return nil, nil, fmt.Errorf("unable to scan file : %w", err)
-		}
-	}
-
-	defer e.Close()
-
-	if e.FileHeader.Class == elf.ELFCLASS32 {
-		isoOp.imported32bit = true
-	} else if e.FileHeader.Class == elf.ELFCLASS64 {
-		isoOp.imported64bit = true
-	}
-
-	libs, err := e.ImportedLibraries()
-	if err != nil {
-		return nil, nil, fmt.Errorf("unable to load list of imported libraries from elf binary: %w", err)
-	}
-	var paths []string
-	y := os.Getenv("LD_LIBRARY_PATH")
-	if y != "" {
-		x := filepath.SplitList(y)
-		paths = append(paths, x...)
-	}
-	x, err := e.DynString(elf.DT_RPATH)
-	if err != nil {
-		return nil, nil, fmt.Errorf("unable to load rpath from elf binary: %w", err)
-	}
-	paths = append(paths, x...)
-	x, err = e.DynString(elf.DT_RUNPATH)
-	if err != nil {
-		return nil, nil, fmt.Errorf("unable to load runpath from elf binary: %w", err)
-	}
-	paths = append(paths, x...)
-	// system paths path (/etc/ld.so.conf)
-	var loadPathsFromFile func(path string) error
-	loadPathsFromFile = func(path string) error {
+	fn = func(path string) error {
 		data, err := ioutil.ReadFile(path)
 		if err != nil {
 			return err
 		}
 		lines := strings.Split(string(data), "\n")
 		for _, line := range lines {
+
 			if strings.HasPrefix(line, "/") {
-				paths = append(paths, line)
+				if info, err := os.Stat(line); err == nil && info.IsDir() {
+					paths = append(paths, line)
+				}
 				continue
 			}
+
 			if strings.HasPrefix(line, "include") {
 				line = strings.TrimPrefix(line, "include ")
 				line = strings.TrimSpace(line)
-				line = filepath.ToSlash(filepath.Join(prefix, line))
+				line = filepath.ToSlash(line)
 
 				matches, err := filepath.Glob(line)
 				if err != nil {
 					return err
 				}
 				for _, match := range matches {
-					err = loadPathsFromFile(match)
+					err = fn(match)
 					if err != nil {
 						return err
 					}
@@ -221,66 +163,102 @@ func (isoOp *importSharedObjectsOperation) listDependencies(fpath string) ([]str
 		return nil
 	}
 
-	err = loadPathsFromFile(filepath.Join(prefix, DynamicLinkerConfig))
+	err := fn(path)
+
+	return paths, err
+}
+
+func locateDependency(lib string, libClass elf.Class, filePath string, depList []string) (string, error) {
+	for _, sp := range depList {
+		if strings.HasPrefix(sp, "$ORIGIN") {
+			sp = filepath.Join(filepath.Dir(filePath), "."+strings.TrimPrefix(sp, "$ORIGIN"))
+		}
+
+		sp = filepath.Join(sp, lib)
+		_, err := os.Stat(sp)
+		if err != nil {
+			if !os.IsNotExist(err) {
+				return "", fmt.Errorf("unable to stat candidate dependency: %w", err)
+			}
+			continue
+		}
+
+		l, err := elf.Open(sp)
+		if err != nil {
+			if strings.Contains(err.Error(), "The name of the file cannot be resolved by the system.") {
+				// symlink reopen elf at point
+				linuxPath := filepath.ToSlash(sp)
+				target, err := ReadLink(linuxPath)
+				if err != nil {
+					return "", errorDependencyReadlink(err)
+				}
+
+				if !filepath.IsAbs(target) {
+					target = filepath.Join(filepath.Dir(linuxPath), target)
+				}
+
+				l, err = elf.Open(target)
+				if err != nil {
+					return "", errorDependencyScan(err)
+				}
+			} else {
+				return "", errorDependencyScan(err)
+			}
+		}
+		defer l.Close()
+
+		if libClass == l.FileHeader.Class {
+			return sp, nil
+		}
+	}
+
+	return "", fmt.Errorf("unable to locate dependency: %s", lib)
+}
+
+//listDependencies: Given a file path 'fpath' locate the files dependencies.
+//	Return a list of paths to dependencies found on system, and a list names of dependencies who are missing from system.
+func (isoOp *importSharedObjectsOperation) listDependencies(fpath string) ([]string, []string, error) {
+	e, err := elf.Open(fpath)
+	if err != nil {
+		if strings.HasPrefix(err.Error(), "bad magic number") {
+			return []string{}, nil, nil
+		}
+		if errors.Is(err, io.EOF) {
+			return []string{}, []string{}, nil
+		} else {
+			return nil, nil, fmt.Errorf("unable to scan file : %w", err)
+		}
+	}
+
+	defer e.Close()
+
+	isoOp.imported32bit = (e.FileHeader.Class == elf.ELFCLASS32)
+	isoOp.imported64bit = (e.FileHeader.Class == elf.ELFCLASS64)
+
+	libs, err := e.ImportedLibraries()
+	if err != nil {
+		return nil, nil, fmt.Errorf("unable to load list of imported libraries from elf binary: %w", err)
+	}
+
+	paths := getLDPathsFromENV()
+	x, err := e.DynString(elf.DT_RPATH)
+	if err != nil {
+		return nil, nil, fmt.Errorf("unable to load rpath from elf binary: %w", err)
+	}
+	paths = append(paths, x...)
+	x, err = e.DynString(elf.DT_RUNPATH)
+	if err != nil {
+		return nil, nil, fmt.Errorf("unable to load runpath from elf binary: %w", err)
+	}
+	paths = append(paths, x...)
+
+	filePaths, err := loadPathsFromFile(DynamicLinkerConfig)
 	if err != nil {
 		return nil, nil, err
 	}
-	paths = append(paths, filepath.Join(prefix, DefaultLinuxLibPath))
-	paths = append(paths, filepath.Join(prefix, DefaultLinuxUserLibPath))
-
-	fn := func(lib string) (string, error) {
-		for _, sp := range paths {
-			if strings.HasPrefix(sp, "$ORIGIN") {
-				sp = strings.Replace(sp, "$ORIGIN", ".", 1)
-				sp = filepath.Join(filepath.Dir(fpath), sp)
-			}
-
-			sp = filepath.Join(sp, lib)
-			if runtime.GOOS == "windows" {
-				if !strings.HasPrefix(sp, prefix) {
-					sp = filepath.Join(prefix, sp)
-				}
-			}
-			// prefix stat to get the elf open rather than returning
-			_, err := os.Stat(sp)
-			if err != nil {
-				if !os.IsNotExist(err) {
-					return "", fmt.Errorf("unable to stat candidate dependency: %w", err)
-				}
-				continue
-			}
-
-			l, err := elf.Open(sp)
-			if err != nil {
-				if strings.Contains(err.Error(), "The name of the file cannot be resolved by the system.") {
-					// symlink reopen elf at point
-					linuxPath := filepath.ToSlash(strings.TrimPrefix(sp, prefix))
-					target, err := ReadLink(linuxPath)
-					if err != nil {
-						return "", errorDependencyReadlink(err)
-					}
-					if strings.HasPrefix(target, "/") {
-						target = filepath.Join(prefix, target)
-					} else {
-						target = filepath.Join(prefix, filepath.Dir(linuxPath), target)
-					}
-					l, err = elf.Open(target)
-					if err != nil {
-						return "", errorDependencyScan(err)
-					}
-				} else {
-					return "", errorDependencyScan(err)
-				}
-			}
-			defer l.Close()
-
-			if e.FileHeader.Class == l.FileHeader.Class {
-				return sp, nil
-			}
-		}
-
-		return "", fmt.Errorf("unable to locate dependency: %s", lib)
-	}
+	paths = append(paths, filePaths...)
+	paths = append(paths, DefaultLinuxLibPath)
+	paths = append(paths, DefaultLinuxUserLibPath)
 
 	var deps []string
 	var errs []error
@@ -307,7 +285,7 @@ func (isoOp *importSharedObjectsOperation) listDependencies(fpath string) ([]str
 	noLocates := make([]string, 0)
 
 	for _, lib := range libs {
-		dep, lerr := fn(lib)
+		dep, lerr := locateDependency(lib, e.FileHeader.Class, fpath, paths)
 		if lerr != nil {
 			locationErrPrefix := "unable to locate dependency: "
 			if strings.HasPrefix(lerr.Error(), locationErrPrefix) {
@@ -335,7 +313,7 @@ func (isoOp *importSharedObjectsOperation) listDependencies(fpath string) ([]str
 }
 
 //appendSliceToUnfoundDependencies appends missingDeps arg to operations unfoundDependencies
-func (isoOp *importSharedObjectsOperation) appendSliceToUnfoundDependencies(missingDeps []string) () {
+func (isoOp *importSharedObjectsOperation) appendSliceToUnfoundDependencies(missingDeps []string) {
 	for _, l := range missingDeps {
 		isoOp.unfoundDependencies[l] = nil
 	}
@@ -347,13 +325,13 @@ func (isoOp *importSharedObjectsOperation) initLDPATHS() error {
 	isoOp.ldPATHS = getLDPathsFromENV()
 
 	// Load paths from linker config
-	if err := isoOp.loadLDPathsFromLinkerConfig(filepath.Join(prefix, DynamicLinkerConfig)); err != nil {
+	if err := isoOp.loadLDPathsFromLinkerConfig(DynamicLinkerConfig); err != nil {
 		return err
 	}
 
 	// Append Common Linux Lib Paths
-	isoOp.ldPATHS = append(isoOp.ldPATHS, filepath.Join(prefix, DefaultLinuxLibPath))
-	isoOp.ldPATHS = append(isoOp.ldPATHS, filepath.Join(prefix, DefaultLinuxUserLibPath))
+	isoOp.ldPATHS = append(isoOp.ldPATHS, DefaultLinuxLibPath)
+	isoOp.ldPATHS = append(isoOp.ldPATHS, DefaultLinuxUserLibPath)
 
 	return nil
 }
@@ -388,9 +366,7 @@ func (isoOp *importSharedObjectsOperation) loadLDPathsFromLinkerConfig(path stri
 		}
 
 		if strings.HasPrefix(line, "include") {
-			line = strings.TrimPrefix(line, "include ")
-			line = strings.TrimSpace(line)
-			line = filepath.ToSlash(filepath.Join(prefix, line))
+			line = filepath.ToSlash(strings.TrimSpace(strings.TrimPrefix(line, "include ")))
 			matches, err := filepath.Glob(line)
 			if err != nil {
 				return err
@@ -421,11 +397,6 @@ func (isoOp *importSharedObjectsOperation) loadLDPathsFromLinkerConfig(path stri
 func (isoOp *importSharedObjectsOperation) findLib(name string, class elf.Class) (string, error) {
 	for _, sp := range isoOp.ldPATHS {
 		sp = filepath.Join(sp, name)
-		if runtime.GOOS == "windows" {
-			if !strings.HasPrefix(sp, prefix) {
-				sp = filepath.Join(prefix, sp)
-			}
-		}
 		_, err := os.Stat(sp)
 		if err != nil {
 			if !os.IsNotExist(err) {
@@ -437,15 +408,13 @@ func (isoOp *importSharedObjectsOperation) findLib(name string, class elf.Class)
 		if err != nil {
 			if strings.Contains(err.Error(), "The name of the file cannot be resolved by the system.") {
 				// symlink reopen elf at point
-				linuxPath := filepath.ToSlash(strings.TrimPrefix(sp, prefix))
+				linuxPath := filepath.ToSlash(sp)
 				target, err := ReadLink(linuxPath)
 				if err != nil {
 					return "", errorDependencyReadlink(err)
 				}
-				if strings.HasPrefix(target, "/") {
-					target = filepath.Join(prefix, target)
-				} else {
-					target = filepath.Join(prefix, filepath.Dir(linuxPath), target)
+				if !filepath.IsAbs(target) {
+					target = filepath.Join(filepath.Dir(linuxPath), target)
 				}
 
 				l, err = elf.Open(target)
@@ -594,11 +563,6 @@ func (isoOp *importSharedObjectsOperation) Start() error {
 			}
 		}
 
-		if strings.HasPrefix(path, DefaultLinuxLibPath) || strings.HasPrefix(path, "\\lib") {
-			// append win prefix to find actual dependencies
-			path = filepath.Join(prefix, path)
-		}
-
 		libs, missingLibs, err := isoOp.listDependencies(path)
 		if err != nil {
 			return err
@@ -608,7 +572,7 @@ func (isoOp *importSharedObjectsOperation) Start() error {
 		isoOp.appendSliceToUnfoundDependencies(missingLibs)
 
 		for _, l := range libs {
-			err = recurseFile(filepath.Join(prefix, l))
+			err = recurseFile(l)
 			if err != nil {
 				return err
 			}

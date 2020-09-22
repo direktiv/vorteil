@@ -395,7 +395,7 @@ func (iio *IO) Readdir(inode *Inode) ([]*DirectoryEntry, error) {
 
 		name := cstring(buf.Bytes()[:dirent.NameLen])
 
-		if name == "" {
+		if name == "" || dirent.Inode == 0 {
 			continue
 		}
 

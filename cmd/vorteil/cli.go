@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -2147,6 +2148,30 @@ and cleaning up the instance when it's done.`,
 			buildablePath = args[0]
 		}
 
+		// Fetch name of the app from path
+
+		var name string
+		_, err := os.Stat(buildablePath)
+		if err != nil {
+			// If stat errors assume its a url
+			u, errParse := url.Parse(buildablePath)
+			if errParse == nil {
+				// Check if its a url i can handle otherwise default to vorteil-vm
+				if u.Hostname() == "apps.vorteil.io" {
+					name = u.Path
+					name = strings.ReplaceAll(name, "/file/", "")
+					name = strings.ReplaceAll(name, "/", "-")
+				} else {
+					name = "vorteil-vm"
+				}
+			} else {
+				log.Errorf("%v", err)
+				os.Exit(1)
+			}
+		} else {
+			name = strings.ReplaceAll(filepath.Base(buildablePath), ".vorteil", "")
+		}
+
 		pkgBuilder, err := getPackageBuilder("BUILDABLE", buildablePath)
 		if err != nil {
 			log.Errorf("%v", err)
@@ -2184,28 +2209,27 @@ and cleaning up the instance when it's done.`,
 			log.Errorf("%v", err)
 			os.Exit(1)
 		}
-
 		switch flagPlatform {
 		case platformQEMU:
-			err = runQEMU(pkgReader, cfg)
+			err = runQEMU(pkgReader, cfg, name)
 			if err != nil {
 				log.Errorf("%v", err)
 				os.Exit(1)
 			}
 		case platformVirtualBox:
-			err = runVirtualBox(pkgReader, cfg)
+			err = runVirtualBox(pkgReader, cfg, name)
 			if err != nil {
 				log.Errorf("%v", err)
 				os.Exit(1)
 			}
 		case platformHyperV:
-			err = runHyperV(pkgReader, cfg)
+			err = runHyperV(pkgReader, cfg, name)
 			if err != nil {
 				log.Errorf("%v", err)
 				os.Exit(1)
 			}
 		case platformFirecracker:
-			err = runFirecracker(pkgReader, cfg)
+			err = runFirecracker(pkgReader, cfg, name)
 			if err != nil {
 				log.Errorf("%v", err)
 				os.Exit(1)

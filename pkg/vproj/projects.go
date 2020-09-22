@@ -25,7 +25,7 @@ import (
 
 const (
 	// FileName ..
-	FileName = ".vorteilproject"
+	FileName          = ".vorteilproject"
 	UnpackTempPattern = "vorteil-unpack-"
 )
 
@@ -239,6 +239,10 @@ func (t *Target) NewBuilder() (vpkg.Builder, error) {
 		ignore = append(ignore, ip)
 	}
 
+	t.Dir, err = filepath.Abs(t.Dir)
+	if err != nil {
+		return nil, err
+	}
 	t.Dir = filepath.ToSlash(t.Dir)
 
 	err = filepath.Walk(t.Dir, func(path string, info os.FileInfo, err error) error {

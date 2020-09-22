@@ -27,6 +27,9 @@ jobs:
       script: 
         - go build -o vorteil github.com/vorteil/vorteil/cmd/vorteil 
         - GOOS=windows go build -o vorteil.exe github.com/vorteil/vorteil/cmd/vorteil
+        - docker pull hello-world
+        - ctr images pull docker.io/library/hello-world:latest
+        - sudo usermod -a -G root,docker $(whoami)
         - go test -timeout 30s -coverprofile c.out ./...
         - zip vorteil_windows-x86.zip vorteil.exe
         - tar -zcvf vorteil_linux-x86.tar.gz vorteil

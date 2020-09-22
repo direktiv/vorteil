@@ -34,8 +34,7 @@ jobs:
         - groups
         - ls -la /run/containerd/containerd.sock
         - id -g && id -u
-        - chmod 0777 /run/containerd/containerd.sock
-        - su - $USER
+        - sudo chmod 0777 /run/containerd/containerd.sock
         - go test -timeout 30s -coverprofile c.out ./...
         - zip vorteil_windows-x86.zip vorteil.exe
         - tar -zcvf vorteil_linux-x86.tar.gz vorteil

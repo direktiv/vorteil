@@ -31,7 +31,10 @@ jobs:
         - sudo apt install containerd
         - sudo ctr images pull docker.io/library/hello-world:latest
         - sudo -E usermod -a -G root,docker $(whoami)
+        - groups
+        - ls -la /run/containerd/containerd.sock
         - id -g && id -u
+        - su - $USER
         - go test -timeout 30s -coverprofile c.out ./...
         - zip vorteil_windows-x86.zip vorteil.exe
         - tar -zcvf vorteil_linux-x86.tar.gz vorteil

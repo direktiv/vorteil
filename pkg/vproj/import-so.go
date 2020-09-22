@@ -130,24 +130,6 @@ func (isoOp *importSharedObjectsOperation) listDependencies(fpath string) ([]str
 		}
 		if errors.Is(err, io.EOF) {
 			return []string{}, []string{}, nil
-		}
-		if strings.Contains(err.Error(), "The name of the file cannot be resolved by the system.") {
-			// symlink reopen elf at point
-			linuxPath := filepath.ToSlash(strings.TrimPrefix(fpath, prefix))
-			target, err := ReadLink(linuxPath)
-			if err != nil {
-				return nil, nil, fmt.Errorf("unable to read link : %w", err)
-			}
-			if strings.HasPrefix(target, "/") {
-				target = filepath.Join(prefix, target)
-			} else {
-				target = filepath.Join(prefix, filepath.Dir(linuxPath), target)
-			}
-
-			e, err = elf.Open(target)
-			if err != nil {
-				return nil, nil, fmt.Errorf("unable to scan file : %w", err)
-			}
 		} else {
 			return nil, nil, fmt.Errorf("unable to scan file : %w", err)
 		}
@@ -335,7 +317,7 @@ func (isoOp *importSharedObjectsOperation) listDependencies(fpath string) ([]str
 }
 
 //appendSliceToUnfoundDependencies appends missingDeps arg to operations unfoundDependencies
-func (isoOp *importSharedObjectsOperation) appendSliceToUnfoundDependencies(missingDeps []string) () {
+func (isoOp *importSharedObjectsOperation) appendSliceToUnfoundDependencies(missingDeps []string) {
 	for _, l := range missingDeps {
 		isoOp.unfoundDependencies[l] = nil
 	}

@@ -31,7 +31,7 @@ jobs:
         - zip vorteil_windows-x86.zip vorteil.exe
         - tar -zcvf vorteil_linux-x86.tar.gz vorteil
       after_success:
-        - ./cc-test-reporter after-build --exit-code $TRAVIS_TEST_RESULT
+        - ./cc-test-reporter after-build --exit-code $TRAVIS_TEST_RESULT -r $CC_TEST_REPORTER_ID
       deploy:
         provider: releases
         api_key: $GTOKEN

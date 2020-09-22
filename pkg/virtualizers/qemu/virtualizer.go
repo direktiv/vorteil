@@ -196,17 +196,6 @@ func (v *Virtualizer) Stop() error {
 				return err
 			}
 
-			// Sleep is to log the entire shutdown sequence
-			time.Sleep(time.Second * 4)
-
-			v.state = virtualizers.Ready
-
-			v.sock.Close()
-
-			// vm should be stopped by now so close the pipes
-			v.errPipe.Close()
-			v.outPipe.Close()
-			v.disk.Close()
 		}
 	} else {
 		return errors.New("vm is already stopped")

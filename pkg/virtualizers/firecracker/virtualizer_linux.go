@@ -257,7 +257,7 @@ func (v *Virtualizer) Detach(source string) error {
 	}
 
 	// sleep for shutdown signal
-	time.Sleep(time.Second * 4)
+	// time.Sleep(time.Second * 4)
 	// delete tap device as vmm has been stopped don't worry about catching error as its not found
 	// for _, device := range v.tapDevice {
 	// device.DeleteLink()
@@ -553,7 +553,7 @@ func (v *Virtualizer) Stop() error {
 		}
 
 		// Sleep to handle shutdown logs doesn't affect anything makes the output nicer
-		time.Sleep(time.Second * 2)
+		// time.Sleep(time.Second * 2)
 
 		v.state = virtualizers.Ready
 

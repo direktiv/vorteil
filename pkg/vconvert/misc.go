@@ -54,6 +54,8 @@ func writeFile(name string, r io.Reader) error {
 // findBinary tries to find the executable in the expanded container image
 func findBinary(name string, env []string, cwd string, targetDir string, log elog.View) (string, error) {
 
+	log.Debugf("finding %s in %s (cwd: %s, env %v)", name, targetDir, cwd, env)
+
 	if strings.HasPrefix(name, "./") {
 		abs, err := filepath.Abs(name)
 		if err != nil {
@@ -76,7 +78,8 @@ func findBinary(name string, env []string, cwd string, targetDir string, log elo
 	// absolute
 	if strings.HasPrefix(name, "/") {
 		fp := filepath.Join(targetDir, name)
-		if _, err := os.Stat(fp); err == nil {
+		log.Debugf("checking %s", fp)
+		if _, err := os.Lstat(fp); err == nil {
 			return name, nil
 		}
 		return "", fmt.Errorf("can not find binary %s", name)

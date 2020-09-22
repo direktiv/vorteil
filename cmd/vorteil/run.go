@@ -45,6 +45,7 @@ func runFirecracker(pkgReader vpkg.Reader, cfg *vcfg.VCFG, name string) error {
 	// Create base folder to store virtualbox vms so the socket can be grouped
 	parent := fmt.Sprintf("%s-%s", firecracker.VirtualizerID, randstr.Hex(5))
 	parent = filepath.Join(os.TempDir(), parent)
+	defer os.RemoveAll(parent)
 
 	// Create parent directory as it doesn't exist
 	err = os.MkdirAll(parent, os.ModePerm)
@@ -133,7 +134,7 @@ func runHyperV(pkgReader vpkg.Reader, cfg *vcfg.VCFG, name string) error {
 	defer os.Remove(f.Name())
 	defer f.Close()
 
-	defer os.Remove(parent)
+	defer os.RemoveAll(parent)
 
 	err = vdisk.Build(context.Background(), f, &vdisk.BuildArgs{
 		PackageReader: pkgReader,
@@ -183,6 +184,7 @@ func runVirtualBox(pkgReader vpkg.Reader, cfg *vcfg.VCFG, name string) error {
 	// Create base folder to store virtualbox vms so the socket can be grouped
 	parent := fmt.Sprintf("%s-%s", virtualbox.VirtualizerID, randstr.Hex(5))
 	parent = filepath.Join(os.TempDir(), parent)
+	defer os.RemoveAll(parent)
 
 	// Create parent directory as it doesn't exist
 	err := os.MkdirAll(parent, os.ModePerm)
@@ -250,7 +252,7 @@ func runQEMU(pkgReader vpkg.Reader, cfg *vcfg.VCFG, name string) error {
 	// Create base folder to store virtualbox vms so the socket can be grouped
 	parent := fmt.Sprintf("%s-%s", qemu.VirtualizerID, randstr.Hex(5))
 	parent = filepath.Join(os.TempDir(), parent)
-
+	defer os.RemoveAll(parent)
 	// Create parent directory as it doesn't exist
 	err := os.MkdirAll(parent, os.ModePerm)
 	if err != nil {
@@ -340,8 +342,7 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG, name st
 		if err != nil {
 			return
 		}
-		virt.Close(true)
-
+		virt.Close(false)
 		if flagRecord != "" {
 			decompile(diskpath, flagRecord)
 		}

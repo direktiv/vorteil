@@ -614,10 +614,10 @@ func (v *Virtualizer) Close(force bool) error {
 	virtualizers.ActiveVMs.Delete(v.name)
 
 	// remove contents when closing
-	err = os.RemoveAll(v.folder)
-	if err != nil {
-		return err
-	}
+	// err = os.RemoveAll(v.folder)
+	// if err != nil {
+	// 	return err
+	// }
 	return nil
 }
 

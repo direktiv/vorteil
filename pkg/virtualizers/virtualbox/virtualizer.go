@@ -243,6 +243,7 @@ func (v *Virtualizer) Close(force bool) error {
 	}
 	v.disk.Close()
 	virtualizers.ActiveVMs.Delete(v.name)
+
 	err = os.RemoveAll(v.folder)
 	if err != nil {
 		return err
@@ -346,52 +347,52 @@ func (v *Virtualizer) Prepare(args *virtualizers.PrepareArgs) *virtualizers.Virt
 }
 
 // Detach ... removes vm from active vms list and moves content to source directory
-func (v *Virtualizer) Detach(source string) error {
-	if v.state != virtualizers.Ready {
-		return errors.New("virtual machine must be in a ready state to detach")
-	}
+// func (v *Virtualizer) Detach(source string) error {
+// 	if v.state != virtualizers.Ready {
+// 		return errors.New("virtual machine must be in a ready state to detach")
+// 	}
 
-	// remove "-" from the source directory as clonevm doesn't seem to work with it replace with space
-	source = strings.ReplaceAll(source, "-", " ")
-	// make directory to put it in as it doesn't exist anymore
-	err := os.MkdirAll(source, 0777)
-	if err != nil {
-		return err
-	}
-	_, err = os.Stat(filepath.Join(filepath.ToSlash(source), fmt.Sprintf("%s Clone", v.name)))
-	if err == nil {
-		return errors.New("source directory where you want to copy already exists")
-	} else if !os.IsNotExist(err) {
-		return err
-	}
-	// clone vm from temp directory to source
-	cmd := exec.Command("VBoxManage", "clonevm", v.name, fmt.Sprintf("--basefolder=%s", filepath.ToSlash(source)), "--register")
-	err = v.execute(cmd)
-	if err != nil {
-		if !strings.Contains(err.Error(), "100%") {
-			return err
-		}
-	}
+// 	// remove "-" from the source directory as clonevm doesn't seem to work with it replace with space
+// 	source = strings.ReplaceAll(source, "-", " ")
+// 	// make directory to put it in as it doesn't exist anymore
+// 	err := os.MkdirAll(source, 0777)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	_, err = os.Stat(filepath.Join(filepath.ToSlash(source), fmt.Sprintf("%s Clone", v.name)))
+// 	if err == nil {
+// 		return errors.New("source directory where you want to copy already exists")
+// 	} else if !os.IsNotExist(err) {
+// 		return err
+// 	}
+// 	// clone vm from temp directory to source
+// 	cmd := exec.Command("VBoxManage", "clonevm", v.name, fmt.Sprintf("--basefolder=%s", filepath.ToSlash(source)), "--register")
+// 	err = v.execute(cmd)
+// 	if err != nil {
+// 		if !strings.Contains(err.Error(), "100%") {
+// 			return err
+// 		}
+// 	}
 
-	time.Sleep(time.Second * 5)
-	// remove vm entirely from here might as well force it as the cloned vm has a non corrupt disk
-	err = v.Close(true)
-	if err != nil {
-		return err
-	}
+// 	time.Sleep(time.Second * 5)
+// 	// remove vm entirely from here might as well force it as the cloned vm has a non corrupt disk
+// 	err = v.Close(true)
+// 	if err != nil {
+// 		return err
+// 	}
 
-	if runtime.GOOS != "windows" {
-		cmd := exec.Command("VBoxManage", "modifyvm", fmt.Sprintf("%s Clone", v.name), "--uartmode1", "server", filepath.Join(filepath.ToSlash(source), fmt.Sprintf("%s Clone", v.name), "monitor.sock"))
-		err = v.execute(cmd)
-		if err != nil {
-			if !strings.Contains(err.Error(), "100%") {
-				return err
-			}
-		}
-	}
+// 	if runtime.GOOS != "windows" {
+// 		cmd := exec.Command("VBoxManage", "modifyvm", fmt.Sprintf("%s Clone", v.name), "--uartmode1", "server", filepath.Join(filepath.ToSlash(source), fmt.Sprintf("%s Clone", v.name), "monitor.sock"))
+// 		err = v.execute(cmd)
+// 		if err != nil {
+// 			if !strings.Contains(err.Error(), "100%") {
+// 				return err
+// 			}
+// 		}
+// 	}
 
-	return nil
-}
+// 	return nil
+// }
 
 // execute is generic wrapping function to run command execs
 func (v *Virtualizer) execute(cmd *exec.Cmd) error {
@@ -468,20 +469,18 @@ func modifyVM(name string, ram, cpus, sock string) []string {
 	return vboxArgs
 }
 
-func (v *Virtualizer) createAndConfigure(diskpath string) error {
-	cVMArgs := createVM(v.folder, v.name)
-	cmd := exec.Command("VBoxManage", cVMArgs...)
-	err := v.execute(cmd)
-	if err != nil {
-		return err
+// prepareVM executes the modify function with appropriate arguments for storage
+func (v *Virtualizer) prepareVM(diskpath string) error {
+	cpus := int(v.config.VM.CPUs)
+	if cpus == 0 {
+		cpus = 1
 	}
-
-	mVMArgs := modifyVM(v.name, strconv.Itoa(v.config.VM.RAM.Units(vcfg.MiB)), strconv.Itoa(int(v.config.VM.CPUs)), filepath.ToSlash(filepath.Join(v.folder, "monitor.sock")))
+	mVMArgs := modifyVM(v.name, strconv.Itoa(v.config.VM.RAM.Units(vcfg.MiB)), strconv.Itoa(cpus), filepath.ToSlash(filepath.Join(v.folder, "monitor.sock")))
 	if runtime.GOOS == "windows" {
-		mVMArgs = modifyVM(v.name, strconv.Itoa(v.config.VM.RAM.Units(vcfg.MiB)), strconv.Itoa(int(v.config.VM.CPUs)), fmt.Sprintf("\\\\.\\pipe\\%s", v.id))
+		mVMArgs = modifyVM(v.name, strconv.Itoa(v.config.VM.RAM.Units(vcfg.MiB)), strconv.Itoa(cpus), fmt.Sprintf("\\\\.\\pipe\\%s", v.id))
 	}
-	cmd = exec.Command("VBoxManage", mVMArgs...)
-	err = v.execute(cmd)
+	cmd := exec.Command("VBoxManage", mVMArgs...)
+	err := v.execute(cmd)
 	if err != nil {
 		return err
 	}
@@ -498,6 +497,22 @@ func (v *Virtualizer) createAndConfigure(diskpath string) error {
 		"--storagectl", fmt.Sprintf("SCSI-%s", filepath.Base(diskpath)), "--port", "0", "--device", "0",
 		"--type", "hdd", "--medium", diskpath)
 	err = v.execute(cmd)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (v *Virtualizer) createAndConfigure(diskpath string) error {
+	cVMArgs := createVM(v.folder, v.name)
+	cmd := exec.Command("VBoxManage", cVMArgs...)
+	err := v.execute(cmd)
+	if err != nil {
+		return err
+	}
+
+	err = v.prepareVM(diskpath)
 	if err != nil {
 		return err
 	}
@@ -598,28 +613,14 @@ func (v *Virtualizer) createAndConfigure(diskpath string) error {
 	return nil
 }
 
-// prepare sets the fields and arguments to spawn the virtual machine
-func (o *operation) prepare(args *virtualizers.PrepareArgs) {
-	var returnErr error
-	var err error
-	o.updateStatus(fmt.Sprintf("Preparing virtualbox files..."))
-	defer func() {
-		o.finished(returnErr)
-	}()
-	o.name = args.Name
-	o.id = randstr.Hex(5)
-	o.folder = filepath.Dir(args.ImagePath)
-	// o.folder = filepath.Join(o.vmdrive, fmt.Sprintf("%s-%s", o.id, o.Type()))
-	// err := os.MkdirAll(o.folder, os.ModePerm)
-	// if err != nil {
-	// 	returnErr = err
-	// }
+// checkIfBridged checks if bridged device exists on virtualbox
+func (o *operation) checkIfBridged() (bool, error) {
+	var deviceIsBridged bool
 	if o.networkType == "bridged" {
 		devices, err := virtualizers.BridgedDevices()
 		if err != nil {
-			returnErr = err
+			return false, err
 		}
-		deviceIsBridged := false
 		for _, device := range devices {
 			if device == o.networkDevice {
 				deviceIsBridged = true
@@ -627,17 +628,20 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 			}
 		}
 		if !deviceIsBridged {
-			returnErr = fmt.Errorf("error: network device '%s' is not a valid bridge interface", o.networkDevice)
-			return
+			return false, fmt.Errorf("error: network device '%s' is not a valid bridge interface", o.networkDevice)
 		}
 	}
+	return deviceIsBridged, nil
+}
 
+// checkIfHost checks if host device exists on virtualbox
+func (o *operation) checkIfHost() (bool, error) {
+	var deviceIsHost bool
 	if o.networkType == "hostonly" {
 		devices, err := virtualizers.HostDevices()
 		if err != nil {
-			returnErr = err
+			return false, err
 		}
-		deviceIsHost := false
 		for _, device := range devices {
 			if device == o.networkDevice {
 				deviceIsHost = true
@@ -645,9 +649,37 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 			}
 		}
 		if !deviceIsHost {
-			returnErr = fmt.Errorf("error: network device '%s' is not a valid host interface", o.networkDevice)
-			return
+			return false, fmt.Errorf("error: network device '%s' is not a valid host interface", o.networkDevice)
+
 		}
+	}
+	return deviceIsHost, nil
+}
+
+// prepare sets the fields and arguments to spawn the virtual machine
+func (o *operation) prepare(args *virtualizers.PrepareArgs) {
+	var returnErr error
+	var err error
+
+	o.updateStatus(fmt.Sprintf("Preparing virtualbox files..."))
+	defer func() {
+		o.finished(returnErr)
+	}()
+
+	o.name = args.Name
+	o.id = randstr.Hex(5)
+	o.folder = filepath.Dir(args.ImagePath)
+
+	_, err = o.checkIfBridged()
+	if err != nil {
+		returnErr = err
+		return
+	}
+
+	_, err = o.checkIfHost()
+	if err != nil {
+		returnErr = err
+		return
 	}
 
 	_, loaded := virtualizers.ActiveVMs.LoadOrStore(o.name, o.Virtualizer)
@@ -656,10 +688,18 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 		return
 	}
 
-	err = o.createAndConfigure(args.ImagePath)
+	err = o.startupVM(args.ImagePath, args.Start)
 	if err != nil {
-		returnErr = fmt.Errorf("Error configuring vm: %s", err.Error())
+		returnErr = err
 		return
+	}
+
+}
+
+func (o *operation) startupVM(path string, start bool) error {
+	err := o.createAndConfigure(path)
+	if err != nil {
+		return fmt.Errorf("Error configuring vm: %s", err.Error())
 	}
 
 	o.state = "ready"
@@ -667,12 +707,11 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	// This needs to be routined as its waiting for the pipe to start
 	go o.initLogging()
 
-	if args.Start {
+	if start {
 		err = o.Start()
 		if err != nil {
-			returnErr = fmt.Errorf("Error starting vm: %s", err.Error())
-			return
+			return fmt.Errorf("Error starting vm: %s", err.Error())
 		}
 	}
-
+	return nil
 }

@@ -28,7 +28,7 @@ jobs:
         - if [ ! -z "$TRAVIS_TAG" ]; then export BUILD_TAG=$TRAVIS_TAG; else export BUILD_TAG=0.0.0; fi;
         - export BUILD_DATE=$(shell date -R)
         - export BUILD_REF=$(git rev-parse --short HEAD)
-        - echo $BUILD_TAG-$BUILD_REF ($BUILD_DATE)
+        - echo "$BUILD_TAG-$BUILD_REF ($BUILD_DATE)"
         - docker pull hello-world
         - sudo apt install containerd
         - sudo ctr images pull docker.io/library/hello-world:latest
@@ -70,7 +70,7 @@ jobs:
         - if [ ! -z "$TRAVIS_TAG" ]; then export BUILD_TAG=$TRAVIS_TAG; else export BUILD_TAG=0.0.0; fi;
         - export BUILD_DATE=$(shell date -R)
         - export BUILD_REF=$(git rev-parse --short HEAD)
-        - echo $BUILD_TAG-$BUILD_REF ($BUILD_DATE)
+        - echo "$BUILD_TAG-$BUILD_REF ($BUILD_DATE)"
         - go build -o vorteil -ldflags '-X main.release=$BUILD_TAG -X main.commit=$BUILD_REF -X "main.date=$BUILD_DATE"' github.com/vorteil/vorteil/cmd/vorteil
         - if [ "$TRAVIS_EVENT_TYPE" != "pull_request" ]; then codesign -s $OSX_APP_SIGN_ID -v --timestamp --options runtime vorteil; fi;
         - mkdir -p build && mv vorteil build/

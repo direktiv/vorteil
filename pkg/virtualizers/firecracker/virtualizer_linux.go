@@ -471,9 +471,11 @@ func (o *operation) fetchVMLinux(kernel string) (string, error) {
 			return "", err
 		}
 		defer resp.Body.Close()
+		p := o.logger.NewProgress("Downloading VMLinux", "Bytes", length)
+		defer p.Finish(false)
 		// pipe stream
 		body := io.TeeReader(resp.Body, newWriter(int64(length), func(downloaded, total int64) {
-			o.updateStatus(fmt.Sprintf("Downloading VMLinux(%s/%s)", ByteCountDecimal(downloaded), ByteCountDecimal(total)))
+			p.Increment(downloaded)
 		}))
 		_, err = io.Copy(file, body)
 		if err != nil {

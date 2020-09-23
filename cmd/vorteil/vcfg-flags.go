@@ -54,28 +54,24 @@ func setFlagArgArray(arg string) {
 		elems[1] = strings.Split(elems[1], "]")[0]
 		switch elems[0] {
 		case "--network":
-			if i, err := strconv.Atoi(elems[1]); err == nil && (i+1) > maxNetworkFlags {
-				maxNetworkFlags = i + 1
-			}
+			tallyRepeatableFlag(&maxNetworkFlags, elems[1])
 		case "--program":
-			if i, err := strconv.Atoi(elems[1]); err == nil && (i+1) > maxProgramFlags {
-				maxProgramFlags = i + 1
-			}
+			tallyRepeatableFlag(&maxProgramFlags, elems[1])
 		case "--nfs":
-			if i, err := strconv.Atoi(elems[1]); err == nil && (i+1) > maxNFSFlags {
-				maxNFSFlags = i + 1
-			}
+			tallyRepeatableFlag(&maxNFSFlags, elems[1])
 		case "--logging":
-			if i, err := strconv.Atoi(elems[1]); err == nil && (i+1) > maxLoggingFlags {
-				maxLoggingFlags = i + 1
-			}
+			tallyRepeatableFlag(&maxLoggingFlags, elems[1])
 		case "--redirect":
-			if i, err := strconv.Atoi(elems[1]); err == nil && (i+1) > maxRedirectFlags {
-				maxRedirectFlags = i + 1
-			}
+			tallyRepeatableFlag(&maxRedirectFlags, elems[1])
 		}
 	}
 
+}
+
+func tallyRepeatableFlag(v *int, s string) {
+	if i, err := strconv.Atoi(s); err == nil && (i+1) > *v {
+		*v = i + 1
+	}
 }
 
 type flag interface {

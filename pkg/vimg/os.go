@@ -17,14 +17,17 @@ import (
 	"github.com/vorteil/vorteil/pkg/vkern"
 )
 
-const OSReservedSectors = 32
-const KernelConfigSpaceSectors = 32
+// Various build constants.
+const (
+	OSReservedSectors        = 32
+	KernelConfigSpaceSectors = 32
+)
 
+// GetKernel is the function a Builder will use to load a kernel bundle. It must be set externally.
 var GetKernel func(ctx context.Context, version vkern.CalVer) (*vkern.ManagedBundle, error)
-var GetLatestKernel func(ctx context.Context) (vkern.CalVer, error)
 
-type Config struct {
-}
+// GetLatestKernel is the function a Builder will use to determine what kernel to use if none is specified. It must be set externally.
+var GetLatestKernel func(ctx context.Context) (vkern.CalVer, error)
 
 func (b *Builder) prebuildOS(ctx context.Context) error {
 
@@ -243,6 +246,7 @@ func (b *Builder) generateConfig() error {
 	return nil
 }
 
+// BootloaderConfig is the structure of the bootloader config as it appears on the disk.
 type BootloaderConfig struct {
 	Version        [16]byte     // 0
 	_              [16]byte     // 16
@@ -255,9 +259,8 @@ type BootloaderConfig struct {
 	LinuxArgs      [0x2000]byte // 256
 }
 
-func (b *Builder) writeOS(ctx context.Context, w io.WriteSeeker) error {
+func (b *Builder) writeBootloader(ctx context.Context, w io.WriteSeeker) error {
 
-	// bootloader
 	err := ctx.Err()
 	if err != nil {
 		return err
@@ -279,18 +282,20 @@ func (b *Builder) writeOS(ctx context.Context, w io.WriteSeeker) error {
 	copy(bootConf.LinuxArgs[:], b.linuxArgs)
 
 	buf := new(bytes.Buffer)
-	err = binary.Write(buf, binary.LittleEndian, &bootConf)
-	if err != nil {
-		return err
-	}
+	_ = binary.Write(buf, binary.LittleEndian, &bootConf)
 
 	_, err = io.Copy(w, bytes.NewReader(buf.Bytes()))
 	if err != nil {
 		return err
 	}
 
-	// kernel
-	err = ctx.Err()
+	return nil
+
+}
+
+func (b *Builder) writeKernel(ctx context.Context, w io.WriteSeeker) error {
+
+	err := ctx.Err()
 	if err != nil {
 		return err
 	}
@@ -306,8 +311,13 @@ func (b *Builder) writeOS(ctx context.Context, w io.WriteSeeker) error {
 		return err
 	}
 
-	// config
-	err = ctx.Err()
+	return nil
+
+}
+
+func (b *Builder) writeKernelConfig(ctx context.Context, w io.WriteSeeker) error {
+
+	err := ctx.Err()
 	if err != nil {
 		return err
 	}
@@ -322,12 +332,39 @@ func (b *Builder) writeOS(ctx context.Context, w io.WriteSeeker) error {
 		return err
 	}
 
-	// padding
-	err = ctx.Err()
+	return nil
+
+}
+
+func (b *Builder) writeKernelAndConfig(ctx context.Context, w io.WriteSeeker) error {
+
+	err := b.writeKernel(ctx, w)
 	if err != nil {
 		return err
 	}
 
+	err = b.writeKernelConfig(ctx, w)
+	if err != nil {
+		return err
+	}
+
+	return nil
+
+}
+
+func (b *Builder) writeOS(ctx context.Context, w io.WriteSeeker) error {
+
+	err := b.writeBootloader(ctx, w)
+	if err != nil {
+		return err
+	}
+
+	err = b.writeKernelAndConfig(ctx, w)
+	if err != nil {
+		return err
+	}
+
+	// padding
 	_, err = w.Seek((b.osLastLBA+1)*SectorSize, io.SeekStart)
 	if err != nil {
 		return err
@@ -344,9 +381,8 @@ func (b *Builder) osRegionIsHole(begin, size int64) bool {
 	return false
 }
 
-func (b *Builder) validateOSArgs(ctx context.Context) error {
+func (b *Builder) determineKernelTags() {
 
-	b.linuxArgs = b.vcfg.System.KernelArgs
 	b.kernelTags = []string{}
 
 	if b.kernelOptions.Shell {
@@ -381,6 +417,16 @@ func (b *Builder) validateOSArgs(ctx context.Context) error {
 			break
 		}
 	}
+
+	return
+
+}
+
+func (b *Builder) validateOSArgs(ctx context.Context) error {
+
+	b.linuxArgs = b.vcfg.System.KernelArgs
+
+	b.determineKernelTags()
 
 	var err error
 	b.kernel, err = vkern.Parse(b.vcfg.VM.Kernel)
@@ -443,9 +489,9 @@ func (b *Builder) processLinuxArgs() error {
 	// console
 	if _, ok := m["console"]; !ok {
 		args = append(args, "console=ttyS0,115200", "console=tty0")
-	} /* TODO else {
-		b.Warn("system.kernel-args contains a 'console' argument, which interferes with the system.output-mode VCFG value")
-	}*/
+	} else {
+		b.log.Warnf("system.kernel-args contains a 'console' argument, which interferes with the system.output-mode VCFG value")
+	}
 
 	if _, ok := m["init"]; !ok {
 		args = append(args, "init=/vorteil/vinitd")

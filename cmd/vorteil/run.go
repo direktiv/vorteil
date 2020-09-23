@@ -286,16 +286,24 @@ func gatherNetworkDetails(machine *virtualizers.VirtualMachine) []string {
 	var lines []string
 	for _, network := range machine.Networks {
 		for _, portmap := range network.UDP {
-			lines = append(lines, fetchPorts(lines, portmap, "udp")...)
+			var udp []string
+			udp = append(udp, fetchPorts(udp, portmap, "udp")...)
+			lines = append(lines, udp...)
 		}
 		for _, portmap := range network.TCP {
-			lines = append(lines, fetchPorts(lines, portmap, "tcp")...)
+			var tcp []string
+			tcp = append(tcp, fetchPorts(tcp, portmap, "tcp")...)
+			lines = append(lines, tcp...)
 		}
 		for _, portmap := range network.HTTP {
-			lines = append(lines, fetchPorts(lines, portmap, "http")...)
+			var http []string
+			http = append(http, fetchPorts(http, portmap, "http")...)
+			lines = append(lines, http...)
 		}
 		for _, portmap := range network.HTTPS {
-			lines = append(lines, fetchPorts(lines, portmap, "https")...)
+			var https []string
+			https = append(https, fetchPorts(https, portmap, "https")...)
+			lines = append(lines, https...)
 		}
 	}
 	return lines

@@ -225,8 +225,7 @@ func Backends() ([]string, error) {
 // 	mgr.subserver = graph
 // }
 
-// initDB create a database to store the virtualizers or connect to the current one.
-func (mgr *Manager) initDB() error {
+func (mgr *Manager) createDB() error {
 	var err error
 
 	mgr.database, err = sql.Open("sqlite3", mgr.databaseAddr)
@@ -247,12 +246,23 @@ func (mgr *Manager) initDB() error {
 	}
 	mgr.log("Activated database secure delete behaviour.")
 
+	return nil
+}
+
+// initDB create a database to store the virtualizers or connect to the current one.
+func (mgr *Manager) initDB() error {
+	var err error
+
+	err = mgr.createDB()
+	if err != nil {
+		return err
+	}
 	s := "CREATE TABLE IF NOT EXISTS {{.Table}} ({{.Name}} TEXT, {{.Type}} TEXT, {{.Data}} BLOB, PRIMARY KEY ({{.Name}}))"
 	tmpl := template.Must(template.New("virtualizerTableInit").Parse(s))
 	buf := new(bytes.Buffer)
 	err = tmpl.Execute(buf, virtualizerTable)
 	if err != nil {
-		panic(err)
+		return err
 	}
 
 	query := buf.String()
@@ -292,7 +302,6 @@ func New(args *ManagerArgs) (*Manager, error) {
 		}
 
 	}
-
 	if runtime.GOOS == "linux" {
 		// make path if doesn't exist
 		err = os.MkdirAll(mgr.firecrackerPath, 0700)
@@ -300,7 +309,6 @@ func New(args *ManagerArgs) (*Manager, error) {
 			return nil, err
 		}
 	}
-
 	err = mgr.initDB()
 	if err != nil {
 		return nil, err
@@ -309,10 +317,8 @@ func New(args *ManagerArgs) (*Manager, error) {
 	return mgr, nil
 }
 
-// Close loops through the current active vms to close them as the manager is closing.
-func (mgr *Manager) Close() error {
+func (mgr *Manager) checkForCloseVirtualizer() error {
 	var err error
-
 	ActiveVMs.Range(func(key, value interface{}) bool {
 		v, ok := value.(Virtualizer)
 		if !ok {
@@ -326,7 +332,17 @@ func (mgr *Manager) Close() error {
 		}
 		return true
 	})
+	return err
+}
 
+// Close loops through the current active vms to close them as the manager is closing.
+func (mgr *Manager) Close() error {
+	var err error
+
+	err = mgr.checkForCloseVirtualizer()
+	if err != nil {
+		return err
+	}
 	err = mgr.database.Close()
 	if err != nil {
 		return err

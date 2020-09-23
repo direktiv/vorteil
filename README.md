@@ -8,6 +8,7 @@
 <hr/>
 
 [![Build Status](https://travis-ci.org/vorteil/vorteil.svg?branch=master)](https://travis-ci.org/vorteil/vorteil) <a href="https://codeclimate.com/github/vorteil/vorteil/maintainability"><img src="https://api.codeclimate.com/v1/badges/bb819f04d7550b91f24d/maintainability" /></a> <a href="https://codeclimate.com/github/vorteil/vorteil/test_coverage"><img src="https://api.codeclimate.com/v1/badges/bb819f04d7550b91f24d/test_coverage" /></a> [![Go Report Card](https://goreportcard.com/badge/github.com/vorteil/vorteil)](https://goreportcard.com/report/github.com/vorteil/vorteil)
+[![](https://godoc.org/github.com/vorteil/vorteil?status.svg)](http://godoc.org/github.com/vorteil/vorteil)
 
 Turn your applications and containers into micro virtual machines with Vorteil.
 <hr/>

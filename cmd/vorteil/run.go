@@ -267,60 +267,45 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG, name st
 
 }
 
+func fetchPorts(lines []string, portmap virtualizers.RouteMap, networkType string) []string {
+	actual := portmap.Address[strings.LastIndex(portmap.Address, ":")+1:]
+	if actual != portmap.Port && actual != "" {
+		port2 := portmap.Address
+		if port2 == "" {
+			port2 = portmap.Port
+		}
+		lines = append(lines, fmt.Sprintf(" • %s:%s → %s", networkType, portmap.Port, port2))
+	} else {
+		lines = append(lines, fmt.Sprintf(" • %s:%s", networkType, portmap.Port))
+	}
+	return lines
+}
+
 // Fetch network details about virtual machine
 func gatherNetworkDetails(machine *virtualizers.VirtualMachine) []string {
 	var lines []string
 	for _, network := range machine.Networks {
 		for _, portmap := range network.UDP {
-			actual := portmap.Address[strings.LastIndex(portmap.Address, ":")+1:]
-			if actual != portmap.Port && actual != "" {
-				port2 := portmap.Address
-				if port2 == "" {
-					port2 = portmap.Port
-				}
-				lines = append(lines, fmt.Sprintf(" • %s:%s → %s", "udp", portmap.Port, port2))
-			} else {
-				lines = append(lines, fmt.Sprintf(" • %s:%s", "udp", portmap.Port))
-			}
+			var udp []string
+			udp = append(udp, fetchPorts(udp, portmap, "udp")...)
+			lines = append(lines, udp...)
 		}
 		for _, portmap := range network.TCP {
-			actual := portmap.Address[strings.LastIndex(portmap.Address, ":")+1:]
-			if actual != portmap.Port && actual != "" {
-				port2 := portmap.Address
-				if port2 == "" {
-					port2 = portmap.Port
-				}
-				lines = append(lines, fmt.Sprintf(" • %s:%s → %s", "tcp", portmap.Port, port2))
-			} else {
-				lines = append(lines, fmt.Sprintf(" • %s:%s", "tcp", portmap.Port))
-			}
+			var tcp []string
+			tcp = append(tcp, fetchPorts(tcp, portmap, "tcp")...)
+			lines = append(lines, tcp...)
 		}
 		for _, portmap := range network.HTTP {
-			actual := portmap.Address[strings.LastIndex(portmap.Address, ":")+1:]
-			if actual != portmap.Port && actual != "" {
-				port2 := portmap.Address
-				if port2 == "" {
-					port2 = portmap.Port
-				}
-				lines = append(lines, fmt.Sprintf(" • %s:%s → %s", "http", portmap.Port, port2))
-			} else {
-				lines = append(lines, fmt.Sprintf(" • %s:%s", "http", portmap.Port))
-			}
+			var http []string
+			http = append(http, fetchPorts(http, portmap, "http")...)
+			lines = append(lines, http...)
 		}
 		for _, portmap := range network.HTTPS {
-			actual := portmap.Address[strings.LastIndex(portmap.Address, ":")+1:]
-			if actual != portmap.Port && actual != "" {
-				port2 := portmap.Address
-				if port2 == "" {
-					port2 = portmap.Port
-				}
-				lines = append(lines, fmt.Sprintf(" • %s:%s → %s", "https", portmap.Port, port2))
-			} else {
-				lines = append(lines, fmt.Sprintf(" • %s:%s", "https", portmap.Port))
-			}
+			var https []string
+			https = append(https, fetchPorts(https, portmap, "https")...)
+			lines = append(lines, https...)
 		}
 	}
-
 	return lines
 }
 

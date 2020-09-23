@@ -1,12 +1,16 @@
 package ext
 
 import (
+	"bytes"
+	"encoding/binary"
 	"errors"
+	"io"
 	"path"
 
 	"github.com/vorteil/vorteil/pkg/vio"
 )
 
+// Various ext2 build constants.
 const (
 	SectorSize               = 512
 	BlockSize                = 0x1000
@@ -30,6 +34,7 @@ const (
 	inodeSymlinkPermissions     = 0xA000 | 0700
 )
 
+// Superblock is the structure of a superblock as written to the disk.
 type Superblock struct {
 	TotalInodes         uint32
 	TotalBlocks         uint32
@@ -58,6 +63,7 @@ type Superblock struct {
 	SuperGroup          uint16
 }
 
+// Inode is the structure of an inode as written to the disk.
 type Inode struct {
 	Permissions      uint16
 	UID              uint16
@@ -141,7 +147,7 @@ func blockType(i int64) int {
 	}
 
 	// check if the block is a first-level indirect from the second indirect
-	i -= 1
+	i--
 	a = i / (p + 1)
 	b = i % (p + 1)
 	if a < p && b == 0 {
@@ -160,7 +166,7 @@ func blockType(i int64) int {
 	}
 
 	// check if the block is a second-level indirect from the third indirect
-	i -= 1
+	i--
 	a = i / ((p+1)*p + 1)
 	b = i % ((p+1)*p + 1)
 	if b == 0 {
@@ -168,7 +174,7 @@ func blockType(i int64) int {
 	}
 
 	// check if the block is a first-level indirect from the third indirect
-	b -= 1
+	b--
 	a = b / (p + 1)
 	b = b % (p + 1)
 	if a < p && b == 0 {
@@ -223,5 +229,62 @@ func calculateDirectoryBlocks(n *vio.TreeNode) (int64, int64) {
 	}
 
 	return calculateBlocksFromSize(length)
+
+}
+
+type dirTuple struct {
+	name  string
+	inode uint32
+}
+
+func generateDirectoryData(node *nodeBlocks) (io.Reader, error) {
+
+	var tuples []*dirTuple
+	tuples = append(tuples, &dirTuple{name: ".", inode: uint32(node.node.NodeSequenceNumber)})
+	tuples = append(tuples, &dirTuple{name: "..", inode: uint32(node.node.Parent.NodeSequenceNumber)})
+
+	for _, child := range node.node.Children {
+		tuples = append(tuples, &dirTuple{name: path.Base(child.File.Name()), inode: uint32(child.NodeSequenceNumber)})
+	}
+
+	buf := new(bytes.Buffer)
+	length := int64(0)
+	leftover := int64(BlockSize)
+
+	for i, child := range tuples {
+		l := 8 + align(int64(len(child.name)+1), dentryNameAlignment)
+
+		if leftover >= l && (leftover-l == 0 || leftover-l > 8) {
+			length += l
+			leftover -= l
+		} else {
+			// add a null entry into the leftover space
+			_ = binary.Write(buf, binary.LittleEndian, uint32(0))        // inode
+			_ = binary.Write(buf, binary.LittleEndian, uint16(leftover)) // entry size
+			_ = binary.Write(buf, binary.LittleEndian, uint16(0))        // name length
+			_, _ = buf.Write(bytes.Repeat([]byte{0}, int(leftover-8)))   // padding
+
+			length += leftover
+			length += l
+			leftover = int64(BlockSize) - l
+		}
+
+		if leftover < 8 || i == len(tuples)-1 {
+			l += leftover
+			length += leftover
+			leftover = int64(BlockSize)
+		}
+
+		_ = binary.Write(buf, binary.LittleEndian, child.inode)                      // inode
+		_ = binary.Write(buf, binary.LittleEndian, uint16(l))                        // entry size
+		_ = binary.Write(buf, binary.LittleEndian, uint16(len(child.name)))          // name length
+		_ = binary.Write(buf, binary.LittleEndian, append([]byte(child.name), 0))    // name
+		_, _ = buf.Write(bytes.Repeat([]byte{0}, int(l-8-int64(len(child.name))-1))) // padding
+
+	}
+
+	buf.Grow(int(leftover) % int(BlockSize))
+
+	return bytes.NewReader(buf.Bytes()), nil
 
 }

@@ -12,8 +12,10 @@ import (
 	"github.com/vorteil/vorteil/pkg/vimg"
 )
 
+// Format is a string representing a supported disk image format.
 type Format string
 
+// Supported disk image formats.
 const (
 	RAWFormat                 Format = "raw"
 	VMDKFormat                Format = "vmdk"
@@ -26,6 +28,7 @@ const (
 	VHDDynamicFormat          Format = "vhd-dynamic"
 )
 
+// AllFormatStrings returns a list of all supported disk image formats.
 func AllFormatStrings() []string {
 	strs := make([]string, len(formats))
 	i := 0
@@ -62,7 +65,19 @@ var (
 		VHDDynamicFormat:          0x200000,
 	}
 
-	buildFuncs = map[Format]func(context.Context, io.WriteSeeker, *vimg.Builder, *vcfg.VCFG) error{
+	defaultMTUs = map[Format]uint{
+		RAWFormat:                 1500,
+		VMDKFormat:                1500,
+		VMDKSparseFormat:          1500,
+		VMDKStreamOptimizedFormat: 1500,
+		GCPFArchiveFormat:         1460,
+		XVAFormat:                 1500,
+		VHDFormat:                 1500,
+		VHDFixedFormat:            1500,
+		VHDDynamicFormat:          1500,
+	}
+
+	buildFuncs = map[Format]func(io.WriteSeeker, *vimg.Builder, *vcfg.VCFG) (io.WriteSeeker, error){
 		RAWFormat:                 buildRAW,
 		VMDKFormat:                buildSparseVMDK,
 		VMDKSparseFormat:          buildSparseVMDK,
@@ -75,6 +90,7 @@ var (
 	}
 )
 
+// String returns a string representation of the Format.
 func (x Format) String() string {
 	return string(x)
 }
@@ -131,14 +147,38 @@ func ParseFormat(s string) (Format, error) {
 	return f, nil
 }
 
+// Suffix returns an appropriate file extension for files containing the format.
 func (x *Format) Suffix() string {
 	return formats[*x]
 }
 
+// Alignment returns a size in bytes that a RAW image must be aligned to (an
+// integer multiple of) to be compatible with the virtual disk image format.
 func (x *Format) Alignment() int64 {
 	return alignments[*x]
 }
 
+// DefaultMTU returns the default MTU setting for the image format.
+func (x *Format) DefaultMTU() uint {
+	return defaultMTUs[*x]
+}
+
 func (x *Format) build(ctx context.Context, w io.WriteSeeker, b *vimg.Builder, cfg *vcfg.VCFG) error {
-	return buildFuncs[*x](ctx, w, b, cfg)
+
+	w, err := buildFuncs[*x](w, b, cfg)
+	if err != nil {
+		return err
+	}
+	closer, ok := w.(io.Closer)
+	if ok {
+		defer closer.Close()
+	}
+
+	err = b.Build(ctx, w)
+	if err != nil {
+		return err
+	}
+
+	return nil
+
 }

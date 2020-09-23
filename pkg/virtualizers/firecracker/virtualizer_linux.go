@@ -480,20 +480,6 @@ func (o *operation) fetchVMLinux(kernel string) (string, error) {
 	return filepath.Join(o.firecrackerPath, kernel), nil
 }
 
-// ByteCountDecimal converts bytes to readable format
-func ByteCountDecimal(b int64) string {
-	const unit = 1000
-	if b < unit {
-		return fmt.Sprintf("%d B", b)
-	}
-	div, exp := int64(unit), 0
-	for n := b / unit; n >= unit; n /= unit {
-		div *= unit
-		exp++
-	}
-	return fmt.Sprintf("%.1f %cB", float64(b)/float64(div), "kMGTPE"[exp])
-}
-
 // log writes a log to the channel for the job
 func (o *operation) log(text string, v ...interface{}) {
 	o.Logs <- fmt.Sprintf(text, v...)
@@ -613,11 +599,6 @@ func (v *Virtualizer) Close(force bool) error {
 	// remove virtualizer from active vms
 	virtualizers.ActiveVMs.Delete(v.name)
 
-	// remove contents when closing
-	// err = os.RemoveAll(v.folder)
-	// if err != nil {
-	// 	return err
-	// }
 	return nil
 }
 
@@ -741,7 +722,7 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 
 	devices = append(devices, rootDrive)
 
-	o.kip, err = o.fetchVMLinux(o.config.VM.Kernel)
+	o.kip, err = o.fetchVMLinux(fmt.Sprintf("firecracker-%s", o.config.VM.Kernel))
 	if err != nil {
 		returnErr = err
 		return

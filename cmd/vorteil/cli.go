@@ -5,6 +5,8 @@
 package main
 
 import (
+	"fmt"
+
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
@@ -75,6 +77,7 @@ func commandInit() {
 	}
 
 	// Here we define some hidden top-level shortcuts.
+	rootCmd.AddCommand(commandShortcut(versionCmd))
 	rootCmd.AddCommand(commandShortcut(buildCmd))
 	rootCmd.AddCommand(commandShortcut(decompileCmd))
 	rootCmd.AddCommand(commandShortcut(provisionCmd))
@@ -136,4 +139,46 @@ var rootCmd = &cobra.Command{
 	Short: "Vorteil's command-line interface",
 	Long: `Vorteil's command-line interface provides a complete set of tools for developers
 to create, test, optimize, and build Vorteil apps.`,
+}
+
+var versionCmd = &cobra.Command{
+	Use:   "version",
+	Short: "View CLI version information",
+	Long:  "View CLI version information",
+	Args:  cobra.NoArgs,
+	PreRunE: func(cmd *cobra.Command, args []string) error {
+
+		format, err := cmd.Flags().GetString("format")
+		if err != nil {
+			panic(err)
+		}
+
+		switch format {
+		case "json", "", "plain":
+			return nil
+		default:
+			return fmt.Errorf("invalid format '%s'", format)
+		}
+	},
+	Run: func(cmd *cobra.Command, args []string) {
+
+		format, err := cmd.Flags().GetString("format")
+		if err != nil {
+			panic(err)
+		}
+
+		switch format {
+		case "json":
+			fmt.Printf("{\n\t\"version\": \"%s\",\n\t\"ref\": \"%s\",\n\t\"released\": \"%s\"\n}\n",
+				release, commit, date)
+		default:
+			fmt.Printf("Version: %s\nRef: %s\nReleased: %s\n", release, commit, date)
+		}
+
+	},
+}
+
+func init() {
+	f := versionCmd.Flags()
+	f.String("format", "", "specify output format (json, plain)")
 }

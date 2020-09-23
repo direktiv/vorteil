@@ -13,14 +13,12 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 
 	"github.com/vorteil/vorteil/pkg/elog"
 )
 
 const (
 	DynamicLinkerConfig     = "/etc/ld.so.conf"
-	WindowsWSLPrefix        = "\\\\wsl$\\Ubuntu-18.04"
 	DefaultLinuxUserLibPath = "/usr/lib"
 	DefaultLinuxLibPath     = "/lib"
 )
@@ -28,9 +26,10 @@ const (
 var DefaultLibs = []string{"libnss_dns.so.2", "libnss_files.so.2", "libresolv.so.2"}
 
 // NewImportSharedObject: This function is used to create and initialize a importSharedObjectsOperation.
-// 	This function requires two args:
+// 	This function requires three args:
 //			projectPath: The target project you wish to scan, and import shared objects to.
 //			excludeDefaultLibs: Whether or not to exclude default libraries.
+//			logger: logger object to log with
 // 	Once initialized a importSharedObjectsOperation object will be returned.
 // 	Running importSharedObjectsOperation.Start() will then begin the operation.
 func NewImportSharedObject(projectPath string, excludeDefaultLibs bool, logger elog.View) (*importSharedObjectsOperation, error) {
@@ -39,7 +38,7 @@ func NewImportSharedObject(projectPath string, excludeDefaultLibs bool, logger e
 	isoOperation.projectDir = projectPath
 	isoOperation.excludeDefaultLibs = excludeDefaultLibs
 	isoOperation.logger = logger
-	isoOperation.copiedSharedObjects = make(map[string]string)
+	isoOperation.sharedObjects = make(map[string]string)
 
 	if err := isoOperation.initLDPATHS(); err != nil {
 		return nil, err
@@ -50,28 +49,20 @@ func NewImportSharedObject(projectPath string, excludeDefaultLibs bool, logger e
 
 type importSharedObjectsOperation struct {
 	projectDir string
-	w          io.Writer
 
-	count float64
+	sharedObjects map[string]string // Tracks shared objects, if value is "", shared object is missing from system
 
-	copiedSharedObjects map[string]string
-	mapLock             sync.Mutex
+	excludeDefaultLibs  bool
+	sharedObjectClasses []elf.Class
+	imported32bit       bool
+	imported64bit       bool
 
-	excludeDefaultLibs bool
-	imported32bit      bool
-	imported64bit      bool
-
-	ldPATHS []string
+	ldPATHS []string // SYSTEM LD PATHS
 
 	logger elog.View
 }
 
-type sharedObjectInfo struct {
-	path    string
-	elfType elf.Class
-	found   bool
-}
-
+//getLDPathsFromENV: Gets LD_LIBRARY_PATH env value and split the paths into a string slice
 func getLDPathsFromENV() []string {
 	var paths = make([]string, 0, 0)
 	y := os.Getenv("LD_LIBRARY_PATH")
@@ -83,6 +74,8 @@ func getLDPathsFromENV() []string {
 	return paths
 }
 
+//loadLDPathsFromLinkerConfig Load LD config file located at parameter 1 'path', scan for library paths
+//	and append these paths to importSharedObjectsOperation tracked paths at 'ldPATHS.
 func (isoOp *importSharedObjectsOperation) loadLDPathsFromLinkerConfig(path string) error {
 	if strings.Contains(path, "*") {
 		return nil
@@ -126,6 +119,7 @@ func (isoOp *importSharedObjectsOperation) loadLDPathsFromLinkerConfig(path stri
 	return nil
 }
 
+//initLDPATHS: initializes importSharedObjectsOperation.ldPATHS so that it may be used later with findLib func
 func (isoOp *importSharedObjectsOperation) initLDPATHS() error {
 	// Load paths from env
 	isoOp.ldPATHS = getLDPathsFromENV()
@@ -142,33 +136,45 @@ func (isoOp *importSharedObjectsOperation) initLDPATHS() error {
 func (isoOp *importSharedObjectsOperation) Start() error {
 	var err error
 	var projectPaths []string
+	classesImported := make([]elf.Class, 0)
 
 	isoProgress := isoOp.logger.NewProgress("Importing Shared Objects ", "", 0)
 	defer isoProgress.Finish(true)
 
+	// Get all a path to all files in project dir
 	projectPaths, err = isoOp.getProjectFiles()
 	if err != nil {
 		goto ERROR
 	}
 
+	// Find Import Libraries of project files and add them to map
 	for i := range projectPaths {
 		isoOp.addSharedObjects(projectPaths[i])
 	}
 
+	// Find Import Libraries of default files and add them to map
+	if isoOp.imported32bit {
+		classesImported = append(classesImported, elf.ELFCLASS32)
+	}
+	if isoOp.imported64bit {
+		classesImported = append(classesImported, elf.ELFCLASS64)
+	}
 	if !isoOp.excludeDefaultLibs {
 		isoOp.logger.Infof("including Default Libs")
-		for i := range DefaultLibs {
-			elfLibPath, found, err := isoOp.findLib(DefaultLibs[i])
-			if err == nil && found {
-				isoOp.copiedSharedObjects[DefaultLibs[i]] = elfLibPath
-				err := isoOp.addSharedObjects(elfLibPath)
-				if err != nil {
+		for i := range classesImported {
+			for j := range DefaultLibs {
+				elfLibPath, found, err := isoOp.findLib(DefaultLibs[j], classesImported[i])
+				if err == nil && found {
+					isoOp.sharedObjects[DefaultLibs[j]] = elfLibPath
+					err := isoOp.addSharedObjects(elfLibPath)
+					if err != nil {
+						goto ERROR
+					}
+				} else if err == nil {
+					isoOp.sharedObjects[DefaultLibs[j]] = elfLibPath
+				} else {
 					goto ERROR
 				}
-			} else if err == nil {
-				isoOp.copiedSharedObjects[DefaultLibs[i]] = elfLibPath
-			} else {
-				goto ERROR
 			}
 		}
 	}
@@ -185,8 +191,10 @@ ERROR:
 	return nil
 }
 
+// copySharedObjects: loops over stored sharedObjects in operations map and copies those
+//	shared objects into project director
 func (isoOp *importSharedObjectsOperation) copySharedObjects() error {
-	for so, soPath := range isoOp.copiedSharedObjects {
+	for so, soPath := range isoOp.sharedObjects {
 		soProjectPath := filepath.Join(isoOp.projectDir, soPath)
 		if soPath == "" {
 			// Unfound Shared Object
@@ -204,10 +212,14 @@ func (isoOp *importSharedObjectsOperation) copySharedObjects() error {
 	return nil
 }
 
+// copyLib: Copies file at libPath to destPath if it does not exists.
+//	If destPath parent dir does not exists it is created.
+//	If libPath is a symlink, evaluate that symlink and create a symlink to target at destPath
 func (isoOp *importSharedObjectsOperation) copyLib(libPath, destPath string) (bool, error) {
 	destPath = isoOp.adjustPath(destPath)
 	isoOp.logger.Infof("copying '%s' > '%s", libPath, destPath)
 
+	// evaluate libPath so see if its a symlink
 	realLibPath, err := filepath.EvalSymlinks(libPath)
 	if err != nil {
 		panic(err)
@@ -232,8 +244,11 @@ func (isoOp *importSharedObjectsOperation) copyLib(libPath, destPath string) (bo
 			if err != nil {
 				return false, err
 			}
+
+			// Recall copyLib to copy symlinks target into projectDir
 			return isoOp.copyLib(realLibPath, filepath.Join(isoOp.projectDir, realLibPath))
 		} else {
+			// libPath is not a symlink, Copy file over
 			f, err := os.Create(destPath)
 			if err != nil {
 				return false, err
@@ -258,6 +273,8 @@ func (isoOp *importSharedObjectsOperation) copyLib(libPath, destPath string) (bo
 	return true, nil
 }
 
+//adjustPath: If /usr is the top level directory of the path, trim it out.
+//	Readjust path of linker to /lib64
 func (isoOp *importSharedObjectsOperation) adjustPath(path string) string {
 	adjustedPrefix := filepath.Join(isoOp.projectDir, "/usr")
 	if strings.HasPrefix(path, adjustedPrefix) {
@@ -272,29 +289,33 @@ func (isoOp *importSharedObjectsOperation) adjustPath(path string) string {
 	return path
 }
 
+//addSharedObjects: Attempt to open path as an elf file, and recurisely walk through all of that files imported libraries
+//	If a untracked imported libraries is found, add it to the sharedObjects map with the path as its value
 func (isoOp *importSharedObjectsOperation) addSharedObjects(fPath string) error {
 	elfFile, err := elf.Open(fPath)
 	if err != nil {
-		return err
+		return err // File is not a valid elf
 	}
 	defer elfFile.Close()
 	elfLibs, err := elfFile.ImportedLibraries()
 	if err != nil {
-		return err
+		return err // Could not open Imported Libraries
 	}
 
 	isoOp.setValidClass(elfFile.FileHeader.Class)
 
 	for i := range elfLibs {
-		if _, ok := isoOp.copiedSharedObjects[elfLibs[i]]; !ok {
-			elfLibPath, found, err := isoOp.findLib(elfLibs[i])
+		if _, ok := isoOp.sharedObjects[elfLibs[i]]; !ok {
+			elfLibPath, found, err := isoOp.findLib(elfLibs[i], elfFile.FileHeader.Class)
 			if err == nil && found {
-				isoOp.copiedSharedObjects[elfLibs[i]] = elfLibPath
+				// Library path found, add to map and then search library for its own imported libraries
+				isoOp.sharedObjects[elfLibs[i]] = elfLibPath
 				if err := isoOp.addSharedObjects(elfLibPath); err != nil {
 					return err
 				}
 			} else if err == nil {
-				isoOp.copiedSharedObjects[elfLibs[i]] = elfLibPath
+				// Library path not found, add to map
+				isoOp.sharedObjects[elfLibs[i]] = elfLibPath
 			} else {
 				return err
 			}
@@ -304,7 +325,8 @@ func (isoOp *importSharedObjectsOperation) addSharedObjects(fPath string) error 
 	return nil
 }
 
-func (isoOp *importSharedObjectsOperation) findLib(libName string) (string, bool, error) {
+// Find the path of a library given the name and its elf class
+func (isoOp *importSharedObjectsOperation) findLib(libName string, class elf.Class) (string, bool, error) {
 	for _, ldPath := range isoOp.ldPATHS {
 		potentialPath := filepath.Join(ldPath, libName)
 
@@ -320,7 +342,7 @@ func (isoOp *importSharedObjectsOperation) findLib(libName string) (string, bool
 			return "", false, errorDependencyScan(err)
 		}
 
-		if isoOp.isValidClass(l.FileHeader.Class) {
+		if l.FileHeader.Class == class {
 			isoOp.logger.Debugf("Found Path for library: %s at %s", libName, potentialPath)
 			return potentialPath, true, nil
 		}
@@ -329,18 +351,6 @@ func (isoOp *importSharedObjectsOperation) findLib(libName string) (string, bool
 	isoOp.logger.Debugf("Could not find Path for library: %s", libName)
 	// Unable to find lib
 	return "", false, nil
-}
-
-func (isoOp *importSharedObjectsOperation) isValidClass(libClass elf.Class) bool {
-	if isoOp.imported32bit && libClass == elf.ELFCLASS32 {
-		return true
-	}
-
-	if isoOp.imported64bit && libClass == elf.ELFCLASS64 {
-		return true
-	}
-
-	return false
 }
 
 func (isoOp *importSharedObjectsOperation) setValidClass(libClass elf.Class) {

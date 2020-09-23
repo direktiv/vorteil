@@ -292,15 +292,11 @@ func (isoOp *importSharedObjectsOperation) adjustPath(path string) string {
 //addSharedObjects: Attempt to open path as an elf file, and recurisely walk through all of that files imported libraries
 //	If a untracked imported libraries is found, add it to the sharedObjects map with the path as its value
 func (isoOp *importSharedObjectsOperation) addSharedObjects(fPath string) error {
-	elfFile, err := elf.Open(fPath)
-	if err != nil {
-		return err // File is not a valid elf
-	}
-	defer elfFile.Close()
-	elfLibs, err := elfFile.ImportedLibraries()
+	elfFile, elfLibs, err := openElfAndGetLibraries(fPath)
 	if err != nil {
 		return err // Could not open Imported Libraries
 	}
+	defer elfFile.Close()
 
 	isoOp.setValidClass(elfFile.FileHeader.Class)
 
@@ -323,6 +319,20 @@ func (isoOp *importSharedObjectsOperation) addSharedObjects(fPath string) error 
 	}
 
 	return nil
+}
+
+func openElfAndGetLibraries(fPath string) (*elf.File, []string, error) {
+	elfFile, err := elf.Open(fPath)
+	if err != nil {
+		return nil, nil, err // File is not a valid elf
+	}
+	elfLibs, err := elfFile.ImportedLibraries()
+	if err != nil {
+		elfFile.Close()
+		return nil, nil, err // Could not open Imported Libraries
+	}
+
+	return elfFile, elfLibs, nil
 }
 
 // Find the path of a library given the name and its elf class

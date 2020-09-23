@@ -34,13 +34,13 @@ import (
 	"github.com/vorteil/vorteil/pkg/vdisk"
 )
 
+// ProvisionerType : Constant string value used to represent the provisioner type amazon
 const ProvisionerType = "amazon-ec2"
 
-var OwnerStrings = []*string{aws.String("830931392213")}
-
-var AMI = ""
-var MachineType = "t2.nano"
-var ProvisionerID = "Amazon-EC2"
+var ownerStrings = []*string{aws.String("830931392213")}
+var ami = ""
+var machineType = "t2.nano"
+var provisionerID = "Amazon-EC2"
 
 var pollrate = time.Millisecond * 1000
 var securityGroupName = "vorteil-provisioner"
@@ -95,6 +95,7 @@ func (p *Provisioner) DiskFormat() vdisk.Format {
 	return vdisk.RAWFormat
 }
 
+// SizeAlign returns vcfg GiB size in bytes
 func (p *Provisioner) SizeAlign() vcfg.Bytes {
 	return vcfg.GiB
 }
@@ -117,6 +118,10 @@ func (p *Provisioner) Initialize(data []byte) error {
 	return nil
 }
 
+// Provision given a valid ProvisionArgs object will provision the passed vorteil project
+//	to the configured amazon provisioner. This process will return as soon as the vorteil
+//	projects image has been uploaded, unless ReadyWhenUsable was set to true, then
+//	this function will block until aws reports the ami as usable.
 func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 	var err error
 	pendingSpinner := args.Logger.NewProgress("Preparing Instance...", "", 0)
@@ -199,7 +204,7 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 		Values: []*string{aws.String("vorteil-compiler")},
 	}
 	images, err := client.DescribeImages(&ec2.DescribeImagesInput{
-		Owners:  OwnerStrings,
+		Owners:  ownerStrings,
 		Filters: []*ec2.Filter{filter},
 	})
 	if err != nil {
@@ -210,16 +215,16 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 	gigs.Align(vcfg.GiB)
 
 	args.Logger.Infof("Disk size: %d GiB\n", gigs.Units(vcfg.GiB))
-	AMI = *images.Images[0].ImageId
+	ami = *images.Images[0].ImageId
 	reservation, err := client.RunInstancesWithContext(args.Context, &ec2.RunInstancesInput{
 		MaxCount:         aws.Int64(1),
 		MinCount:         aws.Int64(1),
-		ImageId:          aws.String(AMI),
-		InstanceType:     aws.String(MachineType),
+		ImageId:          aws.String(ami),
+		InstanceType:     aws.String(machineType),
 		UserData:         &userdata,
 		SecurityGroupIds: []*string{&securityGroupID},
 		BlockDeviceMappings: []*ec2.BlockDeviceMapping{
-			&ec2.BlockDeviceMapping{
+			{
 				DeviceName: aws.String("/dev/sda1"),
 				Ebs: &ec2.EbsBlockDevice{
 					DeleteOnTermination: aws.Bool(true),
@@ -533,6 +538,7 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 	return err
 }
 
+// Marshal returns json provisioner as bytes
 func (p *Provisioner) Marshal() ([]byte, error) {
 
 	m := make(map[string]interface{})

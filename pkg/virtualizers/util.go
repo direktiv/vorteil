@@ -4,7 +4,10 @@ import (
 	"bytes"
 	"fmt"
 	"net"
+	"os"
 	"os/exec"
+	"path/filepath"
+	"runtime"
 	"strings"
 )
 
@@ -231,4 +234,114 @@ func BindPort(netType, protocol, port string) (string, string, error) {
 	}
 	// Bound on address netRoute
 	return bind, netRoute, nil
+}
+
+// GetExecutable returns the name of the executable for the virtualizer.
+func GetExecutable(virtualizer string) (string, error) {
+	switch virtualizer {
+	case "qemu":
+		return "qemu-system-x86_64", nil
+	case "virtualbox":
+		return "VBoxManage", nil
+	case "vmware":
+		return "vmrun", nil
+	case "firecracker":
+		return "firecracker", nil
+	case "hyperv":
+		return Powershell, nil
+	default:
+		return "", fmt.Errorf("%s is not supported", virtualizer)
+	}
+}
+
+// Backends returns the currently available hypervisors the system running on.
+func Backends() ([]string, error) {
+	var installedVirtualizers []string
+	path := os.Getenv("PATH")
+	separated := ":"
+	if runtime.GOOS == "windows" {
+		separated = ";"
+	}
+	if !strings.Contains(path, vbox) {
+		err := os.Setenv("PATH", fmt.Sprintf("%s%s%s", path, separated, vbox))
+		if err != nil {
+			return nil, err
+		}
+	}
+	path = os.Getenv("PATH")
+
+	// if !strings.Contains(path, vmware) {
+	// 	err := os.Setenv("PATH", fmt.Sprintf("%s%s%s", path, separated, vmware))
+	// 	if err != nil {
+	// 		return nil, err
+	// 	}
+	// }
+	// path = os.Getenv("PATH")
+
+	if !strings.Contains(path, qemu) {
+		err := os.Setenv("PATH", fmt.Sprintf("%s%s%s", path, separated, qemu))
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	path = os.Getenv("PATH")
+
+	if runtime.GOOS == "linux" {
+		if !strings.Contains(path, firecracker) {
+			err := os.Setenv("PATH", fmt.Sprintf("%s%s%s", path, separated, firecracker))
+			if err != nil {
+				return nil, err
+			}
+		}
+		path = os.Getenv("PATH")
+	}
+
+	paths := filepath.SplitList(path)
+
+	for _, v := range supportedVirtualizers {
+		if v == "hyperv" && runtime.GOOS != "windows" {
+			continue
+		} else {
+			virt, err := GetExecutable(v)
+			if err != nil {
+				break
+			}
+			if runtime.GOOS == "windows" {
+				virt = virt + ".exe"
+			}
+			for _, p := range paths {
+				p := filepath.Join(p, virt)
+				_, err = os.Stat(p)
+				if err == nil {
+					found := false
+					for _, virts := range installedVirtualizers {
+						if virts == v {
+							found = true
+						}
+					}
+					if !found {
+						installedVirtualizers = append(installedVirtualizers, v)
+					}
+				}
+			}
+		}
+
+	}
+
+	// If we're on windows check to see if hyperv by checking if the ethernet adapter is online
+	if runtime.GOOS == "windows" {
+		cmd := exec.Command("ipconfig", "/all")
+		// cmd := exec.Command(Powershell, "Get-WindowsOptionalFeature", "-FeatureName", "Microsoft-Hyper-V-All", "-Online")
+		resp, err := cmd.CombinedOutput()
+		if err != nil {
+			fmt.Printf("error checking for hyperv: %v\n", err)
+		}
+		output := string(resp)
+
+		if strings.Contains(output, "Hyper-V Virtual Ethernet Adapter") {
+			installedVirtualizers = append(installedVirtualizers, "hyperv")
+		}
+	}
+	return installedVirtualizers, nil
 }

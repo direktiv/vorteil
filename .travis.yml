@@ -30,7 +30,7 @@ jobs:
         - sudo ctr images pull docker.io/library/hello-world:latest
         - sudo chmod 0777 /run/containerd/containerd.sock
         - go test -timeout 30s -coverprofile c.out ./...
-        - export LDFLAGS="-ldflags '-X main.release=$BUILD_TAG -X main.commit=$BUILD_REF -X \"main.date=$BUILD_DATE\"'"
+        - export LDFLAGS="-ldflags '-X main.release=$BUILD_TAG -X main.commit=$BUILD_REF -X "main.date=$BUILD_DATE"'"
         - echo $LDFLAGS
         - go build -o vorteil -ldflags $LDFLAGS github.com/vorteil/vorteil/cmd/vorteil 
         - GOOS=windows go build -o vorteil.exe -ldflags $LDFLAGS github.com/vorteil/vorteil/cmd/vorteil
@@ -68,7 +68,7 @@ jobs:
         - if [ ! -z "$TRAVIS_TAG" ]; then export BUILD_TAG=$TRAVIS_TAG; else export BUILD_TAG=0.0.0; fi;
         - export BUILD_DATE=$(date '+%a, %d %b %Y %H:%M:%S %z')
         - export BUILD_REF=$(git rev-parse --short HEAD)
-        - export LDFLAGS="'-X main.release=$BUILD_TAG -X main.commit=$BUILD_REF -X \"main.date=$BUILD_DATE\"'"
+        - export LDFLAGS="'-X main.release=$BUILD_TAG -X main.commit=$BUILD_REF -X "main.date=$BUILD_DATE"'"
         - echo $LDFLAGS
         - go build -o vorteil -ldflags $LDFLAGS github.com/vorteil/vorteil/cmd/vorteil
         - if [ "$TRAVIS_EVENT_TYPE" != "pull_request" ] && [ ! -z "$TRAVIS_TAG" ]; then codesign --sign "$OSX_APP_SIGN_ID" -v --timestamp --options runtime vorteil; fi;

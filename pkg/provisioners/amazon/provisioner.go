@@ -130,6 +130,7 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 	if err != nil {
 		return err
 	}
+
 	args.Logger.Infof("Session created.")
 
 	args.Logger.Infof("Creating new client...")

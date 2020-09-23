@@ -618,14 +618,13 @@ func (mgr *Manager) CreateVirtualizer(name, ptype string, data []byte) error {
 	return nil
 }
 
-// Prepare calls the prepare function of a virtualizer which sets up the ability to spawn a VM.
-func (mgr *Manager) Prepare(name string, args *PrepareArgs) (*VirtualizeOperation, error) {
+func (mgr *Manager) prepareVirtualizerData(name string) ([]byte, string, error) {
 	s := "SELECT {{.Type}}, {{.Data}} FROM {{.Table}} WHERE {{.Name}}=?"
 	tmpl := template.Must(template.New("virtualizerTableInit").Parse(s))
 	buf := new(bytes.Buffer)
 	err := tmpl.Execute(buf, virtualizerTable)
 	if err != nil {
-		panic(err)
+		return nil, "", err
 	}
 	query := buf.String()
 	row := mgr.database.QueryRow(query, name)
@@ -633,8 +632,18 @@ func (mgr *Manager) Prepare(name string, args *PrepareArgs) (*VirtualizeOperatio
 	var data []byte
 	err = row.Scan(&ptype, &data)
 	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("no virtualizer named '%s'", name)
+		return nil, "", fmt.Errorf("no virtualizer named '%s'", name)
 	}
+	if err != nil {
+		return nil, "", err
+	}
+	return data, ptype, nil
+}
+
+// Prepare calls the prepare function of a virtualizer which sets up the ability to spawn a VM.
+func (mgr *Manager) Prepare(name string, args *PrepareArgs) (*VirtualizeOperation, error) {
+
+	data, ptype, err := mgr.prepareVirtualizerData(name)
 	if err != nil {
 		return nil, err
 	}
@@ -643,7 +652,6 @@ func (mgr *Manager) Prepare(name string, args *PrepareArgs) (*VirtualizeOperatio
 	if !ok {
 		return nil, fmt.Errorf("virtualizer '%s' has unrecognized virtualizer type: %s", name, ptype)
 	}
-
 	p := palloc.Alloc()
 	err = p.Initialize(data)
 	if err != nil {

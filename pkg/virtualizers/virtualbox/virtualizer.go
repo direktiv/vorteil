@@ -503,49 +503,49 @@ func (v *Virtualizer) prepareVM(diskpath string) error {
 	return nil
 }
 
+func (v *Virtualizer) Bind(args []string, i int, j int, protocol string, port virtualizers.RouteMap, networkType string) ([]string, string, bool, error) {
+	var hasDefinedPorts bool
+	bind, nr, err := virtualizers.BindPort(v.networkType, protocol, port.Port)
+	if err != nil {
+		return nil, "", false, err
+	}
+	hasDefinedPorts = true
+	args = append(args, fmt.Sprintf("--natpf%s", strconv.Itoa(i+1)))
+	args = append(args, fmt.Sprintf("nat%s%s,%s,,%s,,%s", bind, networkType, protocol, bind, port.Port))
+	return args, nr, hasDefinedPorts, nil
+}
+
 func (v *Virtualizer) handlePorts(args []string, route virtualizers.NetworkInterface, protocol string, i int) ([]string, bool, error) {
+	var err error
+	var nr string
 	var hasDefinedPorts bool
 	for j, port := range route.HTTP {
-		bind, nr, err := virtualizers.BindPort(v.networkType, protocol, port.Port)
+		args, nr, hasDefinedPorts, err = v.Bind(args, i, j, protocol, port, "http")
 		if err != nil {
 			return nil, false, err
 		}
 		v.routes[i].HTTP[j].Address = nr
-		hasDefinedPorts = true
-		args = append(args, fmt.Sprintf("--natpf%s", strconv.Itoa(i+1)))
-		args = append(args, fmt.Sprintf("nat%s%s,%s,,%s,,%s", bind, "http", protocol, bind, port.Port))
 	}
 	for j, port := range route.HTTPS {
-		bind, nr, err := virtualizers.BindPort(v.networkType, protocol, port.Port)
+		args, nr, hasDefinedPorts, err = v.Bind(args, i, j, protocol, port, "https")
 		if err != nil {
 			return nil, false, err
 		}
 		v.routes[i].HTTPS[j].Address = nr
-		hasDefinedPorts = true
-		args = append(args, fmt.Sprintf("--natpf%s", strconv.Itoa(i+1)))
-		args = append(args, fmt.Sprintf("nat%s%s,%s,,%s,,%s", bind, "https", protocol, bind, port.Port))
-
 	}
 	for j, port := range route.TCP {
-		bind, nr, err := virtualizers.BindPort(v.networkType, protocol, port.Port)
+		args, nr, hasDefinedPorts, err = v.Bind(args, i, j, protocol, port, "tcp")
 		if err != nil {
 			return nil, false, err
 		}
 		v.routes[i].TCP[j].Address = nr
-		hasDefinedPorts = true
-		args = append(args, fmt.Sprintf("--natpf%s", strconv.Itoa(i+1)))
-		args = append(args, fmt.Sprintf("nat%s%s,%s,,%s,,%s", bind, "tcp", protocol, bind, port.Port))
-
 	}
 	for j, port := range route.UDP {
-		bind, nr, err := virtualizers.BindPort(v.networkType, protocol, port.Port)
+		args, nr, hasDefinedPorts, err = v.Bind(args, i, j, protocol, port, "udp")
 		if err != nil {
 			return nil, false, err
 		}
 		v.routes[i].UDP[j].Address = nr
-		hasDefinedPorts = true
-		args = append(args, fmt.Sprintf("--natpf%s", strconv.Itoa(i+1)))
-		args = append(args, fmt.Sprintf("nat%s%s,%s,,%s,,%s", bind, "udp", protocol, bind, port.Port))
 	}
 	return args, hasDefinedPorts, nil
 }
@@ -600,7 +600,6 @@ func (v *Virtualizer) gatherNetworkDetails() error {
 	if err != nil {
 		return err
 	}
-
 	return nil
 }
 

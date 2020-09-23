@@ -7,22 +7,18 @@ package vproj
 
 import (
 	"debug/elf"
-	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
-	"sync"
 
 	"github.com/vorteil/vorteil/pkg/elog"
 )
 
 const (
 	DynamicLinkerConfig     = "/etc/ld.so.conf"
-	WindowsWSLPrefix        = "\\\\wsl$\\Ubuntu-18.04"
 	DefaultLinuxUserLibPath = "/usr/lib"
 	DefaultLinuxLibPath     = "/lib"
 )
@@ -30,9 +26,10 @@ const (
 var DefaultLibs = []string{"libnss_dns.so.2", "libnss_files.so.2", "libresolv.so.2"}
 
 // NewImportSharedObject: This function is used to create and initialize a importSharedObjectsOperation.
-// 	This function requires two args:
+// 	This function requires three args:
 //			projectPath: The target project you wish to scan, and import shared objects to.
 //			excludeDefaultLibs: Whether or not to exclude default libraries.
+//			logger: logger object to log with
 // 	Once initialized a importSharedObjectsOperation object will be returned.
 // 	Running importSharedObjectsOperation.Start() will then begin the operation.
 func NewImportSharedObject(projectPath string, excludeDefaultLibs bool, logger elog.View) (*importSharedObjectsOperation, error) {
@@ -41,8 +38,9 @@ func NewImportSharedObject(projectPath string, excludeDefaultLibs bool, logger e
 	isoOperation.projectDir = projectPath
 	isoOperation.excludeDefaultLibs = excludeDefaultLibs
 	isoOperation.logger = logger
+	isoOperation.sharedObjects = make(map[string]string)
 
-	if err := isoOperation.initialize(); err != nil {
+	if err := isoOperation.initLDPATHS(); err != nil {
 		return nil, err
 	}
 
@@ -51,289 +49,17 @@ func NewImportSharedObject(projectPath string, excludeDefaultLibs bool, logger e
 
 type importSharedObjectsOperation struct {
 	projectDir string
-	w          io.Writer
 
-	count float64
+	sharedObjects map[string]string // Tracks shared objects, if value is "", shared object is missing from system
 
-	progressPaths       map[string]bool
-	mapLock             sync.Mutex
-	filesDone           map[string]interface{}
-	unfoundDependencies map[string]interface{}
-	foundAtLeast1File   bool
+	excludeDefaultLibs  bool
+	sharedObjectClasses []elf.Class
+	imported32bit       bool
+	imported64bit       bool
 
-	excludeDefaultLibs bool
-	imported32bit      bool
-	imported64bit      bool
-
-	ldPATHS []string
+	ldPATHS []string // SYSTEM LD PATHS
 
 	logger elog.View
-}
-
-// initialize: Locate shared objects and save them to a map in the importSharedObjectsOperation object
-func (isoOp *importSharedObjectsOperation) initialize() error {
-	isoOp.progressPaths = make(map[string]bool)
-	if err := isoOp.initLDPATHS(); err != nil {
-		return fmt.Errorf("could not get all ld library paths, error: %v", err)
-	}
-
-	var recurseCount func(string) error
-	recurseCount = func(d string) error {
-		fs, err := ioutil.ReadDir(d)
-		if err != nil {
-			return err
-		}
-		for _, f := range fs {
-			if f.IsDir() {
-				return recurseCount(filepath.Join(d, f.Name()))
-			}
-			isoOp.progressPaths[filepath.Join(d, f.Name())] = true
-		}
-		return nil
-	}
-
-	err := recurseCount(isoOp.projectDir)
-	if err != nil {
-		return err
-	}
-
-	isoOp.count = float64(len(isoOp.progressPaths))
-
-	// Init Map Files
-	isoOp.mapLock = sync.Mutex{}
-	isoOp.filesDone = make(map[string]interface{})
-	isoOp.unfoundDependencies = make(map[string]interface{})
-
-	return nil
-}
-
-//ReadLink for wsl symlink checking.
-func ReadLink(path string) (string, error) {
-	cmd := exec.Command("bash", "-c", fmt.Sprintf("readlink %s", path))
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(string(out)), nil
-}
-
-func loadPathsFromFile(path string) ([]string, error) {
-	paths := make([]string, 0)
-	var fn func(path string) error
-
-	fn = func(path string) error {
-		data, err := ioutil.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		lines := strings.Split(string(data), "\n")
-		for _, line := range lines {
-
-			if strings.HasPrefix(line, "/") {
-				if info, err := os.Stat(line); err == nil && info.IsDir() {
-					paths = append(paths, line)
-				}
-				continue
-			}
-
-			if strings.HasPrefix(line, "include") {
-				line = strings.TrimPrefix(line, "include ")
-				line = strings.TrimSpace(line)
-				line = filepath.ToSlash(line)
-
-				matches, err := filepath.Glob(line)
-				if err != nil {
-					return err
-				}
-				for _, match := range matches {
-					err = fn(match)
-					if err != nil {
-						return err
-					}
-				}
-				continue
-			}
-			if strings.TrimSpace(line) != "" {
-				if !strings.HasPrefix(line, "#") {
-					return fmt.Errorf("unexpected line in '%s' file: %s", DynamicLinkerConfig, line)
-				}
-			}
-		}
-
-		return nil
-	}
-
-	err := fn(path)
-
-	return paths, err
-}
-
-func locateDependency(lib string, libClass elf.Class, filePath string, depList []string) (string, error) {
-	for _, sp := range depList {
-		if strings.HasPrefix(sp, "$ORIGIN") {
-			sp = filepath.Join(filepath.Dir(filePath), "."+strings.TrimPrefix(sp, "$ORIGIN"))
-		}
-
-		sp = filepath.Join(sp, lib)
-		_, err := os.Stat(sp)
-		if err != nil {
-			if !os.IsNotExist(err) {
-				return "", fmt.Errorf("unable to stat candidate dependency: %w", err)
-			}
-			continue
-		}
-
-		l, err := elf.Open(sp)
-		if err != nil {
-			if strings.Contains(err.Error(), "The name of the file cannot be resolved by the system.") {
-				// symlink reopen elf at point
-				linuxPath := filepath.ToSlash(sp)
-				target, err := ReadLink(linuxPath)
-				if err != nil {
-					return "", errorDependencyReadlink(err)
-				}
-
-				if !filepath.IsAbs(target) {
-					target = filepath.Join(filepath.Dir(linuxPath), target)
-				}
-
-				l, err = elf.Open(target)
-				if err != nil {
-					return "", errorDependencyScan(err)
-				}
-			} else {
-				return "", errorDependencyScan(err)
-			}
-		}
-		defer l.Close()
-
-		if libClass == l.FileHeader.Class {
-			return sp, nil
-		}
-	}
-
-	return "", fmt.Errorf("unable to locate dependency: %s", lib)
-}
-
-//listDependencies: Given a file path 'fpath' locate the files dependencies.
-//	Return a list of paths to dependencies found on system, and a list names of dependencies who are missing from system.
-func (isoOp *importSharedObjectsOperation) listDependencies(fpath string) ([]string, []string, error) {
-	e, err := elf.Open(fpath)
-	if err != nil {
-		if strings.HasPrefix(err.Error(), "bad magic number") {
-			return []string{}, nil, nil
-		}
-		if errors.Is(err, io.EOF) {
-			return []string{}, []string{}, nil
-		} else {
-			return nil, nil, fmt.Errorf("unable to scan file : %w", err)
-		}
-	}
-
-	defer e.Close()
-
-	isoOp.imported32bit = (e.FileHeader.Class == elf.ELFCLASS32)
-	isoOp.imported64bit = (e.FileHeader.Class == elf.ELFCLASS64)
-
-	libs, err := e.ImportedLibraries()
-	if err != nil {
-		return nil, nil, fmt.Errorf("unable to load list of imported libraries from elf binary: %w", err)
-	}
-
-	paths := getLDPathsFromENV()
-	x, err := e.DynString(elf.DT_RPATH)
-	if err != nil {
-		return nil, nil, fmt.Errorf("unable to load rpath from elf binary: %w", err)
-	}
-	paths = append(paths, x...)
-	x, err = e.DynString(elf.DT_RUNPATH)
-	if err != nil {
-		return nil, nil, fmt.Errorf("unable to load runpath from elf binary: %w", err)
-	}
-	paths = append(paths, x...)
-
-	filePaths, err := loadPathsFromFile(DynamicLinkerConfig)
-	if err != nil {
-		return nil, nil, err
-	}
-	paths = append(paths, filePaths...)
-	paths = append(paths, DefaultLinuxLibPath)
-	paths = append(paths, DefaultLinuxUserLibPath)
-
-	var deps []string
-	var errs []error
-
-	for _, p := range e.Progs {
-		if p.ProgHeader.Type == elf.PT_INTERP {
-			// this is the interpreter
-			b, err := ioutil.ReadAll(p.Open())
-			if err != nil {
-				return nil, nil, err
-			}
-
-			var interpreterPath string
-			for _, x := range b {
-				if x == 0x00 {
-					break
-				}
-				interpreterPath = fmt.Sprintf("%s%s", interpreterPath, string(x))
-			}
-			deps = append(deps, interpreterPath)
-		}
-	}
-
-	noLocates := make([]string, 0)
-
-	for _, lib := range libs {
-		dep, lerr := locateDependency(lib, e.FileHeader.Class, fpath, paths)
-		if lerr != nil {
-			locationErrPrefix := "unable to locate dependency: "
-			if strings.HasPrefix(lerr.Error(), locationErrPrefix) {
-				noLocates = append(noLocates, strings.TrimPrefix(lerr.Error(), locationErrPrefix))
-			} else {
-				errs = append(errs, lerr)
-			}
-		} else {
-			deps = append(deps, dep)
-		}
-	}
-
-	if len(errs) > 0 {
-		if len(errs) == 1 {
-			return deps, noLocates, errs[0]
-		}
-		var msgs []string
-		for _, err := range errs {
-			msgs = append(msgs, err.Error())
-		}
-		return deps, noLocates, fmt.Errorf("errors locating libs: %s", strings.Join(msgs, "; "))
-	}
-
-	return deps, noLocates, nil
-}
-
-//appendSliceToUnfoundDependencies appends missingDeps arg to operations unfoundDependencies
-func (isoOp *importSharedObjectsOperation) appendSliceToUnfoundDependencies(missingDeps []string) {
-	for _, l := range missingDeps {
-		isoOp.unfoundDependencies[l] = nil
-	}
-}
-
-//initLDPATHS: initializes importSharedObjectsOperation.ldPATHS so that it may be used later with findLib func
-func (isoOp *importSharedObjectsOperation) initLDPATHS() error {
-	// Load paths from env
-	isoOp.ldPATHS = getLDPathsFromENV()
-
-	// Load paths from linker config
-	if err := isoOp.loadLDPathsFromLinkerConfig(DynamicLinkerConfig); err != nil {
-		return err
-	}
-
-	// Append Common Linux Lib Paths
-	isoOp.ldPATHS = append(isoOp.ldPATHS, DefaultLinuxLibPath)
-	isoOp.ldPATHS = append(isoOp.ldPATHS, DefaultLinuxUserLibPath)
-
-	return nil
 }
 
 //getLDPathsFromENV: Gets LD_LIBRARY_PATH env value and split the paths into a string slice
@@ -393,309 +119,282 @@ func (isoOp *importSharedObjectsOperation) loadLDPathsFromLinkerConfig(path stri
 	return nil
 }
 
-//findLib: Given a library name and class, locate that libraries path on the system and return the path.
-func (isoOp *importSharedObjectsOperation) findLib(name string, class elf.Class) (string, error) {
-	for _, sp := range isoOp.ldPATHS {
-		sp = filepath.Join(sp, name)
-		_, err := os.Stat(sp)
-		if err != nil {
-			if !os.IsNotExist(err) {
-				return "", fmt.Errorf("unable to stat candidate dependency: %w", err)
-			}
-			continue
-		}
-		l, err := elf.Open(sp)
-		if err != nil {
-			if strings.Contains(err.Error(), "The name of the file cannot be resolved by the system.") {
-				// symlink reopen elf at point
-				linuxPath := filepath.ToSlash(sp)
-				target, err := ReadLink(linuxPath)
-				if err != nil {
-					return "", errorDependencyReadlink(err)
-				}
-				if !filepath.IsAbs(target) {
-					target = filepath.Join(filepath.Dir(linuxPath), target)
-				}
-
-				l, err = elf.Open(target)
-				if err != nil {
-					return "", errorDependencyScan(err)
-				}
-			} else {
-				return "", errorDependencyScan(err)
-			}
-		}
-		defer l.Close()
-		if class == l.FileHeader.Class {
-			return sp, nil
-		}
+//initLDPATHS: initializes importSharedObjectsOperation.ldPATHS so that it may be used later with findLib func
+func (isoOp *importSharedObjectsOperation) initLDPATHS() error {
+	// Load paths from env
+	isoOp.ldPATHS = getLDPathsFromENV()
+	// Load paths from linker config
+	if err := isoOp.loadLDPathsFromLinkerConfig(DynamicLinkerConfig); err != nil {
+		return err
 	}
-
-	return "", fmt.Errorf("unable to locate dependency: %s", name)
+	// Append Common Linux Lib Paths
+	isoOp.ldPATHS = append(isoOp.ldPATHS, DefaultLinuxLibPath)
+	isoOp.ldPATHS = append(isoOp.ldPATHS, DefaultLinuxUserLibPath)
+	return nil
 }
 
-//registerFile Add filePath to operations filesDone Map if it does not exist in keys.
-//	If it does, return 'skip' set to true bool
-func (isoOp *importSharedObjectsOperation) registerFile(filePath string) bool {
-	isoOp.mapLock.Lock()
-	var skip bool
-	if _, ok := isoOp.filesDone[filePath]; !ok {
-		// Path is not in map; register filePath in map
-		isoOp.filesDone[filePath] = nil
-	} else {
-		// Path is already in map, set skip bool to true
-		skip = true
-	}
-	isoOp.mapLock.Unlock()
-	return skip
-}
-
-// Start: Start the process of scanning for shared objects and copying them into you project path.
-//	If excludeDefaultLibs was set to false in builder, also copy default libs.
 func (isoOp *importSharedObjectsOperation) Start() error {
+	var err error
+	var projectPaths []string
+	classesImported := make([]elf.Class, 0)
 
 	isoProgress := isoOp.logger.NewProgress("Importing Shared Objects ", "", 0)
 	defer isoProgress.Finish(true)
 
-	var recurseFile func(string) error
-	recurseFile = func(path string) error {
-		if skip := isoOp.registerFile(path); skip {
-			return nil
-		}
+	// Get all a path to all files in project dir
+	projectPaths, err = isoOp.getProjectFiles()
+	if err != nil {
+		goto ERROR
+	}
 
-		if !strings.HasPrefix(path, isoOp.projectDir) {
-			// file is outside of project projectDir -- copy it in and then check for lib dependencies
-			isoOp.logger.Infof("copying '%s'", path)
+	// Find Import Libraries of project files and add them to map
+	for i := range projectPaths {
+		isoOp.addSharedObjects(projectPaths[i])
+	}
 
-			ls, err := os.Lstat(path)
-			if err != nil {
-				return err
-			}
-			adjustedPath := path
-			if strings.HasPrefix(adjustedPath, DefaultLinuxUserLibPath) {
-				if _, err = os.Stat(filepath.Join(isoOp.projectDir, adjustedPath)); err == nil {
-					isoOp.logger.Warnf(fmt.Sprintf("Skipping '%s' -- file from higher priority source already exists within the project directory.", adjustedPath))
-				}
-				isoOp.logger.Warnf(fmt.Sprintf("Adjusted lib name (/usr/lib -> /lib) for: %s", path))
-				adjustedPath = strings.TrimPrefix(adjustedPath, "/usr")
-			}
-
-			// if path points to a symlink
-			if ls.Mode()&os.ModeSymlink == os.ModeSymlink {
-				target, err := os.Readlink(path)
-				if err != nil {
-					return err
-				}
-
-				adjustedTarget := target
-				if strings.HasPrefix(target, DefaultLinuxUserLibPath) {
-					isoOp.logger.Warnf(fmt.Sprintf("Adjusted symlink target (/usr/lib -> /lib) for: %s", target))
-					adjustedTarget = strings.TrimPrefix(adjustedTarget, "/usr")
-				}
-
-				if !filepath.IsAbs(target) {
-					target = filepath.Join(filepath.Dir(path), target)
-				}
-
-				isoOp.logger.Debugf(fmt.Sprintf("found symlink: %s -> %s", path, target))
-
-				err = recurseFile(target)
-				if err != nil {
-					return err
-				}
-
-				projectNewName := filepath.Join(isoOp.projectDir, adjustedPath)
-
-				err = os.MkdirAll(filepath.Dir(projectNewName), 0777)
-				if err != nil {
-					return err
-				}
-
-				if stat, err := os.Lstat(projectNewName); err == nil {
-					if stat.Mode()&os.ModeSymlink == os.ModeSymlink {
-						err = os.Remove(projectNewName)
-						if err != nil {
-							return err
-						}
-					}
-				}
-
-				err = os.Symlink(adjustedTarget, projectNewName)
-				if err != nil {
-					return err
-				}
-
-			} else {
-				newName := adjustedPath
-				if !strings.HasPrefix(newName, isoOp.projectDir) {
-					newName = filepath.Join(isoOp.projectDir, adjustedPath)
-				}
-
-				if _, err := os.Stat(newName); os.IsNotExist(err) {
-					err := func() error {
-						err := os.MkdirAll(filepath.Dir(newName), 0777)
-						if err != nil {
-							return err
-						}
-
-						f, err := os.Create(newName)
-						if err != nil {
-							return err
-						}
-						defer f.Close()
-
-						src, err := os.Open(path)
-						if err != nil {
-							return err
-						}
-						defer src.Close()
-
-						_, err = io.Copy(f, src)
-						if err != nil {
-							return err
-						}
-						return nil
-					}()
+	// Find Import Libraries of default files and add them to map
+	if isoOp.imported32bit {
+		classesImported = append(classesImported, elf.ELFCLASS32)
+	}
+	if isoOp.imported64bit {
+		classesImported = append(classesImported, elf.ELFCLASS64)
+	}
+	if !isoOp.excludeDefaultLibs {
+		isoOp.logger.Infof("including Default Libs")
+		for i := range classesImported {
+			for j := range DefaultLibs {
+				elfLibPath, found, err := isoOp.findLib(DefaultLibs[j], classesImported[i])
+				if err == nil && found {
+					isoOp.sharedObjects[DefaultLibs[j]] = elfLibPath
+					err := isoOp.addSharedObjects(elfLibPath)
 					if err != nil {
-						return err
+						goto ERROR
 					}
+				} else if err == nil {
+					isoOp.sharedObjects[DefaultLibs[j]] = elfLibPath
+				} else {
+					goto ERROR
 				}
 			}
 		}
+	}
 
-		libs, missingLibs, err := isoOp.listDependencies(path)
+	err = isoOp.copySharedObjects()
+	if err != nil {
+		goto ERROR
+	}
+
+	isoOp.logger.Printf("Completed.")
+	return nil
+ERROR:
+	isoOp.logger.Errorf("Import shared Objects failed, error: %v", err)
+	return nil
+}
+
+// copySharedObjects: loops over stored sharedObjects in operations map and copies those
+//	shared objects into project director
+func (isoOp *importSharedObjectsOperation) copySharedObjects() error {
+	for so, soPath := range isoOp.sharedObjects {
+		soProjectPath := filepath.Join(isoOp.projectDir, soPath)
+		if soPath == "" {
+			// Unfound Shared Object
+			isoOp.logger.Warnf("shared object '%s' could not be found, so has been skipped", so)
+		} else {
+			if copied, err := isoOp.copyLib(soPath, soProjectPath); !copied {
+				isoOp.logger.Debugf("skipping '%s' already exists", so)
+			} else if err != nil {
+				isoOp.logger.Errorf("failed to copy '%s'", so)
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+// copyLib: Copies file at libPath to destPath if it does not exists.
+//	If destPath parent dir does not exists it is created.
+//	If libPath is a symlink, evaluate that symlink and create a symlink to target at destPath
+func (isoOp *importSharedObjectsOperation) copyLib(libPath, destPath string) (bool, error) {
+	destPath = isoOp.adjustPath(destPath)
+	isoOp.logger.Infof("copying '%s' > '%s", libPath, destPath)
+
+	// evaluate libPath so see if its a symlink
+	realLibPath, err := filepath.EvalSymlinks(libPath)
+	if err != nil {
+		panic(err)
+	}
+
+	// If target link has same name, inherit real path
+	if filepath.Base(libPath) == filepath.Base(realLibPath) {
+		libPath = realLibPath
+	}
+
+	// Check if path exists
+	if _, err := os.Stat(destPath); os.IsNotExist(err) {
+		err := os.MkdirAll(filepath.Dir(destPath), 0777)
 		if err != nil {
-			return err
+			return false, err
 		}
 
-		isoOp.foundAtLeast1File = len(libs) > 0
-		isoOp.appendSliceToUnfoundDependencies(missingLibs)
+		// If true libPath is a symlink
+		if realLibPath != libPath {
+			isoOp.logger.Debugf("found symlink %s > %s", destPath, realLibPath)
+			err := os.Symlink(strings.TrimPrefix(realLibPath, "/usr"), destPath)
+			if err != nil {
+				return false, err
+			}
 
-		for _, l := range libs {
-			err = recurseFile(l)
+			// Recall copyLib to copy symlinks target into projectDir
+			return isoOp.copyLib(realLibPath, filepath.Join(isoOp.projectDir, realLibPath))
+		} else {
+			// libPath is not a symlink, Copy file over
+			f, err := os.Create(destPath)
+			if err != nil {
+				return false, err
+			}
+			defer f.Close()
+
+			src, err := os.Open(libPath)
+			if err != nil {
+				return false, err
+			}
+			defer src.Close()
+
+			_, err = io.Copy(f, src)
+			if err != nil {
+				return false, err
+			}
+		}
+	} else {
+		return false, nil
+	}
+
+	return true, nil
+}
+
+//adjustPath: If /usr is the top level directory of the path, trim it out.
+//	Readjust path of linker to /lib64
+func (isoOp *importSharedObjectsOperation) adjustPath(path string) string {
+	adjustedPrefix := filepath.Join(isoOp.projectDir, "/usr")
+	if strings.HasPrefix(path, adjustedPrefix) {
+		path = strings.TrimPrefix(path, adjustedPrefix)
+		path = filepath.Join(isoOp.projectDir, path)
+	}
+
+	if strings.HasPrefix(filepath.Base(path), "ld-linux-x86-64") {
+		path = filepath.Join(isoOp.projectDir, "/lib64", filepath.Base(path))
+	}
+
+	return path
+}
+
+//addSharedObjects: Attempt to open path as an elf file, and recurisely walk through all of that files imported libraries
+//	If a untracked imported libraries is found, add it to the sharedObjects map with the path as its value
+func (isoOp *importSharedObjectsOperation) addSharedObjects(fPath string) error {
+	elfFile, elfLibs, err := openElfAndGetLibraries(fPath)
+	if err != nil {
+		return err // Could not open Imported Libraries
+	}
+	defer elfFile.Close()
+
+	isoOp.setValidClass(elfFile.FileHeader.Class)
+
+	for i := range elfLibs {
+		if _, ok := isoOp.sharedObjects[elfLibs[i]]; !ok {
+			elfLibPath, found, err := isoOp.findLib(elfLibs[i], elfFile.FileHeader.Class)
+			if err == nil && found {
+				// Library path found, add to map and then search library for its own imported libraries
+				isoOp.sharedObjects[elfLibs[i]] = elfLibPath
+				if err := isoOp.addSharedObjects(elfLibPath); err != nil {
+					return err
+				}
+			} else if err == nil {
+				// Library path not found, add to map
+				isoOp.sharedObjects[elfLibs[i]] = elfLibPath
+			} else {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+func openElfAndGetLibraries(fPath string) (*elf.File, []string, error) {
+	elfFile, err := elf.Open(fPath)
+	if err != nil {
+		return nil, nil, err // File is not a valid elf
+	}
+	elfLibs, err := elfFile.ImportedLibraries()
+	if err != nil {
+		elfFile.Close()
+		return nil, nil, err // Could not open Imported Libraries
+	}
+
+	return elfFile, elfLibs, nil
+}
+
+// Find the path of a library given the name and its elf class
+func (isoOp *importSharedObjectsOperation) findLib(libName string, class elf.Class) (string, bool, error) {
+	for _, ldPath := range isoOp.ldPATHS {
+		potentialPath := filepath.Join(ldPath, libName)
+
+		// Check if potentialPath can be stat'd
+		if _, err := os.Stat(potentialPath); err != nil && !os.IsNotExist(err) {
+			return "", false, fmt.Errorf("unable to stat candidate dependency: %w", err)
+		} else if err != nil {
+			continue
+		}
+
+		l, err := elf.Open(potentialPath)
+		if err != nil {
+			return "", false, errorDependencyScan(err)
+		}
+
+		if l.FileHeader.Class == class {
+			isoOp.logger.Debugf("Found Path for library: %s at %s", libName, potentialPath)
+			return potentialPath, true, nil
+		}
+	}
+
+	isoOp.logger.Debugf("Could not find Path for library: %s", libName)
+	// Unable to find lib
+	return "", false, nil
+}
+
+func (isoOp *importSharedObjectsOperation) setValidClass(libClass elf.Class) {
+	if !isoOp.imported32bit && libClass == elf.ELFCLASS32 {
+		isoOp.imported32bit = true
+	}
+
+	if !isoOp.imported64bit && libClass == elf.ELFCLASS64 {
+		isoOp.imported64bit = true
+	}
+}
+
+// getListOfElfPath: will scan projectDir and return a list of paths that consists of every file in the project directory
+func (isoOp *importSharedObjectsOperation) getProjectFiles() ([]string, error) {
+	var projectPaths = make([]string, 0)
+	err := filepath.Walk(isoOp.projectDir,
+		func(path string, info os.FileInfo, err error) error {
 			if err != nil {
 				return err
 			}
-		}
+			if !info.IsDir() {
+				projectPaths = append(projectPaths, path)
+			}
+			return nil
+		})
 
-		return nil
+	if err != nil {
+		return nil, err
 	}
 
-	errs := make([]error, 0)
-	paths := make(chan string)
-	endPathScan := "!!! END"
-
-	var recursiveTreeSearch func(string) error
-	recursiveTreeSearch = func(dir string) error {
-		fis, err := ioutil.ReadDir(dir)
-		if err != nil {
-			return err
-		}
-
-		for _, fi := range fis {
-			// Recursively search if fi is a directory
-			if fi.Mode()&os.ModeSymlink == os.ModeSymlink {
-				continue
-			}
-
-			if fi.IsDir() {
-				err = recursiveTreeSearch(filepath.Join(dir, fi.Name()))
-				if err != nil {
-					return err
-				}
-			} else {
-				// Get full filepath if fi is a file
-				paths <- filepath.Join(dir, fi.Name())
-			}
-
-		}
-
-		return nil
-	}
-
-	go func() {
-
-		err := recursiveTreeSearch(isoOp.projectDir)
-		if err != nil {
-			errs = append(errs, err)
-		}
-
-		paths <- endPathScan
-
-	}()
-
-	for {
-		select {
-		case p := <-paths:
-			if p == endPathScan {
-				if !isoOp.excludeDefaultLibs && !isoOp.foundAtLeast1File {
-					isoOp.logger.Warnf("omitting default libs --- no libs were required by the project.")
-				}
-
-				if !isoOp.excludeDefaultLibs && isoOp.foundAtLeast1File {
-					isoOp.logger.Infof("copying default libs")
-
-					defaultLibPaths := make([]string, 0)
-					classes := []elf.Class{}
-
-					if isoOp.imported32bit {
-						classes = append(classes, elf.ELFCLASS32)
-					} else {
-						isoOp.logger.Infof("omitting 32-bit default libs --- no 32-bit binaries detected.")
-					}
-
-					if isoOp.imported64bit {
-						classes = append(classes, elf.ELFCLASS64)
-					} else {
-						isoOp.logger.Infof("omitting 64-bit default libs --- no 64-bit binaries detected.")
-					}
-
-					for _, l := range DefaultLibs {
-						for _, c := range classes {
-							path, err := isoOp.findLib(l, c)
-							if err != nil {
-								isoOp.logger.Warnf(err.Error())
-								continue
-							}
-
-							defaultLibPaths = append(defaultLibPaths, path)
-						}
-					}
-					for _, p := range defaultLibPaths {
-						err := recurseFile(p)
-						if err != nil {
-							return err
-						}
-					}
-				}
-
-				for l := range isoOp.unfoundDependencies {
-					isoOp.logger.Warnf(fmt.Sprintf("unable to locate dependency: %s", l))
-				}
-
-				goto END
-			}
-
-			if err := recurseFile(p); err != nil {
-				return err
-			}
-		}
-	}
-
-END:
-	if len(isoOp.unfoundDependencies) != 0 {
-		isoOp.logger.Printf("Completed with warnings.")
-	} else {
-		isoOp.logger.Printf("Completed.")
-	}
-	return nil
+	return projectPaths, nil
 }
 
 // ERRORS
 func errorDependencyScan(err error) error {
 	return fmt.Errorf("unable to scan candidate dependency: %w", err)
-}
-
-func errorDependencyReadlink(err error) error {
-	return fmt.Errorf("unable to readlink dependency: %w", err)
 }

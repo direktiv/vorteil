@@ -83,11 +83,3 @@ func WriteSeeker(w io.Writer) (io.WriteSeeker, error) {
 	return ws, nil
 
 }
-
-type WRITTEN interface {
-	WRITTEN() int64
-}
-
-func (ws *writeSeeker) WRITTEN() int64 {
-	return ws.k
-}

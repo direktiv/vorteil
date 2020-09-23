@@ -180,23 +180,22 @@ func blockType(i int64) int {
 
 }
 
-func calculateSymlinkSize(f vio.File) (content int64, fs int64) {
-	l := int64(f.Size())
-	content = divide(l, BlockSize)
+func calculateBlocksFromSize(size int64) (content int64, fs int64) {
+	content = divide(size, BlockSize)
 	fs = calculateNumberOfIndirectBlocks(content)
 	fs += content
 	return content, fs
 }
 
-func calculateRegularFileSize(f vio.File) (int64, int64) {
-	l := int64(f.Size())
-	content := divide(l, BlockSize)
-	fs := calculateNumberOfIndirectBlocks(content)
-	fs += content
-	return content, fs
+func calculateSymlinkBlocks(f vio.File) (content int64, fs int64) {
+	return calculateBlocksFromSize(int64(f.Size()))
 }
 
-func calculateDirectorySize(n *vio.TreeNode) (int64, int64) {
+func calculateRegularFileBlocks(f vio.File) (int64, int64) {
+	return calculateBlocksFromSize(int64(f.Size()))
+}
+
+func calculateDirectoryBlocks(n *vio.TreeNode) (int64, int64) {
 
 	var length, leftover int64
 	length = 24 // '.' entry + ".." entry
@@ -223,10 +222,6 @@ func calculateDirectorySize(n *vio.TreeNode) (int64, int64) {
 
 	}
 
-	content := divide(length, BlockSize)
-	fs := calculateNumberOfIndirectBlocks(content)
-	fs += content
-
-	return content, fs
+	return calculateBlocksFromSize(length)
 
 }

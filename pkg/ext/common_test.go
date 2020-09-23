@@ -192,7 +192,7 @@ func TestSymlinkSizeCalculation(t *testing.T) {
 	})
 	defer f.Close()
 
-	content, fs = calculateSymlinkSize(f)
+	content, fs = calculateSymlinkBlocks(f)
 	if content != 1 || fs != 1 {
 		t.Fatalf("calculateSymlinkSize calculates small symlink sizes incorrectly")
 	}
@@ -205,7 +205,7 @@ func TestSymlinkSizeCalculation(t *testing.T) {
 	})
 	defer f.Close()
 
-	content, fs = calculateSymlinkSize(f)
+	content, fs = calculateSymlinkBlocks(f)
 	if content != 0 || fs != 0 {
 		t.Fatalf("calculateSymlinkSize calculates zero-length symlink sizes incorrectly")
 	}
@@ -225,7 +225,7 @@ func TestFileSizeCalculation(t *testing.T) {
 	})
 	defer f.Close()
 
-	content, fs = calculateRegularFileSize(f)
+	content, fs = calculateRegularFileBlocks(f)
 	if content != 0 || fs != 0 {
 		t.Fatalf("calculateRegularFileSize calculates zero-length file sizes incorrectly")
 	}
@@ -237,7 +237,7 @@ func TestFileSizeCalculation(t *testing.T) {
 	})
 	defer f.Close()
 
-	content, fs = calculateRegularFileSize(f)
+	content, fs = calculateRegularFileBlocks(f)
 	if content != 1 || fs != 1 {
 		t.Fatalf("calculateRegularFileSize calculates tiny file sizes incorrectly")
 	}
@@ -249,7 +249,7 @@ func TestFileSizeCalculation(t *testing.T) {
 	})
 	defer f.Close()
 
-	content, fs = calculateRegularFileSize(f)
+	content, fs = calculateRegularFileBlocks(f)
 	if content != 5 || fs != 5 {
 		t.Fatalf("calculateRegularFileSize calculates small file sizes incorrectly")
 	}
@@ -261,7 +261,7 @@ func TestFileSizeCalculation(t *testing.T) {
 	})
 	defer f.Close()
 
-	content, fs = calculateRegularFileSize(f)
+	content, fs = calculateRegularFileBlocks(f)
 	if content != 13 || fs != 14 {
 		t.Fatalf("calculateRegularFileSize calculates medium file sizes incorrectly")
 	}
@@ -278,7 +278,7 @@ func TestDirectorySizeCalculation(t *testing.T) {
 		Children: []*vio.TreeNode{},
 	}
 
-	content, fs = calculateDirectorySize(n)
+	content, fs = calculateDirectoryBlocks(n)
 	if content != 1 || fs != 1 {
 		t.Fatalf("calculateDirectorySize calculates empty directory sizes incorrectly")
 	}

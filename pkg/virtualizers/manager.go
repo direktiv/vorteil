@@ -537,16 +537,21 @@ func RegisteredVirtualizers() map[string]VirtualizerAllocator {
 	return registeredVirtualizers
 }
 
-func fetchVirtualizerData(ptype string, data []byte) error {
+func (mgr *Manager) fetchVirtualizerData(ptype string, data []byte) (*sql.Tx, error) {
 	palloc, ok := registeredVirtualizers[ptype]
 	if !ok {
-		return fmt.Errorf("unrecognized virtualizer type: %s", ptype)
+		return nil, fmt.Errorf("unrecognized virtualizer type: %s", ptype)
 	}
 	err := palloc.ValidateArgs(data)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return nil
+	// add to db
+	tx, err := mgr.database.Begin()
+	if err != nil {
+		return nil, err
+	}
+	return tx, nil
 }
 
 func selectCreateVirtualizerData(tx *sql.Tx, name string) error {
@@ -594,16 +599,11 @@ func insertCreateVirtualizerData(tx *sql.Tx, name string, ptype string, data []b
 
 // CreateVirtualizer creates a virtualizer from the name, type and data required
 func (mgr *Manager) CreateVirtualizer(name, ptype string, data []byte) error {
-	err := fetchVirtualizerData(ptype, data)
+	tx, err := mgr.fetchVirtualizerData(ptype, data)
 	if err != nil {
 		return err
 	}
 
-	// add to db
-	tx, err := mgr.database.Begin()
-	if err != nil {
-		return err
-	}
 	defer tx.Rollback()
 
 	err = selectCreateVirtualizerData(tx, name)

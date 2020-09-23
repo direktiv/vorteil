@@ -537,8 +537,7 @@ func RegisteredVirtualizers() map[string]VirtualizerAllocator {
 	return registeredVirtualizers
 }
 
-// CreateVirtualizer creates a virtualizer from the name, type and data required
-func (mgr *Manager) CreateVirtualizer(name, ptype string, data []byte) error {
+func fetchVirtualizerData(ptype string, data []byte) error {
 	palloc, ok := registeredVirtualizers[ptype]
 	if !ok {
 		return fmt.Errorf("unrecognized virtualizer type: %s", ptype)
@@ -547,20 +546,16 @@ func (mgr *Manager) CreateVirtualizer(name, ptype string, data []byte) error {
 	if err != nil {
 		return err
 	}
+	return nil
+}
 
-	// add to db
-	tx, err := mgr.database.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-
+func selectCreateVirtualizerData(tx *sql.Tx, name string) error {
 	s := "SELECT {{.Type}} FROM {{.Table}} WHERE {{.Name}}=?"
 	tmpl := template.Must(template.New("virtualizerTableInit").Parse(s))
 	buf := new(bytes.Buffer)
-	err = tmpl.Execute(buf, virtualizerTable)
+	err := tmpl.Execute(buf, virtualizerTable)
 	if err != nil {
-		panic(err)
+		return err
 	}
 	query := buf.String()
 	row := tx.QueryRow(query, name)
@@ -573,15 +568,18 @@ func (mgr *Manager) CreateVirtualizer(name, ptype string, data []byte) error {
 	if err != sql.ErrNoRows {
 		return err
 	}
+	return nil
+}
 
-	s = "INSERT INTO {{.Table}} ({{.Name}}, {{.Type}}, {{.Data}}) VALUES(?, ?, ?)"
-	tmpl = template.Must(template.New("virtualizerTableInit").Parse(s))
-	buf = new(bytes.Buffer)
-	err = tmpl.Execute(buf, virtualizerTable)
+func insertCreateVirtualizerData(tx *sql.Tx, name string, ptype string, data []byte) error {
+	s := "INSERT INTO {{.Table}} ({{.Name}}, {{.Type}}, {{.Data}}) VALUES(?, ?, ?)"
+	tmpl := template.Must(template.New("virtualizerTableInit").Parse(s))
+	buf := new(bytes.Buffer)
+	err := tmpl.Execute(buf, virtualizerTable)
 	if err != nil {
-		panic(err)
+		return err
 	}
-	query = buf.String()
+	query := buf.String()
 	_, err = tx.Exec(query, name, ptype, data)
 	if err != nil {
 		return err
@@ -591,7 +589,32 @@ func (mgr *Manager) CreateVirtualizer(name, ptype string, data []byte) error {
 	if err != nil {
 		return err
 	}
+	return nil
+}
 
+// CreateVirtualizer creates a virtualizer from the name, type and data required
+func (mgr *Manager) CreateVirtualizer(name, ptype string, data []byte) error {
+	err := fetchVirtualizerData(ptype, data)
+	if err != nil {
+		return err
+	}
+
+	// add to db
+	tx, err := mgr.database.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	err = selectCreateVirtualizerData(tx, name)
+	if err != nil {
+		return err
+	}
+
+	err = insertCreateVirtualizerData(tx, name, ptype, data)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 

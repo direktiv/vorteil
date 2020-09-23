@@ -25,7 +25,6 @@ require (
 	github.com/containerd/ttrpc v1.0.1 // indirect
 	github.com/containerd/typeurl v1.0.1 // indirect
 	github.com/containers/image v3.0.2+incompatible
-	github.com/coreos/go-semver v0.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.1
 	github.com/djherbis/buffer v1.1.0
 	github.com/djherbis/nio v2.0.3+incompatible

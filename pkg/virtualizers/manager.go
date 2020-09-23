@@ -502,6 +502,26 @@ func (mgr *Manager) ValidateArgs(name string) error {
 	return palloc.ValidateArgs(data)
 }
 
+func (mgr *Manager) deleteVirtualizerData(tx *sql.Tx, name string) error {
+	s := "DELETE FROM {{.Table}} WHERE {{.Name}}=?"
+	tmpl := template.Must(template.New("virtualizerTableInit").Parse(s))
+	buf := new(bytes.Buffer)
+	err := tmpl.Execute(buf, virtualizerTable)
+	if err != nil {
+		return err
+	}
+	query := buf.String()
+	_, err = tx.Exec(query, name)
+	if err != nil {
+		return err
+	}
+	err = tx.Commit()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 //DeleteVirtualizer removes a virtualizer from the database with the appropriate name
 func (mgr *Manager) DeleteVirtualizer(name string) error {
 	tx, err := mgr.database.Begin()
@@ -510,37 +530,12 @@ func (mgr *Manager) DeleteVirtualizer(name string) error {
 	}
 	defer tx.Rollback()
 
-	s := "SELECT {{.Type}} FROM {{.Table}} WHERE {{.Name}}=?"
-	tmpl := template.Must(template.New("virtualizerTableInit").Parse(s))
-	buf := new(bytes.Buffer)
-	err = tmpl.Execute(buf, virtualizerTable)
-	if err != nil {
-		panic(err)
-	}
-	query := buf.String()
-	row := tx.QueryRow(query, name)
-	var x string
-	err = row.Scan(&x)
-	if err == sql.ErrNoRows {
-		return nil
-	}
+	err = mgr.selectVirtualizerData(tx, name)
 	if err != nil {
 		return err
 	}
 
-	s = "DELETE FROM {{.Table}} WHERE {{.Name}}=?"
-	tmpl = template.Must(template.New("virtualizerTableInit").Parse(s))
-	buf = new(bytes.Buffer)
-	err = tmpl.Execute(buf, virtualizerTable)
-	if err != nil {
-		panic(err)
-	}
-	query = buf.String()
-	_, err = tx.Exec(query, name)
-	if err != nil {
-		return err
-	}
-	err = tx.Commit()
+	err = mgr.deleteVirtualizerData(tx, name)
 	if err != nil {
 		return err
 	}
@@ -570,7 +565,7 @@ func (mgr *Manager) fetchVirtualizerData(ptype string, data []byte) (*sql.Tx, er
 	return tx, nil
 }
 
-func selectCreateVirtualizerData(tx *sql.Tx, name string) error {
+func (mgr *Manager) selectVirtualizerData(tx *sql.Tx, name string) error {
 	s := "SELECT {{.Type}} FROM {{.Table}} WHERE {{.Name}}=?"
 	tmpl := template.Must(template.New("virtualizerTableInit").Parse(s))
 	buf := new(bytes.Buffer)
@@ -622,7 +617,7 @@ func (mgr *Manager) CreateVirtualizer(name, ptype string, data []byte) error {
 
 	defer tx.Rollback()
 
-	err = selectCreateVirtualizerData(tx, name)
+	err = mgr.selectVirtualizerData(tx, name)
 	if err != nil {
 		return err
 	}

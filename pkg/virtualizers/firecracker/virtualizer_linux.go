@@ -37,24 +37,32 @@ import (
 	"github.com/vorteil/vorteil/pkg/virtualizers/util"
 )
 
+const (
+	vorteilBridge = "vorteil-bridge"
+)
+
 func FetchBridgeDev() error {
 	// Check if bridge device exists
-	_, err := tenus.BridgeFromName("vorteil-bridge")
+	_, err := tenus.BridgeFromName(vorteilBridge)
 	if err != nil {
 		return errors.New("try running 'vorteil firecracker-setup' before using firecracker")
 	}
 	return err
 }
-func SetupBridgeAndDHCPServer() error {
 
+// SetupBridgeAndDHCPServer creates the bridge which provides DHCP addresses todo
+// firecracker instances.
+func SetupBridgeAndDHCPServer(log elog.View) error {
+
+	log.Printf("creating bridge %s", vorteilBridge)
 	// Create bridge device
-	bridger, err := tenus.NewBridgeWithName("vorteil-bridge")
+	bridger, err := tenus.NewBridgeWithName(vorteilBridge)
 	if err != nil {
 		if !strings.Contains(err.Error(), "Interface name vorteil-bridge already assigned on the host") {
 			return err
 		}
 		// get bridge device
-		bridger, err = tenus.BridgeFromName("vorteil-bridge")
+		bridger, err = tenus.BridgeFromName(vorteilBridge)
 		if err != nil {
 			return err
 		}
@@ -76,9 +84,12 @@ func SetupBridgeAndDHCPServer() error {
 			return err
 		}
 	}
+
+	log.Printf("starting dhcp server")
+
 	// create dhcp server on an interface
 	server := dhcpHandler.NewHandler()
-	pc, err := conn.NewUDP4BoundListener("vorteil-bridge", ":67")
+	pc, err := conn.NewUDP4BoundListener(vorteilBridge, ":67")
 	if err != nil {
 		return err
 	}
@@ -103,6 +114,7 @@ type Devices struct {
 	Devices []string `json:"devices"`
 }
 
+// OrganiseTapDevices handles http requests to create and delete tap interfaces for firecracker
 func OrganiseTapDevices(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodPost:
@@ -115,7 +127,7 @@ func OrganiseTapDevices(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// get bridge device
-		bridgeDev, err := tenus.BridgeFromName("vorteil-bridge")
+		bridgeDev, err := tenus.BridgeFromName(vorteilBridge)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 		}

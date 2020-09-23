@@ -143,17 +143,33 @@ func (isoOp *importSharedObjectsOperation) Start() error {
 	var err error
 	var projectPaths []string
 
+	isoProgress := isoOp.logger.NewProgress("Importing Shared Objects ", "", 0)
+	defer isoProgress.Finish(true)
+
 	projectPaths, err = isoOp.getProjectFiles()
 	if err != nil {
 		goto ERROR
 	}
 
-	projectPaths = append(projectPaths, DefaultLibs...)
-
 	for i := range projectPaths {
-		err = isoOp.addSharedObjects(projectPaths[i])
-		if err != nil {
-			// panic(err)
+		isoOp.addSharedObjects(projectPaths[i])
+	}
+
+	if !isoOp.excludeDefaultLibs {
+		isoOp.logger.Infof("including Default Libs")
+		for i := range DefaultLibs {
+			elfLibPath, found, err := isoOp.findLib(DefaultLibs[i])
+			if err == nil && found {
+				isoOp.copiedSharedObjects[DefaultLibs[i]] = elfLibPath
+				err := isoOp.addSharedObjects(elfLibPath)
+				if err != nil {
+					goto ERROR
+				}
+			} else if err == nil {
+				isoOp.copiedSharedObjects[DefaultLibs[i]] = elfLibPath
+			} else {
+				goto ERROR
+			}
 		}
 	}
 
@@ -162,13 +178,10 @@ func (isoOp *importSharedObjectsOperation) Start() error {
 		goto ERROR
 	}
 
-	goto END
-
+	isoOp.logger.Printf("Completed.")
+	return nil
 ERROR:
-	panic(err)
-END:
-	// spew.Dump(isoOp.copiedSharedObjects)
-	// spew.Dump(projectPaths)
+	isoOp.logger.Errorf("Import shared Objects failed, error: %v", err)
 	return nil
 }
 
@@ -179,11 +192,10 @@ func (isoOp *importSharedObjectsOperation) copySharedObjects() error {
 			// Unfound Shared Object
 			isoOp.logger.Warnf("shared object '%s' could not be found, so has been skipped", so)
 		} else {
-			isoOp.logger.Infof("copying '%s' to '%s", so, soProjectPath)
-			if copied, err := copyLib(soPath, soProjectPath); !copied {
-				isoOp.logger.Debugf("skipping '%s', '%s' already exists", so, soProjectPath)
+			if copied, err := isoOp.copyLib(soPath, soProjectPath); !copied {
+				isoOp.logger.Debugf("skipping '%s' already exists", so)
 			} else if err != nil {
-				isoOp.logger.Errorf("failed to copy '%s' to '%s'", so, soProjectPath)
+				isoOp.logger.Errorf("failed to copy '%s'", so)
 				return err
 			}
 		}
@@ -192,7 +204,20 @@ func (isoOp *importSharedObjectsOperation) copySharedObjects() error {
 	return nil
 }
 
-func copyLib(libPath, destPath string) (bool, error) {
+func (isoOp *importSharedObjectsOperation) copyLib(libPath, destPath string) (bool, error) {
+	destPath = isoOp.adjustPath(destPath)
+	isoOp.logger.Infof("copying '%s' > '%s", libPath, destPath)
+
+	realLibPath, err := filepath.EvalSymlinks(libPath)
+	if err != nil {
+		panic(err)
+	}
+
+	// If target link has same name, inherit real path
+	if filepath.Base(libPath) == filepath.Base(realLibPath) {
+		libPath = realLibPath
+	}
+
 	// Check if path exists
 	if _, err := os.Stat(destPath); os.IsNotExist(err) {
 		err := os.MkdirAll(filepath.Dir(destPath), 0777)
@@ -200,27 +225,51 @@ func copyLib(libPath, destPath string) (bool, error) {
 			return false, err
 		}
 
-		f, err := os.Create(destPath)
-		if err != nil {
-			return false, err
-		}
-		defer f.Close()
+		// If true libPath is a symlink
+		if realLibPath != libPath {
+			isoOp.logger.Debugf("found symlink %s > %s", destPath, realLibPath)
+			err := os.Symlink(strings.TrimPrefix(realLibPath, "/usr"), destPath)
+			if err != nil {
+				return false, err
+			}
+			return isoOp.copyLib(realLibPath, filepath.Join(isoOp.projectDir, realLibPath))
+		} else {
+			f, err := os.Create(destPath)
+			if err != nil {
+				return false, err
+			}
+			defer f.Close()
 
-		src, err := os.Open(libPath)
-		if err != nil {
-			return false, err
-		}
-		defer src.Close()
+			src, err := os.Open(libPath)
+			if err != nil {
+				return false, err
+			}
+			defer src.Close()
 
-		_, err = io.Copy(f, src)
-		if err != nil {
-			return false, err
+			_, err = io.Copy(f, src)
+			if err != nil {
+				return false, err
+			}
 		}
 	} else {
 		return false, nil
 	}
 
 	return true, nil
+}
+
+func (isoOp *importSharedObjectsOperation) adjustPath(path string) string {
+	adjustedPrefix := filepath.Join(isoOp.projectDir, "/usr")
+	if strings.HasPrefix(path, adjustedPrefix) {
+		path = strings.TrimPrefix(path, adjustedPrefix)
+		path = filepath.Join(isoOp.projectDir, path)
+	}
+
+	if strings.HasPrefix(filepath.Base(path), "ld-linux-x86-64") {
+		path = filepath.Join(isoOp.projectDir, "/lib64", filepath.Base(path))
+	}
+
+	return path
 }
 
 func (isoOp *importSharedObjectsOperation) addSharedObjects(fPath string) error {
@@ -238,12 +287,14 @@ func (isoOp *importSharedObjectsOperation) addSharedObjects(fPath string) error 
 
 	for i := range elfLibs {
 		if _, ok := isoOp.copiedSharedObjects[elfLibs[i]]; !ok {
-			elfLibPath, _, err := isoOp.findLib(elfLibs[i])
-			if err == nil {
+			elfLibPath, found, err := isoOp.findLib(elfLibs[i])
+			if err == nil && found {
 				isoOp.copiedSharedObjects[elfLibs[i]] = elfLibPath
 				if err := isoOp.addSharedObjects(elfLibPath); err != nil {
 					return err
 				}
+			} else if err == nil {
+				isoOp.copiedSharedObjects[elfLibs[i]] = elfLibPath
 			} else {
 				return err
 			}

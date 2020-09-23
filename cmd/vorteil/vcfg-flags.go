@@ -169,28 +169,33 @@ type nBoolFlag struct {
 }
 
 func (f *nBoolFlag) AddTo(flagSet *pflag.FlagSet) {
+	f.sanitizeValue()
+	key := strings.Replace(f.key, "<<N>>", "i", -1)
+	flagSet.BoolVar(&f.void, key, f.void, f.usage)
+	f.handleHiddenFlag(flagSet, key)
+	f.initNumberedKeys(flagSet)
 
+}
+
+func (f *nBoolFlag) sanitizeValue() {
 	if f.value == nil {
 		f.value = make([]bool, *f.total, *f.total)
 	}
+}
 
-	key := strings.Replace(f.key, "<<N>>", "i", -1)
-	flagSet.BoolVar(&f.void, key, f.void, f.usage)
+func (f *nBoolFlag) handleHiddenFlag(flagSet *pflag.FlagSet, key string) {
 	if f.hidden {
-		flag := flagSet.Lookup(key)
-		flag.Hidden = true
+		flagSet.Lookup(key).Hidden = true
 	}
+}
 
+func (f *nBoolFlag) initNumberedKeys(flagSet *pflag.FlagSet) {
 	for i := 0; i < *f.total; i++ {
-		key = f.nKey(i)
+		key := f.nKey(i)
 		flagSet.BoolVar(&f.value[i], key, f.value[i], f.usage)
 		flagSet.MarkHidden(key)
-		if f.hidden {
-			flag := flagSet.Lookup(key)
-			flag.Hidden = true
-		}
+		f.handleHiddenFlag(flagSet, key)
 	}
-
 }
 
 func (f nBoolFlag) nKey(n int) string {
@@ -239,26 +244,32 @@ type nStringFlag struct {
 }
 
 func (f *nStringFlag) AddTo(flagSet *pflag.FlagSet) {
+	f.sanitizeValue()
+	key := strings.Replace(f.key, "<<N>>", "i", -1)
+	flagSet.StringVar(&f.void, key, f.void, f.usage)
+	f.handleHiddenFlag(flagSet, key)
+	f.initNumberedKeys(flagSet)
+}
+
+func (f *nStringFlag) sanitizeValue() {
 	if f.value == nil {
 		f.value = make([]string, *f.total, *f.total)
 	}
+}
 
-	key := strings.Replace(f.key, "<<N>>", "i", -1)
-	flagSet.StringVar(&f.void, key, f.void, f.usage)
+func (f *nStringFlag) handleHiddenFlag(flagSet *pflag.FlagSet, key string) {
 	if f.hidden {
-		flag := flagSet.Lookup(key)
-		flag.Hidden = true
+		flagSet.Lookup(key).Hidden = true
 	}
+}
+
+func (f *nStringFlag) initNumberedKeys(flagSet *pflag.FlagSet) {
 	for i := 0; i < *f.total; i++ {
-		key = f.nKey(i)
+		key := f.nKey(i)
 		flagSet.StringVar(&f.value[i], key, f.value[i], f.usage)
 		flagSet.MarkHidden(key)
-		if f.hidden {
-			flag := flagSet.Lookup(key)
-			flag.Hidden = true
-		}
+		f.handleHiddenFlag(flagSet, key)
 	}
-
 }
 
 func (f *nStringFlag) AddUnhiddenTo(flagSet *pflag.FlagSet) {

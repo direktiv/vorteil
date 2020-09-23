@@ -11,6 +11,7 @@ import (
 	"github.com/vorteil/vorteil/pkg/vcfg"
 	"github.com/vorteil/vorteil/pkg/vhd"
 	"github.com/vorteil/vorteil/pkg/vimg"
+	"github.com/vorteil/vorteil/pkg/vio"
 	"github.com/vorteil/vorteil/pkg/vmdk"
 	"github.com/vorteil/vorteil/pkg/vpkg"
 	"github.com/vorteil/vorteil/pkg/xva"
@@ -138,7 +139,7 @@ func lcm(a, b int64, integers ...int64) int64 {
 }
 
 func buildRAW(w io.WriteSeeker, b *vimg.Builder, cfg *vcfg.VCFG) (io.WriteSeeker, error) {
-	return w, nil
+	return vio.WriteSeeker(w)
 }
 
 func buildStreamOptimizedVMDK(w io.WriteSeeker, b *vimg.Builder, cfg *vcfg.VCFG) (io.WriteSeeker, error) {

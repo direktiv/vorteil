@@ -4,17 +4,19 @@
     <img src="assets/images/vlogo.png" alt="vorteil">
   </a>
   <h3 align="center">vorteil.io</h3>
+    <h5 align="center">turn your applications and containers into micro virtual machines</h5>
 </p>
 <hr/>
 
 [![Build Status](https://travis-ci.org/vorteil/vorteil.svg?branch=master)](https://travis-ci.org/vorteil/vorteil) <a href="https://codeclimate.com/github/vorteil/vorteil/maintainability"><img src="https://api.codeclimate.com/v1/badges/bb819f04d7550b91f24d/maintainability" /></a> <a href="https://codeclimate.com/github/vorteil/vorteil/test_coverage"><img src="https://api.codeclimate.com/v1/badges/bb819f04d7550b91f24d/test_coverage" /></a> [![Go Report Card](https://goreportcard.com/badge/github.com/vorteil/vorteil)](https://goreportcard.com/report/github.com/vorteil/vorteil)
 
-Turn your applications and containers into micro virtual machines with Vorteil.
-<hr/>
-
 Vorteil is an operating system for running cloud applications on micro virtual machines. It takes only the files you need and runs them on a custom Linux kernel without any unnecessary background services: there's no ssh, no shell, and no login; just a toml file that Vorteil's init process (vinitd) uses to configure the system and launch your apps.
 
-Vorteil's lightweight design enhances security, reduces capital and operating costs, and reduces performance overhead compared to containers and other server operating systems.
+<p align="center">
+  <a href="https://github.com/vorteil/vorteil">
+    <img src="assets/images/terminal.gif" alt="terminal">
+  </a>
+</p>
 
 The tools that build Vorteil images have been optimized for speed, and can take your project from loose files to a running virtual machine in as little as one second.
 

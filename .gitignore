@@ -12,6 +12,7 @@
 
 # Unignore specific files
 !assets/images/vlogo.png
+!assets/images/terminal.gif
 !.travis.yml
 
 # test files

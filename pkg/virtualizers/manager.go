@@ -4,12 +4,10 @@ import (
 	"bytes"
 	"database/sql"
 	"fmt"
-	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"text/template"
 
 	"github.com/vorteil/vorteil/pkg/vcfg"
@@ -128,105 +126,12 @@ func init() {
 	}
 }
 
-// Backends returns the currently available hypervisors the system running on.
-func Backends() ([]string, error) {
-	var installedVirtualizers []string
-	path := os.Getenv("PATH")
-	separated := ":"
-	if runtime.GOOS == "windows" {
-		separated = ";"
-	}
-	if !strings.Contains(path, vbox) {
-		err := os.Setenv("PATH", fmt.Sprintf("%s%s%s", path, separated, vbox))
-		if err != nil {
-			return nil, err
-		}
-	}
-	path = os.Getenv("PATH")
-
-	// if !strings.Contains(path, vmware) {
-	// 	err := os.Setenv("PATH", fmt.Sprintf("%s%s%s", path, separated, vmware))
-	// 	if err != nil {
-	// 		return nil, err
-	// 	}
-	// }
-	// path = os.Getenv("PATH")
-
-	if !strings.Contains(path, qemu) {
-		err := os.Setenv("PATH", fmt.Sprintf("%s%s%s", path, separated, qemu))
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	path = os.Getenv("PATH")
-
-	if runtime.GOOS == "linux" {
-		if !strings.Contains(path, firecracker) {
-			err := os.Setenv("PATH", fmt.Sprintf("%s%s%s", path, separated, firecracker))
-			if err != nil {
-				return nil, err
-			}
-		}
-		path = os.Getenv("PATH")
-	}
-
-	paths := filepath.SplitList(path)
-
-	for _, v := range supportedVirtualizers {
-		if v == "hyperv" && runtime.GOOS != "windows" {
-			continue
-		} else {
-			virt, err := GetExecutable(v)
-			if err != nil {
-				break
-			}
-			if runtime.GOOS == "windows" {
-				virt = virt + ".exe"
-			}
-			for _, p := range paths {
-				p := filepath.Join(p, virt)
-				_, err = os.Stat(p)
-				if err == nil {
-					found := false
-					for _, virts := range installedVirtualizers {
-						if virts == v {
-							found = true
-						}
-					}
-					if !found {
-						installedVirtualizers = append(installedVirtualizers, v)
-					}
-				}
-			}
-		}
-
-	}
-
-	// If we're on windows check to see if hyperv by checking if the ethernet adapter is online
-	if runtime.GOOS == "windows" {
-		cmd := exec.Command("ipconfig", "/all")
-		// cmd := exec.Command(Powershell, "Get-WindowsOptionalFeature", "-FeatureName", "Microsoft-Hyper-V-All", "-Online")
-		resp, err := cmd.CombinedOutput()
-		if err != nil {
-			fmt.Printf("error checking for hyperv: %v\n", err)
-		}
-		output := string(resp)
-
-		if strings.Contains(output, "Hyper-V Virtual Ethernet Adapter") {
-			installedVirtualizers = append(installedVirtualizers, "hyperv")
-		}
-	}
-	return installedVirtualizers, nil
-}
-
 // // AppendGraph attaches the graph used to update subscriptions to the manager after it was finalized
 // func (mgr *Manager) AppendGraph(graph *graph.Graph) {
 // 	mgr.subserver = graph
 // }
 
-// initDB create a database to store the virtualizers or connect to the current one.
-func (mgr *Manager) initDB() error {
+func (mgr *Manager) createDB() error {
 	var err error
 
 	mgr.database, err = sql.Open("sqlite3", mgr.databaseAddr)
@@ -247,12 +152,23 @@ func (mgr *Manager) initDB() error {
 	}
 	mgr.log("Activated database secure delete behaviour.")
 
+	return nil
+}
+
+// initDB create a database to store the virtualizers or connect to the current one.
+func (mgr *Manager) initDB() error {
+	var err error
+
+	err = mgr.createDB()
+	if err != nil {
+		return err
+	}
 	s := "CREATE TABLE IF NOT EXISTS {{.Table}} ({{.Name}} TEXT, {{.Type}} TEXT, {{.Data}} BLOB, PRIMARY KEY ({{.Name}}))"
 	tmpl := template.Must(template.New("virtualizerTableInit").Parse(s))
 	buf := new(bytes.Buffer)
 	err = tmpl.Execute(buf, virtualizerTable)
 	if err != nil {
-		panic(err)
+		return err
 	}
 
 	query := buf.String()
@@ -292,7 +208,6 @@ func New(args *ManagerArgs) (*Manager, error) {
 		}
 
 	}
-
 	if runtime.GOOS == "linux" {
 		// make path if doesn't exist
 		err = os.MkdirAll(mgr.firecrackerPath, 0700)
@@ -300,7 +215,6 @@ func New(args *ManagerArgs) (*Manager, error) {
 			return nil, err
 		}
 	}
-
 	err = mgr.initDB()
 	if err != nil {
 		return nil, err
@@ -309,10 +223,8 @@ func New(args *ManagerArgs) (*Manager, error) {
 	return mgr, nil
 }
 
-// Close loops through the current active vms to close them as the manager is closing.
-func (mgr *Manager) Close() error {
+func (mgr *Manager) checkForCloseVirtualizer() error {
 	var err error
-
 	ActiveVMs.Range(func(key, value interface{}) bool {
 		v, ok := value.(Virtualizer)
 		if !ok {
@@ -326,7 +238,17 @@ func (mgr *Manager) Close() error {
 		}
 		return true
 	})
+	return err
+}
 
+// Close loops through the current active vms to close them as the manager is closing.
+func (mgr *Manager) Close() error {
+	var err error
+
+	err = mgr.checkForCloseVirtualizer()
+	if err != nil {
+		return err
+	}
 	err = mgr.database.Close()
 	if err != nil {
 		return err
@@ -486,6 +408,26 @@ func (mgr *Manager) ValidateArgs(name string) error {
 	return palloc.ValidateArgs(data)
 }
 
+func (mgr *Manager) deleteVirtualizerData(tx *sql.Tx, name string) error {
+	s := "DELETE FROM {{.Table}} WHERE {{.Name}}=?"
+	tmpl := template.Must(template.New("virtualizerTableInit").Parse(s))
+	buf := new(bytes.Buffer)
+	err := tmpl.Execute(buf, virtualizerTable)
+	if err != nil {
+		return err
+	}
+	query := buf.String()
+	_, err = tx.Exec(query, name)
+	if err != nil {
+		return err
+	}
+	err = tx.Commit()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 //DeleteVirtualizer removes a virtualizer from the database with the appropriate name
 func (mgr *Manager) DeleteVirtualizer(name string) error {
 	tx, err := mgr.database.Begin()
@@ -494,37 +436,12 @@ func (mgr *Manager) DeleteVirtualizer(name string) error {
 	}
 	defer tx.Rollback()
 
-	s := "SELECT {{.Type}} FROM {{.Table}} WHERE {{.Name}}=?"
-	tmpl := template.Must(template.New("virtualizerTableInit").Parse(s))
-	buf := new(bytes.Buffer)
-	err = tmpl.Execute(buf, virtualizerTable)
-	if err != nil {
-		panic(err)
-	}
-	query := buf.String()
-	row := tx.QueryRow(query, name)
-	var x string
-	err = row.Scan(&x)
-	if err == sql.ErrNoRows {
-		return nil
-	}
+	err = mgr.selectVirtualizerData(tx, name)
 	if err != nil {
 		return err
 	}
 
-	s = "DELETE FROM {{.Table}} WHERE {{.Name}}=?"
-	tmpl = template.Must(template.New("virtualizerTableInit").Parse(s))
-	buf = new(bytes.Buffer)
-	err = tmpl.Execute(buf, virtualizerTable)
-	if err != nil {
-		panic(err)
-	}
-	query = buf.String()
-	_, err = tx.Exec(query, name)
-	if err != nil {
-		return err
-	}
-	err = tx.Commit()
+	err = mgr.deleteVirtualizerData(tx, name)
 	if err != nil {
 		return err
 	}
@@ -537,30 +454,30 @@ func RegisteredVirtualizers() map[string]VirtualizerAllocator {
 	return registeredVirtualizers
 }
 
-// CreateVirtualizer creates a virtualizer from the name, type and data required
-func (mgr *Manager) CreateVirtualizer(name, ptype string, data []byte) error {
+func (mgr *Manager) fetchVirtualizerData(ptype string, data []byte) (*sql.Tx, error) {
 	palloc, ok := registeredVirtualizers[ptype]
 	if !ok {
-		return fmt.Errorf("unrecognized virtualizer type: %s", ptype)
+		return nil, fmt.Errorf("unrecognized virtualizer type: %s", ptype)
 	}
 	err := palloc.ValidateArgs(data)
 	if err != nil {
-		return err
+		return nil, err
 	}
-
 	// add to db
 	tx, err := mgr.database.Begin()
 	if err != nil {
-		return err
+		return nil, err
 	}
-	defer tx.Rollback()
+	return tx, nil
+}
 
+func (mgr *Manager) selectVirtualizerData(tx *sql.Tx, name string) error {
 	s := "SELECT {{.Type}} FROM {{.Table}} WHERE {{.Name}}=?"
 	tmpl := template.Must(template.New("virtualizerTableInit").Parse(s))
 	buf := new(bytes.Buffer)
-	err = tmpl.Execute(buf, virtualizerTable)
+	err := tmpl.Execute(buf, virtualizerTable)
 	if err != nil {
-		panic(err)
+		return err
 	}
 	query := buf.String()
 	row := tx.QueryRow(query, name)
@@ -573,15 +490,18 @@ func (mgr *Manager) CreateVirtualizer(name, ptype string, data []byte) error {
 	if err != sql.ErrNoRows {
 		return err
 	}
+	return nil
+}
 
-	s = "INSERT INTO {{.Table}} ({{.Name}}, {{.Type}}, {{.Data}}) VALUES(?, ?, ?)"
-	tmpl = template.Must(template.New("virtualizerTableInit").Parse(s))
-	buf = new(bytes.Buffer)
-	err = tmpl.Execute(buf, virtualizerTable)
+func insertCreateVirtualizerData(tx *sql.Tx, name string, ptype string, data []byte) error {
+	s := "INSERT INTO {{.Table}} ({{.Name}}, {{.Type}}, {{.Data}}) VALUES(?, ?, ?)"
+	tmpl := template.Must(template.New("virtualizerTableInit").Parse(s))
+	buf := new(bytes.Buffer)
+	err := tmpl.Execute(buf, virtualizerTable)
 	if err != nil {
-		panic(err)
+		return err
 	}
-	query = buf.String()
+	query := buf.String()
 	_, err = tx.Exec(query, name, ptype, data)
 	if err != nil {
 		return err
@@ -591,18 +511,37 @@ func (mgr *Manager) CreateVirtualizer(name, ptype string, data []byte) error {
 	if err != nil {
 		return err
 	}
-
 	return nil
 }
 
-// Prepare calls the prepare function of a virtualizer which sets up the ability to spawn a VM.
-func (mgr *Manager) Prepare(name string, args *PrepareArgs) (*VirtualizeOperation, error) {
+// CreateVirtualizer creates a virtualizer from the name, type and data required
+func (mgr *Manager) CreateVirtualizer(name, ptype string, data []byte) error {
+	tx, err := mgr.fetchVirtualizerData(ptype, data)
+	if err != nil {
+		return err
+	}
+
+	defer tx.Rollback()
+
+	err = mgr.selectVirtualizerData(tx, name)
+	if err != nil {
+		return err
+	}
+
+	err = insertCreateVirtualizerData(tx, name, ptype, data)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (mgr *Manager) prepareVirtualizerData(name string) ([]byte, string, error) {
 	s := "SELECT {{.Type}}, {{.Data}} FROM {{.Table}} WHERE {{.Name}}=?"
 	tmpl := template.Must(template.New("virtualizerTableInit").Parse(s))
 	buf := new(bytes.Buffer)
 	err := tmpl.Execute(buf, virtualizerTable)
 	if err != nil {
-		panic(err)
+		return nil, "", err
 	}
 	query := buf.String()
 	row := mgr.database.QueryRow(query, name)
@@ -610,8 +549,18 @@ func (mgr *Manager) Prepare(name string, args *PrepareArgs) (*VirtualizeOperatio
 	var data []byte
 	err = row.Scan(&ptype, &data)
 	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("no virtualizer named '%s'", name)
+		return nil, "", fmt.Errorf("no virtualizer named '%s'", name)
 	}
+	if err != nil {
+		return nil, "", err
+	}
+	return data, ptype, nil
+}
+
+// Prepare calls the prepare function of a virtualizer which sets up the ability to spawn a VM.
+func (mgr *Manager) Prepare(name string, args *PrepareArgs) (*VirtualizeOperation, error) {
+
+	data, ptype, err := mgr.prepareVirtualizerData(name)
 	if err != nil {
 		return nil, err
 	}
@@ -620,7 +569,6 @@ func (mgr *Manager) Prepare(name string, args *PrepareArgs) (*VirtualizeOperatio
 	if !ok {
 		return nil, fmt.Errorf("virtualizer '%s' has unrecognized virtualizer type: %s", name, ptype)
 	}
-
 	p := palloc.Alloc()
 	err = p.Initialize(data)
 	if err != nil {
@@ -633,247 +581,4 @@ func (mgr *Manager) Prepare(name string, args *PrepareArgs) (*VirtualizeOperatio
 
 	op := p.Prepare(args)
 	return op, nil
-}
-
-// GetExecutable returns the name of the executable for the virtualizer.
-func GetExecutable(virtualizer string) (string, error) {
-	switch virtualizer {
-	case "qemu":
-		return "qemu-system-x86_64", nil
-	case "virtualbox":
-		return "VBoxManage", nil
-	case "vmware":
-		return "vmrun", nil
-	case "firecracker":
-		return "firecracker", nil
-	case "hyperv":
-		return Powershell, nil
-	default:
-		return "", fmt.Errorf("%s is not supported", virtualizer)
-	}
-}
-
-// BindPort attempts to bind ports and if not available will assign a different port.
-func BindPort(netType, protocol, port string) (string, string, error) {
-	var (
-		bind     string
-		netRoute string
-		isBound  bool
-	)
-
-	if netType == "nat" {
-		netRoute = fmt.Sprintf("localhost:%s", port)
-		// log attempting to bind
-		switch protocol {
-		case "udp":
-			addr, err := net.ResolveUDPAddr("udp4", netRoute)
-			if err != nil {
-				return "", netRoute, err
-			}
-			listener, err := net.ListenUDP("udp4", addr)
-			if err == nil {
-				s := strings.Split(listener.LocalAddr().String(), ":")
-				bind = s[len(s)-1]
-				isBound = true
-				listener.Close()
-			}
-		default:
-			listener, err := net.Listen("tcp4", fmt.Sprintf(":%s", port))
-			if err == nil {
-				s := strings.Split(listener.Addr().String(), ":")
-				bind = s[len(s)-1]
-				isBound = true
-				listener.Close()
-			}
-		}
-		if !isBound {
-			// log that it failed to bind netRoute
-			netRoute = "localhost:0"
-			switch protocol {
-			case "udp":
-				addr, err := net.ResolveUDPAddr("udp4", netRoute)
-				if err != nil {
-					return "", netRoute, err
-				}
-				listener, err := net.ListenUDP("udp4", addr)
-				if err == nil {
-					s := strings.Split(listener.LocalAddr().String(), ":")
-					bind = s[len(s)-1]
-					isBound = true
-					netRoute = "localhost:" + bind
-					listener.Close()
-				} else {
-					return "", netRoute, err
-				}
-			default:
-				listener, err := net.Listen("tcp4", netRoute)
-				if err == nil {
-					s := strings.Split(listener.Addr().String(), ":")
-					bind = s[len(s)-1]
-					isBound = true
-					netRoute = "localhost:" + bind
-					listener.Close()
-				} else {
-					return "", netRoute, err
-				}
-			}
-		}
-	}
-	// Bound on address netRoute
-	return bind, netRoute, nil
-}
-
-// CheckNameExistsHyperV checks the hyperv driver to see if a vm with the same name already exists
-func CheckNameExistsHyperV(name string) (bool, error) {
-	command := exec.Command(Powershell, "Get-VM", "|", "Select", "Name")
-	var outB, errB bytes.Buffer
-	command.Stdout = &outB
-	command.Stderr = &errB
-	err := command.Run()
-	if err != nil {
-		return false, err
-	}
-	list := strings.Split(strings.TrimSpace(outB.String()), "----")
-	if len(list) > 1 {
-		vmlist := strings.Split(strings.TrimSpace(list[1]), "\n")
-		for _, vm := range vmlist {
-			if vm == name {
-				return true, nil
-			}
-		}
-	}
-
-	return false, nil
-}
-
-// CheckNameExistsVirtualBox checks the virtualbox list to see if a vm with the same name
-// has already been created
-func CheckNameExistsVirtualBox(name string) (bool, error) {
-
-	command := exec.Command("VBoxManage", "showvminfo", name)
-	var outB, errB bytes.Buffer
-	command.Stdout = &outB
-	command.Stderr = &errB
-
-	err := command.Run()
-	if err != nil {
-		errMsg := strings.Split(fmt.Sprintf("%s", command.Stderr), "\n")[0]
-		if errMsg == fmt.Sprintf("VBoxManage: error: Could not find a registered machine named '%s'", name) {
-			return false, nil
-		}
-		return false, err
-	}
-
-	return true, nil
-}
-
-// HostDevices is a virtualbox only function which returns a list of available host devices
-func HostDevices() ([]string, error) {
-	var hostDevices []string
-	virtualizers, err := Backends()
-	if err != nil {
-		return nil, err
-	}
-
-	vboxInstalled := false
-	for _, v := range virtualizers {
-		if v == "virtualbox" {
-			vboxInstalled = true
-		}
-	}
-
-	if !vboxInstalled {
-		return nil, fmt.Errorf("virtualbox must be installed to run this function")
-	}
-
-	cmd := exec.Command("VBoxManage", "list", "hostonlyifs")
-	b, err := cmd.CombinedOutput()
-	if err != nil {
-		return nil, err
-	}
-
-	lines := strings.Split(fmt.Sprintf("%s", b), "\n")
-	for _, line := range lines {
-		if strings.Contains(line, "Name:") {
-			if strings.TrimSpace(strings.Split(strings.TrimPrefix(line, "Name:"), "VBoxNetworkName:")[0]) != "" {
-				hostDevices = append(hostDevices, strings.TrimSpace(strings.Split(strings.TrimPrefix(line, "Name:"), "VBoxNetworkName:")[0]))
-
-			}
-		}
-	}
-	return hostDevices, nil
-}
-
-// VSwitches is a windows only function which returns the virtual switches hyper-v responds with
-func VSwitches() ([]string, error) {
-	virtualizers, err := Backends()
-	if err != nil {
-		return nil, err
-	}
-
-	hyperVInstalled := false
-	for _, v := range virtualizers {
-		if v == "hyperv" {
-			hyperVInstalled = true
-		}
-	}
-	if !hyperVInstalled {
-		return nil, fmt.Errorf("hyperv must be available to run this function")
-	}
-
-	cmd := exec.Command(Powershell, "Get-VMSwitch", "|", "Select", "Name")
-	b, err := cmd.CombinedOutput()
-	if err != nil {
-		if !strings.Contains(err.Error(), "exit status 1") {
-			return nil, err
-		} else {
-			return nil, fmt.Errorf("%s", string(b))
-		}
-	}
-
-	lines := strings.Split(fmt.Sprintf("%s", b), "----")
-	if len(lines) >= 2 {
-		split := strings.Split(strings.TrimSpace(lines[1]), "\n")
-		return split, nil
-	}
-
-	return nil, fmt.Errorf("no virtual switches are created in the hyperv manager")
-
-}
-
-// BridgedDevices is a virtualbox only function which returns an array of available bridged devices
-func BridgedDevices() ([]string, error) {
-	var bridgedDevices []string
-	virtualizers, err := Backends()
-	if err != nil {
-		return nil, err
-	}
-	vboxInstalled := false
-	for _, v := range virtualizers {
-		if v == "virtualbox" {
-			vboxInstalled = true
-		}
-	}
-	if !vboxInstalled {
-		return nil, fmt.Errorf("virtualbox must be installed to run this function")
-	}
-	cmd := exec.Command("VBoxManage", "list", "bridgedifs")
-	b, err := cmd.CombinedOutput()
-	if err != nil {
-		return nil, err
-	}
-
-	check := make(map[string]int)
-	lines := strings.Split(fmt.Sprintf("%s", b), "\n")
-	for _, line := range lines {
-		if strings.HasPrefix(line, "Name:") {
-			device := strings.TrimSpace(strings.Split(line, "Name:")[1])
-			check[device] = 1
-		}
-	}
-	for device := range check {
-		bridgedDevices = append(bridgedDevices, device)
-	}
-
-	return bridgedDevices, nil
 }

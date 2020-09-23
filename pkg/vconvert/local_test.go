@@ -13,6 +13,7 @@ import (
 // ctr images pull docker.io/library/hello-world:latest
 // the user needs to be in the docker and root group
 // sudo usermod -a -G root,docker USER
+
 func TestDownloadInformationDocker(t *testing.T) {
 
 	r, _ := NewContainerConverter("local.docker/hello-world", "", nil)

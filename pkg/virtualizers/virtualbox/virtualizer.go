@@ -600,7 +600,6 @@ func (v *Virtualizer) gatherNetworkDetails() error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("ROUTES: %+v\n", v.routes)
 	return nil
 }
 

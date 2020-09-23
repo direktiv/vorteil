@@ -11,15 +11,19 @@ import (
 	"github.com/vorteil/vorteil/pkg/vcfg"
 	"github.com/vorteil/vorteil/pkg/vhd"
 	"github.com/vorteil/vorteil/pkg/vimg"
+	"github.com/vorteil/vorteil/pkg/vio"
 	"github.com/vorteil/vorteil/pkg/vmdk"
 	"github.com/vorteil/vorteil/pkg/vpkg"
 	"github.com/vorteil/vorteil/pkg/xva"
 )
 
+// KernelOptions contains all kernel configuration settings.
 type KernelOptions struct {
 	Shell bool
 }
 
+// BuildArgs conains all arguments a caller can use to customize the behaviour
+// of the Build function.
 type BuildArgs struct {
 	PackageReader vpkg.Reader
 	Format        Format
@@ -28,34 +32,38 @@ type BuildArgs struct {
 	Logger        elog.View
 }
 
-func Build(ctx context.Context, w io.WriteSeeker, args *BuildArgs) error {
-
-	defaultMTU := uint(1500)
-
-	switch args.Format {
-	case RAWFormat:
-	case VMDKFormat:
-	case VMDKSparseFormat:
-	case VMDKStreamOptimizedFormat:
-	case GCPFArchiveFormat:
-		defaultMTU = 1460
-	case XVAFormat:
-	case VHDFormat:
-	case VHDFixedFormat:
-	case VHDDynamicFormat:
-	default:
-		return fmt.Errorf("build function does not support this disk format: '%s'", args.Format)
+func negotiateSize(ctx context.Context, vimgBuilder *vimg.Builder, cfg *vcfg.VCFG, args *BuildArgs) error {
+	size := vimgBuilder.MinimumSize()
+	if !cfg.VM.DiskSize.IsDelta() {
+		if size > int64(cfg.VM.DiskSize.Units(vcfg.Byte)) {
+			delta := vcfg.Bytes(size) - cfg.VM.DiskSize
+			delta.Align(vcfg.MiB)
+			return fmt.Errorf("specified disk size %s insufficient to contain disk contents", delta)
+		}
+		size = int64(cfg.VM.DiskSize.Units(vcfg.Byte))
 	}
 
-	log := args.Logger
+	alignment := args.SizeAlign
+	if alignment == 0 {
+		alignment = 1
+	}
+	alignment = lcm(args.Format.Alignment(), alignment)
+	if size%args.Format.Alignment() != 0 {
+		size = (size/alignment + 1) * alignment
+	}
 
-	vf := args.PackageReader.VCFG()
-	defer vf.Close()
-	cfg, err := vcfg.LoadFile(vf)
+	err := vimgBuilder.Prebuild(ctx, size)
 	if err != nil {
 		return err
 	}
-	vf.Close()
+
+	return nil
+
+}
+
+func build(ctx context.Context, w io.WriteSeeker, cfg *vcfg.VCFG, args *BuildArgs) error {
+
+	log := args.Logger
 
 	vimgBuilder, err := vimg.NewBuilder(ctx, &vimg.BuilderArgs{
 		Kernel: vimg.KernelOptions{
@@ -73,29 +81,9 @@ func Build(ctx context.Context, w io.WriteSeeker, args *BuildArgs) error {
 	}
 	defer vimgBuilder.Close()
 
-	vimgBuilder.SetDefaultMTU(defaultMTU)
+	vimgBuilder.SetDefaultMTU(args.Format.DefaultMTU())
 
-	size := vimgBuilder.MinimumSize()
-	if !cfg.VM.DiskSize.IsDelta() {
-		if size > int64(cfg.VM.DiskSize.Units(vcfg.Byte)) {
-			delta := vcfg.Bytes(size) - cfg.VM.DiskSize
-			delta.Align(vcfg.MiB)
-			return fmt.Errorf("specified disk size %s insufficient to contain disk contents", delta)
-		} else {
-			size = int64(cfg.VM.DiskSize.Units(vcfg.Byte))
-		}
-	}
-
-	alignment := args.SizeAlign
-	if alignment == 0 {
-		alignment = 1
-	}
-	alignment = lcm(args.Format.Alignment(), alignment)
-	if size%args.Format.Alignment() != 0 {
-		size = (size/alignment + 1) * alignment
-	}
-
-	err = vimgBuilder.Prebuild(ctx, size)
+	err = negotiateSize(ctx, vimgBuilder, cfg, args)
 	if err != nil {
 		return err
 	}
@@ -106,6 +94,27 @@ func Build(ctx context.Context, w io.WriteSeeker, args *BuildArgs) error {
 	}
 
 	return nil
+
+}
+
+// Build writes a virtual disk image to w using the provided args.
+func Build(ctx context.Context, w io.WriteSeeker, args *BuildArgs) error {
+
+	vf := args.PackageReader.VCFG()
+	defer vf.Close()
+	cfg, err := vcfg.LoadFile(vf)
+	if err != nil {
+		return err
+	}
+	_ = vf.Close()
+
+	err = build(ctx, w, cfg, args)
+	if err != nil {
+		return err
+	}
+
+	return nil
+
 }
 
 // greatest common divisor (GCD) via Euclidean algorithm
@@ -129,106 +138,30 @@ func lcm(a, b int64, integers ...int64) int64 {
 	return result
 }
 
-func buildRAW(ctx context.Context, w io.WriteSeeker, b *vimg.Builder, cfg *vcfg.VCFG) error {
-	err := b.Build(ctx, w)
-	if err != nil {
-		return err
-	}
-	return nil
+func buildRAW(w io.WriteSeeker, b *vimg.Builder, cfg *vcfg.VCFG) (io.WriteSeeker, error) {
+	return vio.WriteSeeker(w)
 }
 
-func buildStreamOptimizedVMDK(ctx context.Context, w io.WriteSeeker, b *vimg.Builder, cfg *vcfg.VCFG) error {
-
-	vw, err := vmdk.NewStreamOptimizedWriter(w, b)
-	if err != nil {
-		return err
-	}
-	defer vw.Close()
-
-	err = b.Build(ctx, vw)
-	if err != nil {
-		return err
-	}
-	return nil
-
+func buildStreamOptimizedVMDK(w io.WriteSeeker, b *vimg.Builder, cfg *vcfg.VCFG) (io.WriteSeeker, error) {
+	return vmdk.NewStreamOptimizedWriter(w, b)
 }
 
-func buildSparseVMDK(ctx context.Context, w io.WriteSeeker, b *vimg.Builder, cfg *vcfg.VCFG) error {
-
-	vw, err := vmdk.NewSparseWriter(w, b)
-	if err != nil {
-		return err
-	}
-	defer vw.Close()
-
-	err = b.Build(ctx, vw)
-	if err != nil {
-		return err
-	}
-	return nil
-
+func buildSparseVMDK(w io.WriteSeeker, b *vimg.Builder, cfg *vcfg.VCFG) (io.WriteSeeker, error) {
+	return vmdk.NewSparseWriter(w, b)
 }
 
-func buildGCPArchive(ctx context.Context, w io.WriteSeeker, b *vimg.Builder, cfg *vcfg.VCFG) error {
-
-	gw, err := gcparchive.NewWriter(w, b)
-	if err != nil {
-		return err
-	}
-	defer gw.Close()
-
-	err = b.Build(ctx, gw)
-	if err != nil {
-		return err
-	}
-	return nil
-
+func buildGCPArchive(w io.WriteSeeker, b *vimg.Builder, cfg *vcfg.VCFG) (io.WriteSeeker, error) {
+	return gcparchive.NewWriter(w, b)
 }
 
-func buildXVA(ctx context.Context, w io.WriteSeeker, b *vimg.Builder, cfg *vcfg.VCFG) error {
-
-	gw, err := xva.NewWriter(w, b, cfg)
-	if err != nil {
-		return err
-	}
-	defer gw.Close()
-
-	err = b.Build(ctx, gw)
-	if err != nil {
-		return err
-	}
-	return nil
-
+func buildXVA(w io.WriteSeeker, b *vimg.Builder, cfg *vcfg.VCFG) (io.WriteSeeker, error) {
+	return xva.NewWriter(w, b, cfg)
 }
 
-func buildFixedVHD(ctx context.Context, w io.WriteSeeker, b *vimg.Builder, cfg *vcfg.VCFG) error {
-
-	vw, err := vhd.NewFixedWriter(w, b)
-	if err != nil {
-		return err
-	}
-	defer vw.Close()
-
-	err = b.Build(ctx, vw)
-	if err != nil {
-		return err
-	}
-	return nil
-
+func buildFixedVHD(w io.WriteSeeker, b *vimg.Builder, cfg *vcfg.VCFG) (io.WriteSeeker, error) {
+	return vhd.NewFixedWriter(w, b)
 }
 
-func buildDynamicVHD(ctx context.Context, w io.WriteSeeker, b *vimg.Builder, cfg *vcfg.VCFG) error {
-
-	vw, err := vhd.NewDynamicWriter(w, b)
-	if err != nil {
-		return err
-	}
-	defer vw.Close()
-
-	err = b.Build(ctx, vw)
-	if err != nil {
-		return err
-	}
-	return nil
-
+func buildDynamicVHD(w io.WriteSeeker, b *vimg.Builder, cfg *vcfg.VCFG) (io.WriteSeeker, error) {
+	return vhd.NewDynamicWriter(w, b)
 }

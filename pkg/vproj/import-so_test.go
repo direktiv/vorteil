@@ -1,210 +1,195 @@
 package vproj
 
-import (
-	"debug/elf"
-	"fmt"
-	"github.com/vorteil/vorteil/pkg/elog"
-	"io"
-	"io/ioutil"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"testing"
+// func TestSharedObjectInitializationInvalid(t *testing.T) {
+// 	isoOp, err := NewImportSharedObject("/tmp/no-existent-Path", true, &elog.CLI{})
+// 	assert.Error(t, err)
+// 	assert.Nil(t, isoOp)
+// }
 
-	"github.com/stretchr/testify/assert"
-)
+// func TestSharedObjectInitializationValid(t *testing.T) {
+// 	// SETUP
+// 	dir, err := ioutil.TempDir(os.TempDir(), "vorteil-iso-test")
+// 	assert.NoError(t, err, "Could not create tmp dir for testing")
+// 	defer os.RemoveAll(dir)
+// 	err = copyGoBinaryToDir(dir)
+// 	assert.NoError(t, err, "Could not copy Go binary to Temp Path: "+dir)
 
-func TestSharedObjectInitializationInvalid(t *testing.T) {
-	isoOp, err := NewImportSharedObject("/tmp/no-existent-Path", true, &elog.CLI{})
-	assert.Error(t, err)
-	assert.Nil(t, isoOp)
-}
+// 	isoOp, err := NewImportSharedObject(dir, true, &elog.CLI{})
+// 	assert.NoError(t, err)
+// 	assert.NotNil(t, isoOp)
+// }
 
-func TestSharedObjectInitializationValid(t *testing.T) {
-	// SETUP
-	dir, err := ioutil.TempDir(os.TempDir(), "vorteil-iso-test")
-	assert.NoError(t, err, "Could not create tmp dir for testing")
-	defer os.RemoveAll(dir)
-	err = copyGoBinaryToDir(dir)
-	assert.NoError(t, err, "Could not copy Go binary to Temp Path: "+dir)
+// func TestSharedObjectInitializationStart(t *testing.T) {
+// 	// SETUP
+// 	dirExclude, err := ioutil.TempDir(os.TempDir(), "vorteil-iso-test")
+// 	assert.NoError(t, err, "Could not create tmp dir for testing")
+// 	defer os.RemoveAll(dirExclude)
+// 	err = copyGoBinaryToDir(dirExclude)
+// 	assert.NoError(t, err, "Could not copy Go binary to Temp Path: "+dirExclude)
 
-	isoOp, err := NewImportSharedObject(dir, true, &elog.CLI{})
-	assert.NoError(t, err)
-	assert.NotNil(t, isoOp)
-}
+// 	dir, err := ioutil.TempDir(os.TempDir(), "vorteil-iso-test")
+// 	assert.NoError(t, err, "Could not create tmp dir for testing")
+// 	defer os.RemoveAll(dir)
+// 	err = copyGoBinaryToDir(dir)
+// 	assert.NoError(t, err, "Could not copy Go binary to Temp Path: "+dir)
 
-func TestSharedObjectInitializationStart(t *testing.T) {
-	// SETUP
-	dirExclude, err := ioutil.TempDir(os.TempDir(), "vorteil-iso-test")
-	assert.NoError(t, err, "Could not create tmp dir for testing")
-	defer os.RemoveAll(dirExclude)
-	err = copyGoBinaryToDir(dirExclude)
-	assert.NoError(t, err, "Could not copy Go binary to Temp Path: "+dirExclude)
+// 	isoOp, err := NewImportSharedObject(dir, false, &elog.CLI{})
+// 	assert.NoError(t, err)
+// 	assert.NotNil(t, isoOp)
 
-	dir, err := ioutil.TempDir(os.TempDir(), "vorteil-iso-test")
-	assert.NoError(t, err, "Could not create tmp dir for testing")
-	defer os.RemoveAll(dir)
-	err = copyGoBinaryToDir(dir)
-	assert.NoError(t, err, "Could not copy Go binary to Temp Path: "+dir)
+// 	err = isoOp.Start()
+// 	assert.NoError(t, err)
 
-	isoOp, err := NewImportSharedObject(dir, false, &elog.CLI{})
-	assert.NoError(t, err)
-	assert.NotNil(t, isoOp)
+// 	isoOpExclude, err := NewImportSharedObject(dirExclude, true, &elog.CLI{})
+// 	assert.NoError(t, err)
+// 	assert.NotNil(t, isoOpExclude)
 
-	err = isoOp.Start()
-	assert.NoError(t, err)
+// 	err = isoOpExclude.Start()
+// 	assert.NoError(t, err)
+// }
 
-	isoOpExclude, err := NewImportSharedObject(dirExclude, true, &elog.CLI{})
-	assert.NoError(t, err)
-	assert.NotNil(t, isoOpExclude)
+// func TestSharedObjectFindLib(t *testing.T) {
+// 	dir, err := ioutil.TempDir(os.TempDir(), "vorteil-iso-test")
+// 	assert.NoError(t, err, "Could not create tmp dir for testing")
+// 	defer os.RemoveAll(dir)
+// 	err = copyGoBinaryToDir(dir)
+// 	assert.NoError(t, err, "Could not copy Go binary to Temp Path: "+dir)
 
-	err = isoOpExclude.Start()
-	assert.NoError(t, err)
-}
+// 	isoOp, err := NewImportSharedObject(dir, true, &elog.CLI{})
+// 	assert.NoError(t, err)
+// 	assert.NotNil(t, isoOp)
 
-func TestSharedObjectFindLib(t *testing.T) {
-	dir, err := ioutil.TempDir(os.TempDir(), "vorteil-iso-test")
-	assert.NoError(t, err, "Could not create tmp dir for testing")
-	defer os.RemoveAll(dir)
-	err = copyGoBinaryToDir(dir)
-	assert.NoError(t, err, "Could not copy Go binary to Temp Path: "+dir)
+// 	goPath, err := exec.LookPath("go")
+// 	assert.NoError(t, err, "Could not locate Go binary on system")
 
-	isoOp, err := NewImportSharedObject(dir, true, &elog.CLI{})
-	assert.NoError(t, err)
-	assert.NotNil(t, isoOp)
+// 	eGo, err := elf.Open(goPath)
+// 	assert.NoError(t, err, "Could not open Go binary on system")
+// 	defer eGo.Close()
 
-	goPath, err := exec.LookPath("go")
-	assert.NoError(t, err, "Could not locate Go binary on system")
+// 	goDeps, err := eGo.ImportedLibraries()
+// 	assert.NoError(t, err, "Could not get Go binary dependencies")
+// 	assert.Greater(t, len(goDeps), 0, "Go binary has no dependencies")
 
-	eGo, err := elf.Open(goPath)
-	assert.NoError(t, err, "Could not open Go binary on system")
-	defer eGo.Close()
+// 	for _, goDep := range goDeps {
+// 		path, err := isoOp.findLib(goDep, eGo.Class)
+// 		assert.NotEmpty(t, path)
+// 		assert.NoError(t, err)
+// 	}
 
-	goDeps, err := eGo.ImportedLibraries()
-	assert.NoError(t, err, "Could not get Go binary dependencies")
-	assert.Greater(t, len(goDeps), 0, "Go binary has no dependencies")
+// 	// Invalid Lib
+// 	path, err := isoOp.findLib("FAKE.LIB.NAME", elf.ELFCLASS64)
+// 	assert.Empty(t, path)
+// 	assert.Error(t, err)
+// }
 
+// func TestSharedObjectReadLink(t *testing.T) {
+// 	// SETUP
+// 	emptyFile, err := ioutil.TempFile(os.TempDir(), "vorteil-iso-test")
+// 	assert.NoError(t, err, "Could not create tmp file for testing")
+// 	defer os.Remove(emptyFile.Name())
 
-	for _, goDep := range goDeps {
-		path, err := isoOp.findLib(goDep, eGo.Class)
-		assert.NotEmpty(t, path)
-		assert.NoError(t, err)
-	}
+// 	err = os.Symlink(emptyFile.Name(), emptyFile.Name()+".Symlink")
+// 	assert.NoError(t, err, "Could not create symlink: "+emptyFile.Name()+".Symlink")
 
-	// Invalid Lib
-	path, err := isoOp.findLib("FAKE.LIB.NAME", elf.ELFCLASS64)
-	assert.Empty(t, path)
-	assert.Error(t, err)
-}
+// 	// Invalid
+// 	path, err := ReadLink(emptyFile.Name())
+// 	assert.Empty(t, path)
+// 	assert.Error(t, err)
 
-func TestSharedObjectReadLink(t *testing.T) {
-	// SETUP
-	emptyFile, err := ioutil.TempFile(os.TempDir(), "vorteil-iso-test")
-	assert.NoError(t, err, "Could not create tmp file for testing")
-	defer os.Remove(emptyFile.Name())
+// 	// Valid
+// 	targetPath, err := ReadLink(emptyFile.Name() + ".Symlink")
+// 	assert.Equal(t, targetPath, emptyFile.Name())
+// 	assert.NoError(t, err)
 
-	err = os.Symlink(emptyFile.Name(), emptyFile.Name()+".Symlink")
-	assert.NoError(t, err, "Could not create symlink: "+emptyFile.Name()+".Symlink")
+// }
 
-	// Invalid
-	path, err := ReadLink(emptyFile.Name())
-	assert.Empty(t, path)
-	assert.Error(t, err)
+// func TestSharedObjectFindDeps(t *testing.T) {
+// 	// SETUP
+// 	emptyFile, err := ioutil.TempFile(os.TempDir(), "vorteil-iso-test")
+// 	assert.NoError(t, err, "Could not create tmp file for testing")
+// 	defer os.Remove(emptyFile.Name())
 
-	// Valid
-	targetPath, err := ReadLink(emptyFile.Name() + ".Symlink")
-	assert.Equal(t, targetPath, emptyFile.Name())
-	assert.NoError(t, err)
+// 	dir, err := ioutil.TempDir(os.TempDir(), "vorteil-iso-test")
+// 	assert.NoError(t, err, "Could not create tmp dir for testing")
+// 	defer os.RemoveAll(dir)
+// 	err = copyGoBinaryToDir(dir)
+// 	assert.NoError(t, err, "Could not copy Go binary to Temp Path: "+dir)
 
-}
+// 	goPath, err := exec.LookPath("go")
+// 	assert.NoError(t, err, "Could not locate Go binary on system")
 
-func TestSharedObjectFindDeps(t *testing.T) {
-	// SETUP
-	emptyFile, err := ioutil.TempFile(os.TempDir(), "vorteil-iso-test")
-	assert.NoError(t, err, "Could not create tmp file for testing")
-	defer os.Remove(emptyFile.Name())
+// 	eGo, err := elf.Open(goPath)
+// 	assert.NoError(t, err, "Could not open Go binary on system")
+// 	defer eGo.Close()
 
-	dir, err := ioutil.TempDir(os.TempDir(), "vorteil-iso-test")
-	assert.NoError(t, err, "Could not create tmp dir for testing")
-	defer os.RemoveAll(dir)
-	err = copyGoBinaryToDir(dir)
-	assert.NoError(t, err, "Could not copy Go binary to Temp Path: "+dir)
+// 	goDeps, err := eGo.ImportedLibraries()
+// 	assert.NoError(t, err, "Could not get Go binary dependencies")
+// 	assert.Greater(t, len(goDeps), 0, "Go binary has no dependencies")
 
-	goPath, err := exec.LookPath("go")
-	assert.NoError(t, err, "Could not locate Go binary on system")
+// 	isoOp, err := NewImportSharedObject(dir, true, &elog.CLI{})
+// 	assert.NoError(t, err)
+// 	assert.NotNil(t, isoOp)
 
-	eGo, err := elf.Open(goPath)
-	assert.NoError(t, err, "Could not open Go binary on system")
-	defer eGo.Close()
+// 	soPath, err := isoOp.findLib(goDeps[0], eGo.Class)
+// 	assert.NoError(t, err, "Could not find path of shared object: "+goDeps[0])
 
-	goDeps, err := eGo.ImportedLibraries()
-	assert.NoError(t, err, "Could not get Go binary dependencies")
-	assert.Greater(t, len(goDeps), 0, "Go binary has no dependencies")
+// 	eSOPath, err := elf.Open(soPath)
+// 	assert.NoError(t, err)
+// 	defer eSOPath.Close()
 
-	isoOp, err := NewImportSharedObject(dir, true, &elog.CLI{})
-	assert.NoError(t, err)
-	assert.NotNil(t, isoOp)
+// 	soDeps, err := eSOPath.ImportedLibraries()
+// 	assert.NoError(t, err)
+// 	assert.Greater(t, len(soDeps), 0)
 
-	soPath, err := isoOp.findLib(goDeps[0], eGo.Class)
-	assert.NoError(t, err, "Could not find path of shared object: "+goDeps[0])
+// 	isoOperationSODeps, _, err := isoOp.listDependencies(soPath)
+// 	assert.NoError(t, err)
 
-	eSOPath, err := elf.Open(soPath)
-	assert.NoError(t, err)
-	defer eSOPath.Close()
+// 	for _, isoDep := range isoOperationSODeps {
+// 		var found bool
+// 		var isoDepName = filepath.Base(isoDep)
 
-	soDeps, err := eSOPath.ImportedLibraries()
-	assert.NoError(t, err)
-	assert.Greater(t, len(soDeps), 0)
+// 		// Check if Shared object found with listDependencies exists in slice of shared objects found with ImportedLibraries()
+// 		for _, soDep := range soDeps {
+// 			if isoDepName == soDep {
+// 				found = true
+// 				break
+// 			}
+// 		}
 
-	isoOperationSODeps, _, err := isoOp.listDependencies(soPath)
-	assert.NoError(t, err)
+// 		assert.True(t, found, fmt.Sprintf("Shared Object %s was missed by listDependencies function", isoDep))
+// 	}
 
-	for _, isoDep := range isoOperationSODeps {
-		var found bool
-		var isoDepName = filepath.Base(isoDep)
+// 	// Invalid Deps
+// 	_, _, err = isoOp.listDependencies("/FAKE/PATH/TO/NOTHING")
+// 	assert.Error(t, err)
 
-		// Check if Shared object found with listDependencies exists in slice of shared objects found with ImportedLibraries()
-		for _, soDep := range soDeps {
-			if isoDepName == soDep {
-				found = true
-				break
-			}
-		}
+// 	// No Deps
+// 	noDeps, _, err := isoOp.listDependencies(emptyFile.Name())
+// 	assert.Empty(t, noDeps)
+// 	assert.NoError(t, err)
+// }
 
-		assert.True(t, found, fmt.Sprintf("Shared Object %s was missed by listDependencies function", isoDep))
-	}
+// func copyGoBinaryToDir(dstDir string) error {
+// 	goPath, err := exec.LookPath("go")
+// 	if err != nil {
+// 		return err
+// 	}
 
-	// Invalid Deps
-	_, _, err = isoOp.listDependencies("/FAKE/PATH/TO/NOTHING")
-	assert.Error(t, err)
+// 	in, err := os.Open(goPath)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	defer in.Close()
 
-	// No Deps
-	noDeps, _, err := isoOp.listDependencies(emptyFile.Name())
-	assert.Empty(t, noDeps)
-	assert.NoError(t, err)
-}
+// 	out, err := os.Create(filepath.Join(dstDir, "go"))
+// 	if err != nil {
+// 		return err
+// 	}
+// 	defer out.Close()
 
-func copyGoBinaryToDir(dstDir string) error {
-	goPath, err := exec.LookPath("go")
-	if err != nil {
-		return err
-	}
-
-	in, err := os.Open(goPath)
-	if err != nil {
-		return err
-	}
-	defer in.Close()
-
-	out, err := os.Create(filepath.Join(dstDir, "go"))
-	if err != nil {
-		return err
-	}
-	defer out.Close()
-
-	_, err = io.Copy(out, in)
-	if err != nil {
-		return err
-	}
-	return out.Close()
-}
+// 	_, err = io.Copy(out, in)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	return out.Close()
+// }

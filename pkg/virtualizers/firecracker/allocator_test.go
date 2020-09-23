@@ -1,7 +1,6 @@
 package firecracker
 
 import (
-	"reflect"
 	"testing"
 
 	"github.com/vorteil/vorteil/pkg/vcfg"
@@ -41,11 +40,11 @@ func TestDiskFormat(t *testing.T) {
 	}
 }
 
-func TestIsAvailable(t *testing.T) {
-	available := Allocator.IsAvailable()
+// func TestIsAvailable(t *testing.T) {
+// 	available := Allocator.IsAvailable()
 
-	tt := reflect.TypeOf(available)
-	if tt != reflect.TypeOf(true) {
-		t.Errorf("Is available didn't return a 'bool' but returned '%s'", tt)
-	}
-}
+// 	tt := reflect.TypeOf(available)
+// 	if tt != reflect.TypeOf(true) {
+// 		t.Errorf("Is available didn't return a 'bool' but returned '%s'", tt)
+// 	}
+// }

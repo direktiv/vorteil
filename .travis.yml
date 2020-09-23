@@ -5,18 +5,84 @@ language: go
 go:
   - 1.15
 
-before_install:
-  - sudo apt-get -y install libseccomp-dev
-  - go get -t -v ./...
+services:
+  - docker
 
-before_script:
-  - curl -L https://codeclimate.com/downloads/test-reporter/test-reporter-latest-linux-amd64 > ./cc-test-reporter
-  - chmod +x ./cc-test-reporter
-  - ./cc-test-reporter before-build
-
-script:
-  - go build github.com/vorteil/vorteil/cmd/vorteil
-  - go test -coverprofile c.out ./...
-
-after_success:
-  - ./cc-test-reporter after-build --exit-code $TRAVIS_TEST_RESULT
+jobs:
+  include:
+    - stage: release
+      os: linux
+      dist: bionic
+      before_install:
+        - sudo apt-get -y install libseccomp-dev
+        - go get -t -v ./...
+      before_script:
+        - curl -L https://codeclimate.com/downloads/test-reporter/test-reporter-latest-linux-amd64 > ./cc-test-reporter
+        - chmod +x ./cc-test-reporter
+        - ./cc-test-reporter before-build
+      script: 
+        - if [ ! -z "$TRAVIS_TAG" ]; then export BUILD_TAG=$TRAVIS_TAG; else export BUILD_TAG=0.0.0; fi;
+        - export BUILD_DATE=$(date -R)
+        - export BUILD_REF=$(git rev-parse --short HEAD)
+        - echo "$BUILD_TAG-$BUILD_REF ($BUILD_DATE)"
+        - docker pull hello-world
+        - sudo apt install containerd
+        - sudo ctr images pull docker.io/library/hello-world:latest
+        - sudo chmod 0777 /run/containerd/containerd.sock
+        - go test -timeout 30s -coverprofile c.out ./...
+        - export LDFLAGS="-X main.release=$BUILD_TAG -X main.commit=$BUILD_REF -X 'main.date=$BUILD_DATE'"
+        - echo $LDFLAGS
+        - go build -o vorteil -ldflags "$LDFLAGS" github.com/vorteil/vorteil/cmd/vorteil 
+        - GOOS=windows go build -o vorteil.exe -ldflags "$LDFLAGS" github.com/vorteil/vorteil/cmd/vorteil
+        - zip vorteil_windows-x86.zip vorteil.exe
+        - tar -zcvf vorteil_linux-x86.tar.gz vorteil
+      after_success:
+        - ./cc-test-reporter after-build --exit-code $TRAVIS_TEST_RESULT -r $CC_TEST_REPORTER_ID
+      deploy:
+        provider: releases
+        api_key: $GTOKEN
+        file:
+          - vorteil_windows-x86.zip
+          - vorteil_linux-x86.tar.gz
+        skip_cleanup: true
+        draft: true
+        on:
+          tags: true      
+    - stage: release
+      os: osx
+      osx_image: "xcode11.3"
+      before_install:
+        - go get -t -v ./...
+      before_script:
+        - if [ "$TRAVIS_EVENT_TYPE" != "pull_request" ] && [ ! -z "$TRAVIS_TAG" ]; then export KEY_CHAIN=build.keychain; fi;
+        - if [ "$TRAVIS_EVENT_TYPE" != "pull_request" ] && [ ! -z "$TRAVIS_TAG" ]; then export CERTIFICATE_P12=certificate.p12; fi;
+        - if [ "$TRAVIS_EVENT_TYPE" != "pull_request" ] && [ ! -z "$TRAVIS_TAG" ]; then echo $OSX_P12_CERT | base64 --decode > $CERTIFICATE_P12; fi;
+        - if [ "$TRAVIS_EVENT_TYPE" != "pull_request" ] && [ ! -z "$TRAVIS_TAG" ]; then security create-keychain -p travis $KEY_CHAIN; fi;
+        - if [ "$TRAVIS_EVENT_TYPE" != "pull_request" ] && [ ! -z "$TRAVIS_TAG" ]; then security default-keychain -s $KEY_CHAIN; fi;
+        - if [ "$TRAVIS_EVENT_TYPE" != "pull_request" ] && [ ! -z "$TRAVIS_TAG" ]; then security unlock-keychain -p travis $KEY_CHAIN; fi;
+        - if [ "$TRAVIS_EVENT_TYPE" != "pull_request" ] && [ ! -z "$TRAVIS_TAG" ]; then security import $CERTIFICATE_P12 -k $KEY_CHAIN -P $OSX_P12_PW -T /usr/bin/codesign; fi;
+        - |-
+          if [ "$TRAVIS_EVENT_TYPE" != "pull_request" ] && [ ! -z "$TRAVIS_TAG" ]; then security set-key-partition-list -S apple-tool:,apple: -s -k travis $KEY_CHAIN; fi;
+        - if [ "$TRAVIS_EVENT_TYPE" != "pull_request" ] && [ ! -z "$TRAVIS_TAG" ]; then rm -fr *.p12; fi;
+      script:
+        - if [ ! -z "$TRAVIS_TAG" ]; then export BUILD_TAG=$TRAVIS_TAG; else export BUILD_TAG=0.0.0; fi;
+        - export BUILD_DATE=$(date '+%a, %d %b %Y %H:%M:%S %z')
+        - export BUILD_REF=$(git rev-parse --short HEAD)
+        - export LDFLAGS="-X main.release=$BUILD_TAG -X main.commit=$BUILD_REF -X 'main.date=$BUILD_DATE'"
+        - echo $LDFLAGS
+        - go build -o vorteil -ldflags "$LDFLAGS" github.com/vorteil/vorteil/cmd/vorteil
+        - if [ "$TRAVIS_EVENT_TYPE" != "pull_request" ] && [ ! -z "$TRAVIS_TAG" ]; then codesign --sign "$OSX_APP_SIGN_ID" -v --timestamp --options runtime vorteil; fi;
+        - mkdir -p build && mv vorteil build/
+        - hdiutil create ./vorteil_darwin-x86.dmg -ov -volname "Vorteil CLI" -fs HFS+ -srcfolder ./build/
+        - if [ "$TRAVIS_EVENT_TYPE" != "pull_request" ] && [ ! -z "$TRAVIS_TAG" ]; then codesign --force --deep --sign "$OSX_APP_SIGN_ID" -v --timestamp --options runtime vorteil_darwin-x86.dmg; fi;
+        - if [ "$TRAVIS_EVENT_TYPE" != "pull_request" ] && [ ! -z "$TRAVIS_TAG" ]; then xcrun altool --notarize-app --file $(pwd)/vorteil_darwin-x86.dmg --username $OSX_NOTARIZE_USERNAME --primary-bundle-id com.vorteil.cli -p $OSX_NOTARIZE_PW -- >> /dev/null; fi;
+        - if [ "$TRAVIS_EVENT_TYPE" != "pull_request" ] && [ ! -z "$TRAVIS_TAG" ]; then for ((i=1;i<=30;i+=1)); do xcrun stapler staple $(pwd)/vorteil_darwin-x86.dmg >> /dev/null; if [ $? = 65 ]; then echo "Waiting for notarization to complete..." && sleep 10; fi; done; fi;
+      deploy:
+        provider: releases
+        api_key: $GTOKEN
+        file:
+          - vorteil_darwin-x86.dmg
+        skip_cleanup: true
+        draft: true
+        on: 
+          tags: true

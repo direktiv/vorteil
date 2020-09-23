@@ -2,311 +2,183 @@ package main
 
 import (
 	"bufio"
-	"context"
-	"errors"
 	"fmt"
-	"io/ioutil"
+	"net/url"
 	"os"
 	"os/exec"
 	"os/signal"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"syscall"
 	"time"
 
 	isatty "github.com/mattn/go-isatty"
 	"github.com/mitchellh/go-homedir"
+	"github.com/spf13/cobra"
 	"github.com/thanhpk/randstr"
 	"github.com/vorteil/vorteil/pkg/vcfg"
-	"github.com/vorteil/vorteil/pkg/vdisk"
 	"github.com/vorteil/vorteil/pkg/virtualizers"
 	"github.com/vorteil/vorteil/pkg/virtualizers/firecracker"
-	"github.com/vorteil/vorteil/pkg/virtualizers/hyperv"
-	"github.com/vorteil/vorteil/pkg/virtualizers/qemu"
 	"github.com/vorteil/vorteil/pkg/virtualizers/util"
-	"github.com/vorteil/vorteil/pkg/virtualizers/virtualbox"
 	"github.com/vorteil/vorteil/pkg/vpkg"
 )
 
-func runFirecracker(pkgReader vpkg.Reader, cfg *vcfg.VCFG, name string) error {
-	if runtime.GOOS != "linux" {
-		return errors.New("firecracker is only available on linux")
-	}
-	if !firecracker.Allocator.IsAvailable() {
-		return errors.New("firecracker is not installed on your system")
-	}
-	// Check if bridge device exists
-	err := firecracker.FetchBridgeDev()
-	if err != nil {
-		return errors.New("try running 'sudo vorteil firecracker-setup' before using firecracker")
-	}
-
-	// Create base folder to store virtualbox vms so the socket can be grouped
-	parent := fmt.Sprintf("%s-%s", firecracker.VirtualizerID, randstr.Hex(5))
-	parent = filepath.Join(os.TempDir(), parent)
-	defer os.RemoveAll(parent)
-
-	// Create parent directory as it doesn't exist
-	err = os.MkdirAll(parent, os.ModePerm)
-	if err != nil {
-		log.Errorf("%v", err)
-		os.Exit(1)
-	}
-
-	f, err := ioutil.TempFile(parent, "vorteil.disk")
-	if err != nil {
-		log.Errorf("%v", err)
-		os.Exit(1)
-	}
-	defer os.Remove(f.Name())
-	defer f.Close()
-
-	defer os.Remove(parent)
-
-	err = vdisk.Build(context.Background(), f, &vdisk.BuildArgs{
-		PackageReader: pkgReader,
-		Format:        firecracker.Allocator.DiskFormat(),
-		KernelOptions: vdisk.KernelOptions{
-			Shell: flagShell,
-		},
-		Logger: log,
-	})
-	if err != nil {
-		log.Errorf("%v", err)
-		os.Exit(1)
-	}
-
-	err = f.Close()
-	if err != nil {
-		log.Errorf("%v", err)
-		os.Exit(1)
-	}
-
-	err = pkgReader.Close()
-	if err != nil {
-		log.Errorf("%v", err)
-		os.Exit(1)
-	}
-
-	alloc := firecracker.Allocator
-	virt := alloc.Alloc()
-
-	if flagGUI {
-		log.Warnf("firecracker does not support displaying a gui")
-	}
-
-	config := firecracker.Config{}
-
-	err = virt.Initialize(config.Marshal())
-	if err != nil {
-		return err
-	}
-
-	return run(virt, f.Name(), cfg, name)
+var initFirecrackerCmd = &cobra.Command{
+	Use:    "firecracker-setup",
+	Short:  "Initialize firecracker by spawning a Bridge Device and a DHCP server",
+	Long:   `The init firecracker command is a convenience function to quickly setup the bridge device and DHCP server that firecracker will use`,
+	Hidden: true,
+	Args:   cobra.MaximumNArgs(0),
+	Run: func(cmd *cobra.Command, args []string) {
+		err := firecracker.SetupBridgeAndDHCPServer()
+		if err != nil {
+			log.Errorf("%v", err)
+			os.Exit(1)
+		}
+	},
 }
 
-func runHyperV(pkgReader vpkg.Reader, cfg *vcfg.VCFG, name string) error {
-	if runtime.GOOS != "windows" {
-		return errors.New("hyper-v is only available on windows system")
-	}
-	if !hyperv.Allocator.IsAvailable() {
-		return errors.New("hyper-v is not enabled on your system")
-	}
-	// Create base folder to store virtualbox vms so the socket can be grouped
-	parent := fmt.Sprintf("%s-%s", hyperv.VirtualizerID, randstr.Hex(5))
-	parent = filepath.Join(os.TempDir(), parent)
+var runCmd = &cobra.Command{
+	Use:   "run [RUNNABLE]",
+	Short: "Quick-launch a virtual machine",
+	Long: `The run command is a convenience function for quickly getting a Vorteil machine
+up and running. It attempts to emulate the behaviour of running the binary
+natively as best as possible, which includes making it superficially appear as
+though the virtual machine is a child process of the CLI by handling interrupts
+and cleaning up the instance when it's done.`,
+	Args: cobra.MaximumNArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
 
-	// Create parent directory as it doesn't exist
-	err := os.MkdirAll(parent, os.ModePerm)
-	if err != nil {
-		log.Errorf("%v", err)
-		os.Exit(1)
-	}
+		buildablePath := "."
+		if len(args) >= 1 {
+			buildablePath = args[0]
+		}
 
-	// need to create a tempfile rather than use the function to as hyper-v complains if the extension doesn't exist
-	f, err := os.Create(filepath.Join(parent, "disk.vhd"))
-	if err != nil {
-		log.Errorf("%v", err)
-		os.Exit(1)
-	}
+		// Fetch name of the app from path
 
-	defer os.Remove(f.Name())
-	defer f.Close()
+		var name string
+		_, err := os.Stat(buildablePath)
+		if err != nil {
+			// If stat errors assume its a url
+			u, errParse := url.Parse(buildablePath)
+			if errParse == nil {
+				// Check if its a url i can handle otherwise default to vorteil-vm
+				if u.Hostname() == "apps.vorteil.io" {
+					name = u.Path
+					name = strings.ReplaceAll(name, "/file/", "")
+					name = strings.ReplaceAll(name, "/", "-")
+				} else {
+					name = "vorteil-vm"
+				}
+			} else {
+				log.Errorf("%v", err)
+				os.Exit(1)
+			}
+		} else {
+			name = strings.ReplaceAll(filepath.Base(buildablePath), ".vorteil", "")
+		}
 
-	defer os.RemoveAll(parent)
+		pkgBuilder, err := getPackageBuilder("BUILDABLE", buildablePath)
+		if err != nil {
+			log.Errorf("%v", err)
+			os.Exit(1)
+		}
+		defer pkgBuilder.Close()
 
-	err = vdisk.Build(context.Background(), f, &vdisk.BuildArgs{
-		PackageReader: pkgReader,
-		Format:        hyperv.Allocator.DiskFormat(),
-		KernelOptions: vdisk.KernelOptions{
-			Shell: flagShell,
-		},
-		Logger: log,
-	})
-	if err != nil {
-		log.Errorf("%v", err)
-		os.Exit(1)
-	}
+		err = modifyPackageBuilder(pkgBuilder)
+		if err != nil {
+			log.Errorf("%v", err)
+			os.Exit(1)
+		}
 
-	err = f.Close()
-	if err != nil {
-		log.Errorf("%v", err)
-		os.Exit(1)
-	}
+		pkgReader, err := vpkg.ReaderFromBuilder(pkgBuilder)
+		if err != nil {
+			log.Errorf("%v", err)
+			os.Exit(1)
+		}
+		defer pkgReader.Close()
 
-	err = pkgReader.Close()
-	if err != nil {
-		log.Errorf("%v", err)
-		os.Exit(1)
-	}
+		pkgReader, err = vpkg.PeekVCFG(pkgReader)
+		if err != nil {
+			log.Errorf("%v", err)
+			os.Exit(1)
+		}
 
-	alloc := hyperv.Allocator
-	virt := alloc.Alloc()
+		cfgf := pkgReader.VCFG()
+		cfg, err := vcfg.LoadFile(cfgf)
+		if err != nil {
+			log.Errorf("%v", err)
+			os.Exit(1)
+		}
+		err = initKernels()
+		if err != nil {
+			log.Errorf("%v", err)
+			os.Exit(1)
+		}
+		switch flagPlatform {
+		case platformQEMU:
+			err = runQEMU(pkgReader, cfg, name)
+			if err != nil {
+				log.Errorf("%v", err)
+				os.Exit(1)
+			}
+		case platformVirtualBox:
+			err = runVirtualBox(pkgReader, cfg, name)
+			if err != nil {
+				log.Errorf("%v", err)
+				os.Exit(1)
+			}
+		case platformHyperV:
+			err = runHyperV(pkgReader, cfg, name)
+			if err != nil {
+				log.Errorf("%v", err)
+				os.Exit(1)
+			}
+		case platformFirecracker:
+			err = runFirecracker(pkgReader, cfg, name)
+			if err != nil {
+				log.Errorf("%v", err)
+				os.Exit(1)
+			}
+		default:
+			if flagPlatform == "not installed" {
+				log.Errorf("no virtualizers are currently installed")
+			} else {
+				log.Errorf("%v", fmt.Errorf("platform '%s' not supported", flagPlatform).Error())
+			}
+			os.Exit(1)
+		}
 
-	config := hyperv.Config{
-		Headless:   !flagGUI,
-		SwitchName: "Default Switch",
-	}
-
-	err = virt.Initialize(config.Marshal())
-	if err != nil {
-		return err
-	}
-
-	return run(virt, f.Name(), cfg, name)
+	},
 }
 
-func runVirtualBox(pkgReader vpkg.Reader, cfg *vcfg.VCFG, name string) error {
-	if !virtualbox.Allocator.IsAvailable() {
-		return errors.New("virtualbox not found installed on system")
-	}
-	// Create base folder to store virtualbox vms so the socket can be grouped
-	parent := fmt.Sprintf("%s-%s", virtualbox.VirtualizerID, randstr.Hex(5))
-	parent = filepath.Join(os.TempDir(), parent)
-	defer os.RemoveAll(parent)
-
-	// Create parent directory as it doesn't exist
-	err := os.MkdirAll(parent, os.ModePerm)
-	if err != nil {
-		log.Errorf("%v", err)
-		os.Exit(1)
-	}
-
-	f, err := ioutil.TempFile(parent, "vorteil.disk")
-	if err != nil {
-		log.Errorf("%v", err)
-		os.Exit(1)
-	}
-	defer os.Remove(f.Name())
-	defer f.Close()
-
-	defer os.Remove(parent)
-
-	err = vdisk.Build(context.Background(), f, &vdisk.BuildArgs{
-		PackageReader: pkgReader,
-		Format:        virtualbox.Allocator.DiskFormat(),
-		KernelOptions: vdisk.KernelOptions{
-			Shell: flagShell,
-		},
-		Logger: log,
-	})
-	if err != nil {
-		log.Errorf("%v", err)
-		os.Exit(1)
-	}
-
-	err = f.Close()
-	if err != nil {
-		log.Errorf("%v", err)
-		os.Exit(1)
-	}
-
-	err = pkgReader.Close()
-	if err != nil {
-		log.Errorf("%v", err)
-		os.Exit(1)
-	}
-
-	alloc := virtualbox.Allocator
-	virt := alloc.Alloc()
-
-	config := virtualbox.Config{
-		Headless:    !flagGUI,
-		NetworkType: "nat",
-	}
-
-	err = virt.Initialize(config.Marshal())
-	if err != nil {
-		return err
-	}
-
-	return run(virt, f.Name(), cfg, name)
+func init() {
+	f := runCmd.Flags()
+	f.StringVar(&flagPlatform, "platform", defaultVirtualizer(), "run a virtual machine with appropriate hypervisor (qemu, firecracker, virtualbox, hyper-v)")
+	f.BoolVar(&flagGUI, "gui", false, "when running virtual machine show gui of hypervisor")
+	f.BoolVar(&flagShell, "shell", false, "add a busybox shell environment to the image")
+	f.StringVar(&flagRecord, "record", "", "")
 }
 
-func runQEMU(pkgReader vpkg.Reader, cfg *vcfg.VCFG, name string) error {
-
-	if !qemu.Allocator.IsAvailable() {
-		return errors.New("qemu not installed on system")
+func defaultVirtualizer() string {
+	defaultP := "not installed"
+	backends, _ := virtualizers.Backends()
+	for _, installed := range backends {
+		if installed == "vmware" {
+			continue
+		}
+		if installed == "qemu" {
+			defaultP = "qemu"
+		} else if installed == "hyperv" {
+			defaultP = "hyperv"
+		} else if installed == "virtualbox" {
+			defaultP = "virtualbox"
+		} else if installed == "firecracker" {
+			defaultP = "firecracker"
+		}
+		break
 	}
-	// Create base folder to store virtualbox vms so the socket can be grouped
-	parent := fmt.Sprintf("%s-%s", qemu.VirtualizerID, randstr.Hex(5))
-	parent = filepath.Join(os.TempDir(), parent)
-	defer os.RemoveAll(parent)
-	// Create parent directory as it doesn't exist
-	err := os.MkdirAll(parent, os.ModePerm)
-	if err != nil {
-		log.Errorf("%v", err)
-		os.Exit(1)
-	}
-	f, err := ioutil.TempFile(parent, "vorteil.disk")
-	if err != nil {
-		log.Errorf("%v", err)
-		os.Exit(1)
-	}
-	defer os.Remove(f.Name())
-	defer f.Close()
-	defer os.Remove(parent)
-
-	err = vdisk.Build(context.Background(), f, &vdisk.BuildArgs{
-		PackageReader: pkgReader,
-		Format:        qemu.Allocator.DiskFormat(),
-		KernelOptions: vdisk.KernelOptions{
-			Shell: flagShell,
-		},
-		Logger: log,
-	})
-	if err != nil {
-		log.Errorf("%v", err)
-		os.Exit(1)
-	}
-
-	err = f.Close()
-	if err != nil {
-		log.Errorf("%v", err)
-		os.Exit(1)
-	}
-
-	err = pkgReader.Close()
-	if err != nil {
-		log.Errorf("%v", err)
-		os.Exit(1)
-	}
-
-	alloc := qemu.Allocator
-	virt := alloc.Alloc()
-
-	config := qemu.Config{
-		Headless: !flagGUI,
-	}
-
-	err = virt.Initialize(config.Marshal())
-	if err != nil {
-		return err
-	}
-
-	return run(virt, f.Name(), cfg, name)
-
+	return defaultP
 }
 
 func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG, name string) error {
@@ -395,60 +267,45 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG, name st
 
 }
 
+func fetchPorts(lines []string, portmap virtualizers.RouteMap, networkType string) []string {
+	actual := portmap.Address[strings.LastIndex(portmap.Address, ":")+1:]
+	if actual != portmap.Port && actual != "" {
+		port2 := portmap.Address
+		if port2 == "" {
+			port2 = portmap.Port
+		}
+		lines = append(lines, fmt.Sprintf(" • %s:%s → %s", networkType, portmap.Port, port2))
+	} else {
+		lines = append(lines, fmt.Sprintf(" • %s:%s", networkType, portmap.Port))
+	}
+	return lines
+}
+
 // Fetch network details about virtual machine
 func gatherNetworkDetails(machine *virtualizers.VirtualMachine) []string {
 	var lines []string
 	for _, network := range machine.Networks {
 		for _, portmap := range network.UDP {
-			actual := portmap.Address[strings.LastIndex(portmap.Address, ":")+1:]
-			if actual != portmap.Port && actual != "" {
-				port2 := portmap.Address
-				if port2 == "" {
-					port2 = portmap.Port
-				}
-				lines = append(lines, fmt.Sprintf(" • %s:%s → %s", "udp", portmap.Port, port2))
-			} else {
-				lines = append(lines, fmt.Sprintf(" • %s:%s", "udp", portmap.Port))
-			}
+			var udp []string
+			udp = append(udp, fetchPorts(udp, portmap, "udp")...)
+			lines = append(lines, udp...)
 		}
 		for _, portmap := range network.TCP {
-			actual := portmap.Address[strings.LastIndex(portmap.Address, ":")+1:]
-			if actual != portmap.Port && actual != "" {
-				port2 := portmap.Address
-				if port2 == "" {
-					port2 = portmap.Port
-				}
-				lines = append(lines, fmt.Sprintf(" • %s:%s → %s", "tcp", portmap.Port, port2))
-			} else {
-				lines = append(lines, fmt.Sprintf(" • %s:%s", "tcp", portmap.Port))
-			}
+			var tcp []string
+			tcp = append(tcp, fetchPorts(tcp, portmap, "tcp")...)
+			lines = append(lines, tcp...)
 		}
 		for _, portmap := range network.HTTP {
-			actual := portmap.Address[strings.LastIndex(portmap.Address, ":")+1:]
-			if actual != portmap.Port && actual != "" {
-				port2 := portmap.Address
-				if port2 == "" {
-					port2 = portmap.Port
-				}
-				lines = append(lines, fmt.Sprintf(" • %s:%s → %s", "http", portmap.Port, port2))
-			} else {
-				lines = append(lines, fmt.Sprintf(" • %s:%s", "http", portmap.Port))
-			}
+			var http []string
+			http = append(http, fetchPorts(http, portmap, "http")...)
+			lines = append(lines, http...)
 		}
 		for _, portmap := range network.HTTPS {
-			actual := portmap.Address[strings.LastIndex(portmap.Address, ":")+1:]
-			if actual != portmap.Port && actual != "" {
-				port2 := portmap.Address
-				if port2 == "" {
-					port2 = portmap.Port
-				}
-				lines = append(lines, fmt.Sprintf(" • %s:%s → %s", "https", portmap.Port, port2))
-			} else {
-				lines = append(lines, fmt.Sprintf(" • %s:%s", "https", portmap.Port))
-			}
+			var https []string
+			https = append(https, fetchPorts(https, portmap, "https")...)
+			lines = append(lines, https...)
 		}
 	}
-
 	return lines
 }
 

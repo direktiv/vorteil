@@ -111,10 +111,10 @@ func LookForIP(l *logger.Logger, routes []virtualizers.NetworkInterface) []virtu
 	return routes
 }
 
-// Routes generates api friendly routes for the machine
-func Routes(networks []vcfg.NetworkInterface) []virtualizers.NetworkInterface {
+// generateRoutes ...
+func generateRoutes(nics []vcfg.NetworkInterface) virtualizers.Routes {
 	routes := virtualizers.Routes{}
-	var nics = networks
+
 	for i, nic := range nics {
 		if nic.IP == "" {
 			continue
@@ -153,6 +153,27 @@ func Routes(networks []vcfg.NetworkInterface) []virtualizers.NetworkInterface {
 			routes.NIC[i].Protocol[p] = existingPorts
 		}
 	}
+	return routes
+}
+
+func fetchAddress(i int, routes virtualizers.Routes, port string, networkType virtualizers.NetworkProtocol) string {
+	var addr string
+	if len(routes.NIC) > i {
+		nic := routes.NIC[i]
+		if proto, ok := nic.Protocol[networkType]; ok {
+			if pmap, ok := proto.Port[port]; ok {
+				addr = pmap.Address
+			}
+		}
+	}
+	return addr
+}
+
+// Routes generates api friendly routes for the machine
+func Routes(networks []vcfg.NetworkInterface) []virtualizers.NetworkInterface {
+	var nics = networks
+	routes := generateRoutes(nics)
+
 	apiNics := make([]virtualizers.NetworkInterface, 0)
 	for i, net := range networks {
 		newNetwork := virtualizers.NetworkInterface{
@@ -162,63 +183,27 @@ func Routes(networks []vcfg.NetworkInterface) []virtualizers.NetworkInterface {
 			Gateway: net.Gateway,
 		}
 		for _, port := range net.UDP {
-			var addr string
-			if len(routes.NIC) > i {
-				nic := routes.NIC[i]
-				if proto, ok := nic.Protocol["udp"]; ok {
-					if pmap, ok := proto.Port[port]; ok {
-						addr = pmap.Address
-					}
-				}
-			}
 			newNetwork.UDP = append(newNetwork.UDP, virtualizers.RouteMap{
 				Port:    port,
-				Address: addr,
+				Address: fetchAddress(i, routes, port, "udp"),
 			})
 		}
 		for _, port := range net.TCP {
-			var addr string
-			if len(routes.NIC) > i {
-				nic := routes.NIC[i]
-				if proto, ok := nic.Protocol["tcp"]; ok {
-					if pmap, ok := proto.Port[port]; ok {
-						addr = pmap.Address
-					}
-				}
-			}
 			newNetwork.TCP = append(newNetwork.TCP, virtualizers.RouteMap{
 				Port:    port,
-				Address: addr,
+				Address: fetchAddress(i, routes, port, "tcp"),
 			})
 		}
 		for _, port := range net.HTTP {
-			var addr string
-			if len(routes.NIC) > i {
-				nic := routes.NIC[i]
-				if proto, ok := nic.Protocol["http"]; ok {
-					if pmap, ok := proto.Port[port]; ok {
-						addr = pmap.Address
-					}
-				}
-			}
 			newNetwork.HTTP = append(newNetwork.HTTP, virtualizers.RouteMap{
 				Port:    port,
-				Address: addr,
+				Address: fetchAddress(i, routes, port, "http"),
 			})
 		}
 		for _, port := range net.HTTPS {
-			var addr string
-			if len(routes.NIC) > i {
-				nic := routes.NIC[i]
-				if proto, ok := nic.Protocol["https"]; ok {
-					if pmap, ok := proto.Port[port]; ok {
-						addr = pmap.Address
-					}
-				}
-			}
 			newNetwork.HTTPS = append(newNetwork.HTTPS, virtualizers.RouteMap{
 				Port:    port,
-				Address: addr,
+				Address: fetchAddress(i, routes, port, "https"),
 			})
 		}
 		apiNics = append(apiNics, newNetwork)

@@ -11,6 +11,8 @@ import (
 	"github.com/vorteil/vorteil/pkg/vkern"
 )
 
+// FSCompiler is an interface that must be satisfied for a file-system compipler
+// to be usable in this logic.
 type FSCompiler interface {
 	Mkdir(path string) error
 	AddFile(path string, r io.ReadCloser, size int64, force bool) error
@@ -25,10 +27,12 @@ type FSCompiler interface {
 	RegionIsHole(begin, size int64) bool
 }
 
+// KernelOptions for settings that change kernel behaviour.
 type KernelOptions struct {
 	Shell bool
 }
 
+// BuilderArgs collects all of the arguments needed to call NewBuilder into one place.
 type BuilderArgs struct {
 	Seed       int64
 	Kernel     KernelOptions
@@ -37,6 +41,9 @@ type BuilderArgs struct {
 	Logger     elog.View
 }
 
+// Builder is used for building a raw Vorteil image. Building happens in several
+// stages to make the logic play nicely with potential external logic that needs
+// some back-and-forth control over the build process.
 type Builder struct {
 
 	// The following variables need to be calculated in the NewBuilder step.
@@ -71,6 +78,10 @@ type Builder struct {
 	configData   []byte
 }
 
+// NewBuilder returns a new Builder object configured according to the provided
+// args. In this state it can calculate the minimum possible image size and
+// accept some minor further configuration. Once this configuration is complete
+// you should call Prebuild on it to proceed.
 func NewBuilder(ctx context.Context, args *BuilderArgs) (*Builder, error) {
 
 	err := ctx.Err()
@@ -104,6 +115,9 @@ func NewBuilder(ctx context.Context, args *BuilderArgs) (*Builder, error) {
 	return b, nil
 }
 
+// SetDefaultMTU can be called before calling Prebuild in order to change the
+// default MTU that will be applied to each NIC configuration (if not
+// explicitly set in the VCFG).
 func (b *Builder) SetDefaultMTU(mtu uint) {
 	b.defaultMTU = mtu
 }
@@ -140,6 +154,7 @@ func (b *Builder) calculateMinimumSize(ctx context.Context) error {
 	return nil
 }
 
+// Close frees up any resources kept open by the Builder.
 func (b *Builder) Close() error {
 
 	if b.kernelBundle != nil {
@@ -153,21 +168,23 @@ func (b *Builder) Close() error {
 
 }
 
+// MinimumSize returns the minimum number of bytes that are needed to build the
+// image.
 func (b *Builder) MinimumSize() int64 {
 	return b.minSize
 }
 
+// Prebuild locks in a final raw image size (in bytes) and performs some
+// preflight calculations to determine the final disk layout and to make the
+// RegionIsHole function usable by external logic that wants to wrap the image
+// in some sort of sparse virtual disk image format. Prebuild must be called
+// before calling Build.
 func (b *Builder) Prebuild(ctx context.Context, size int64) error {
-
-	err := ctx.Err()
-	if err != nil {
-		return err
-	}
 
 	b.size = size
 
 	if size%SectorSize != 0 {
-		return errors.New("image size must be a multiple of the sector size")
+		panic(errors.New("image size must be a multiple of the sector size"))
 	}
 
 	sectors := size / SectorSize
@@ -177,7 +194,7 @@ func (b *Builder) Prebuild(ctx context.Context, size int64) error {
 	b.secondaryGPTEntriesOffset = b.secondaryGPTEntriesLBA * SectorSize
 	b.lastUsableLBA = b.secondaryGPTEntriesLBA - 1
 
-	err = b.prebuildOS(ctx)
+	err := b.prebuildOS(ctx)
 	if err != nil {
 		return err
 	}
@@ -198,6 +215,12 @@ func (b *Builder) Prebuild(ctx context.Context, size int64) error {
 	return nil
 }
 
+// Build is the final operation performed by the Builder, and should only be
+// called after a successful call to the Prebuild function. It writes the
+// file-system to the provided io.WriteSeeker, w. Despite using io.Seeker
+// functionality to improve performance, the Builder has been written in a way
+// such that it never needs to seek "backwards", which means you can wrap any
+// io.Writer with a vio.WriteSeeker and it will work.
 func (b *Builder) Build(ctx context.Context, w io.WriteSeeker) error {
 
 	progress := b.log.NewProgress("Writing image", "KiB", b.size)
@@ -213,10 +236,30 @@ func (b *Builder) Build(ctx context.Context, w io.WriteSeeker) error {
 
 }
 
+// Size returns the full final size of the raw disk image.
 func (b *Builder) Size() int64 {
 	return b.size
 }
 
+func (b *Builder) isGPTHole(first, last int64) bool {
+
+	if last < P0FirstLBA && first >= PrimaryGPTEntriesLBA+1 {
+		return true // in the empty space of the primary GPT entries
+	}
+
+	if first >= b.secondaryGPTEntriesLBA+1 && last < b.secondaryGPTHeaderLBA {
+		return true // in the empty space of the secondary GPT entries
+	}
+
+	return false
+
+}
+
+// RegionIsHole can be called after a successful Prebuild. Its purpose is to
+// provide advance notice to sparse disk image formatting logic on regions
+// within the image that will be completely empty. The two args are measured in
+// bytes, and the function returns true if every byte starting at begin and
+// continuing for the full size is zeroed.
 func (b *Builder) RegionIsHole(begin, size int64) bool {
 
 	first := begin / SectorSize
@@ -236,12 +279,8 @@ func (b *Builder) RegionIsHole(begin, size int64) bool {
 		return b.osRegionIsHole(pBegin, pSize)
 	}
 
-	if last < P0FirstLBA && first >= PrimaryGPTEntriesLBA+1 {
-		return true // in the empty space of the primary GPT entries
-	}
-
-	if first >= b.secondaryGPTEntriesLBA+1 && last < b.secondaryGPTHeaderLBA {
-		return true // in the empty space of the secondary GPT entries
+	if b.isGPTHole(first, last) {
+		return true
 	}
 
 	return false

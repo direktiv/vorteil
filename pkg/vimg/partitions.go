@@ -10,6 +10,7 @@ import (
 	"github.com/vorteil/vorteil/pkg/vio"
 )
 
+// Various build constants.
 const (
 	SectorSize              = 512
 	GPTSignature            = 0x5452415020494645 // "EFI PART" (little-endian)
@@ -26,9 +27,11 @@ const (
 )
 
 var (
+	// RootPartitionName is the hardcoded name for the Vorteil OS partition in the GPT.
 	RootPartitionName = []byte{0x76, 0x0, 0x6f, 0x0, 0x72, 0x0, 0x74, 0x0, 0x65, 0x0,
 		0x69, 0x0, 0x6c, 0x0, 0x2d, 0x0, 0x6f, 0x0, 0x73, 0x0} // "vorteil-os" in utf16
 
+	// DataPartitionName is the hardcoded name for the Vorteil root file-system partition in the GPT.
 	DataPartitionName = []byte{0x76, 0x0, 0x6f, 0x0, 0x72, 0x0, 0x74, 0x0, 0x65, 0x0, 0x69, 0x0,
 		0x6c, 0x0, 0x2d, 0x0, 0x72, 0x0, 0x6f, 0x0, 0x6f, 0x0, 0x74, 0x0} // "vorteil-root" in utf16
 
@@ -44,15 +47,9 @@ var (
 	Part2UUIDString = "4048447D-C09D-D111-B245-5FFDCE74FAD2"
 )
 
-func (b *Builder) writePartitions(ctx context.Context, w io.WriteSeeker) error {
+func (b *Builder) writeGPT(ctx context.Context, w io.WriteSeeker) error {
 
-	var err error
-	b.diskUID, err = b.generateUID()
-	if err != nil {
-		return err
-	}
-
-	err = b.writeMBR(ctx, w)
+	err := b.writeMBR(ctx, w)
 	if err != nil {
 		return err
 	}
@@ -67,17 +64,13 @@ func (b *Builder) writePartitions(ctx context.Context, w io.WriteSeeker) error {
 		return err
 	}
 
-	err = b.writeOS(ctx, w)
-	if err != nil {
-		return err
-	}
+	return nil
 
-	err = b.writeRoot(ctx, w)
-	if err != nil {
-		return err
-	}
+}
 
-	err = b.writeSecondaryGPTEntries(ctx, w)
+func (b *Builder) writeSecondaryGPT(ctx context.Context, w io.WriteSeeker) error {
+
+	err := b.writeSecondaryGPTEntries(ctx, w)
 	if err != nil {
 		return err
 	}
@@ -88,8 +81,46 @@ func (b *Builder) writePartitions(ctx context.Context, w io.WriteSeeker) error {
 	}
 
 	return nil
+
 }
 
+func (b *Builder) writePartitionsContents(ctx context.Context, w io.WriteSeeker) error {
+
+	err := b.writeOS(ctx, w)
+	if err != nil {
+		return err
+	}
+
+	err = b.writeRoot(ctx, w)
+	if err != nil {
+		return err
+	}
+
+	return nil
+
+}
+
+func (b *Builder) writePartitions(ctx context.Context, w io.WriteSeeker) error {
+
+	err := b.writeGPT(ctx, w)
+	if err != nil {
+		return err
+	}
+
+	err = b.writePartitionsContents(ctx, w)
+	if err != nil {
+		return err
+	}
+
+	err = b.writeSecondaryGPT(ctx, w)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// ProtectiveMBR is the structure of a protective master boot record as it appears on disk.
 type ProtectiveMBR struct {
 	Bootloader    [446]byte
 	Status        byte
@@ -137,6 +168,7 @@ func (b *Builder) writeMBR(ctx context.Context, w io.WriteSeeker) error {
 
 }
 
+// GPTHeader is the structure of a GUID Partition Table Header as it appears on disk.
 type GPTHeader struct {
 	Signature      uint64
 	Revision       [4]byte
@@ -155,6 +187,7 @@ type GPTHeader struct {
 	_              [420]byte
 }
 
+// GPTEntry is the structure of a GUID Partition Table entry as it appears on disk.
 type GPTEntry struct {
 	TypeGUID      [16]byte
 	PartitionGUID [16]byte
@@ -193,16 +226,10 @@ func (b *Builder) writePrimaryGPTHeader(ctx context.Context, w io.WriteSeeker) e
 	copy(hdr.GUID[:], b.diskUID)
 
 	buf := new(bytes.Buffer)
-	err = binary.Write(buf, binary.LittleEndian, hdr)
-	if err != nil {
-		return err
-	}
+	_ = binary.Write(buf, binary.LittleEndian, hdr)
 
 	crc := crc32.NewIEEE()
-	_, err = io.CopyN(crc, bytes.NewReader(buf.Bytes()), GPTHeaderSize)
-	if err != nil {
-		return err
-	}
+	_, _ = io.CopyN(crc, bytes.NewReader(buf.Bytes()), GPTHeaderSize)
 
 	hdr.CRC = crc.Sum32()
 	err = binary.Write(w, binary.LittleEndian, hdr)
@@ -263,16 +290,10 @@ func (b *Builder) writeSecondaryGPTHeader(ctx context.Context, w io.WriteSeeker)
 	copy(hdr.GUID[:], b.diskUID)
 
 	buf := new(bytes.Buffer)
-	err = binary.Write(buf, binary.LittleEndian, hdr)
-	if err != nil {
-		return err
-	}
+	_ = binary.Write(buf, binary.LittleEndian, hdr)
 
 	crc := crc32.NewIEEE()
-	_, err = io.CopyN(crc, bytes.NewReader(buf.Bytes()), GPTHeaderSize)
-	if err != nil {
-		return err
-	}
+	_, _ = io.CopyN(crc, bytes.NewReader(buf.Bytes()), GPTHeaderSize)
 
 	hdr.CRC = crc.Sum32()
 	err = binary.Write(w, binary.LittleEndian, hdr)
@@ -312,7 +333,8 @@ func (b *Builder) generateUID() ([]byte, error) {
 		return nil, err
 	}
 
-	// TODO: remember why I do this...
+	// NOTE: I wrote this a long time ago and cannot explain why I do these
+	// bitwise operations...
 	buf[6] = buf[6]&^0xf0 | 0x40
 	buf[8] = buf[8]&^0xc0 | 0x80
 
@@ -321,6 +343,12 @@ func (b *Builder) generateUID() ([]byte, error) {
 }
 
 func (b *Builder) generateGPTEntries() error {
+
+	var err error
+	b.diskUID, err = b.generateUID()
+	if err != nil {
+		return err
+	}
 
 	uid0, err := b.generateUID()
 	if err != nil {
@@ -346,29 +374,14 @@ func (b *Builder) generateGPTEntries() error {
 	copy(p1.Name[:], DataPartitionName)
 
 	entriesBuffer := new(bytes.Buffer)
-	err = binary.Write(entriesBuffer, binary.LittleEndian, p0)
-	if err != nil {
-		return err
-	}
-
-	err = binary.Write(entriesBuffer, binary.LittleEndian, p1)
-	if err != nil {
-		return err
-	}
+	_ = binary.Write(entriesBuffer, binary.LittleEndian, p0)
+	_ = binary.Write(entriesBuffer, binary.LittleEndian, p1)
 
 	b.gptEntries = entriesBuffer.Bytes()
 
 	crc := crc32.NewIEEE()
-	_, err = io.Copy(crc, bytes.NewReader(b.gptEntries))
-	if err != nil {
-		return err
-	}
-
-	_, err = io.CopyN(crc, vio.Zeroes, MaximumGPTEntries*GPTEntrySize-int64(len(b.gptEntries)))
-	if err != nil {
-		return err
-	}
-
+	_, _ = io.Copy(crc, bytes.NewReader(b.gptEntries))
+	_, _ = io.CopyN(crc, vio.Zeroes, MaximumGPTEntries*GPTEntrySize-int64(len(b.gptEntries)))
 	b.gptEntriesCRC = crc.Sum32()
 
 	return nil

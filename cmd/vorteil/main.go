@@ -26,6 +26,12 @@ import (
 	"github.com/vorteil/vorteil/pkg/vproj"
 )
 
+var (
+	release = "0.0.0"
+	commit  = ""
+	date    = "Thu, 01 Jan 1970 00:00:00 +0000"
+)
+
 func main() {
 
 	commandInit()

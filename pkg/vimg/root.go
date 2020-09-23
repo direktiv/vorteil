@@ -30,17 +30,7 @@ func (b *Builder) prebuildRoot(ctx context.Context) error {
 
 func (b *Builder) writeRoot(ctx context.Context, w io.WriteSeeker) error {
 
-	err := ctx.Err()
-	if err != nil {
-		return err
-	}
-
-	_, err = w.Seek(0, io.SeekCurrent)
-	if err != nil {
-		return err
-	}
-
-	_, err = w.Seek(b.rootFirstLBA*SectorSize, io.SeekStart)
+	_, err := w.Seek(b.rootFirstLBA*SectorSize, io.SeekStart)
 	if err != nil {
 		return err
 	}
@@ -56,6 +46,7 @@ func (b *Builder) writeRoot(ctx context.Context, w io.WriteSeeker) error {
 	}
 
 	return nil
+
 }
 
 func (b *Builder) rootRegionIsHole(begin, size int64) bool {

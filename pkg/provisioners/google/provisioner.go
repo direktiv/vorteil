@@ -297,6 +297,7 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 	return nil
 }
 
+// Marshal returns json provisioner as bytes
 func (p *Provisioner) Marshal() ([]byte, error) {
 
 	m := make(map[string]interface{})

@@ -38,11 +38,9 @@ import (
 	"github.com/vorteil/vorteil/pkg/virtualizers/util"
 )
 
-
 const (
 	vorteilBridge = "vorteil-bridge"
 )
-
 
 // FetchBridgeDev attempts to retrieve the bridge device
 func FetchBridgeDev() error {
@@ -53,10 +51,6 @@ func FetchBridgeDev() error {
 	}
 	return err
 }
-
-
-// SetupBridgeAndDHCPServer initializes a dhcp server, bridge device and a http listener to create TAP devices
-func SetupBridgeAndDHCPServer() error {
 
 // SetupBridgeAndDHCPServer creates the bridge which provides DHCP addresses todo
 // firecracker instances.

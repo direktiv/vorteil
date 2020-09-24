@@ -483,7 +483,7 @@ func (b *Builder) processLinuxArgs() error {
 	args = append(args, fmt.Sprintf("rootfstype=%s", fs))
 
 	if _, ok := m["loglevel"]; !ok {
-		args = append(args, "loglevel=2")
+		args = append(args, "loglevel=4")
 	}
 
 	if _, ok := m["intel_idle.max_cstate"]; !ok {

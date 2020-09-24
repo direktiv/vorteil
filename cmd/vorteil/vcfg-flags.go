@@ -262,17 +262,21 @@ var networkGatewayFlagValidator = func(f flag.NStringFlag) error {
 	return nil
 }
 
+func initRequiredNetworks(f flag.NStringSliceFlag, i int) {
+	if len(f.Value[i]) == 0 {
+		return
+	}
+	for len(overrideVCFG.Networks) < i+1 {
+		overrideVCFG.Networks = append(overrideVCFG.Networks, vcfg.NetworkInterface{IP: "dhcp"})
+	}
+}
+
 // --network.http
 var networkHTTPFlag = flag.NewNStringSliceFlag("network[<<N>>].http", "expose http port", &maxNetworkFlags, hideFlags, networkHTTPFlagValidator)
 var networkHTTPFlagValidator = func(f flag.NStringSliceFlag) error {
 	for i := 0; i < *f.Total; i++ {
-		if len(f.Value[i]) == 0 {
-			continue
-		}
+		initRequiredNetworks(f, i)
 		s := f.Value[i]
-		for len(overrideVCFG.Networks) < i+1 {
-			overrideVCFG.Networks = append(overrideVCFG.Networks, vcfg.NetworkInterface{IP: "dhcp"})
-		}
 		nic := &overrideVCFG.Networks[i]
 		nic.HTTP = s
 	}
@@ -283,21 +287,12 @@ var networkHTTPFlagValidator = func(f flag.NStringSliceFlag) error {
 // --network.http
 var networkHTTPSFlag = flag.NewNStringSliceFlag("network[<<N>>].https", "expose https port", &maxNetworkFlags, hideFlags, networkHTTPSFlagValidator)
 var networkHTTPSFlagValidator = func(f flag.NStringSliceFlag) error {
-
 	for i := 0; i < *f.Total; i++ {
-
-		if len(f.Value[i]) == 0 {
-			continue
-		}
-
+		initRequiredNetworks(f, i)
 		s := f.Value[i]
-		for len(overrideVCFG.Networks) < i+1 {
-			overrideVCFG.Networks = append(overrideVCFG.Networks, vcfg.NetworkInterface{IP: "dhcp"})
-		}
 		nic := &overrideVCFG.Networks[i]
 		nic.HTTPS = s
 	}
-
 	return nil
 
 }
@@ -360,36 +355,21 @@ var networkMaskFlagValidator = func(f flag.NStringFlag) error {
 // --network.tcp
 var networkTCPFlag = flag.NewNStringSliceFlag("network[<<N>>].tcp", "expose tcp port", &maxNetworkFlags, hideFlags, networkTCPFlagValidator)
 var networkTCPFlagValidator = func(f flag.NStringSliceFlag) error {
-
 	for i := 0; i < *f.Total; i++ {
-
-		if len(f.Value[i]) == 0 {
-			continue
-		}
-
+		initRequiredNetworks(f, i)
 		s := f.Value[i]
-		for len(overrideVCFG.Networks) < i+1 {
-			overrideVCFG.Networks = append(overrideVCFG.Networks, vcfg.NetworkInterface{IP: "dhcp"})
-		}
 		nic := &overrideVCFG.Networks[i]
 		nic.TCP = s
 	}
-
 	return nil
-
 }
 
 // --network.udp
 var networkUDPFlag = flag.NewNStringSliceFlag("network[<<N>>].udp", "expose udp port", &maxNetworkFlags, hideFlags, networkUDPFlagValidator)
 var networkUDPFlagValidator = func(f flag.NStringSliceFlag) error {
 	for i := 0; i < *f.Total; i++ {
-		if len(f.Value[i]) == 0 {
-			continue
-		}
+		initRequiredNetworks(f, i)
 		s := f.Value[i]
-		for len(overrideVCFG.Networks) < i+1 {
-			overrideVCFG.Networks = append(overrideVCFG.Networks, vcfg.NetworkInterface{IP: "dhcp"})
-		}
 		nic := &overrideVCFG.Networks[i]
 		nic.UDP = s
 	}

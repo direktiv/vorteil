@@ -318,8 +318,25 @@ func (p *Provisioner) createEmptyInstance() (string, error) {
 	return instanceID, nil
 }
 
+func ec2PublicIPReady(description *ec2.DescribeInstancesOutput) (ip string, ready bool) {
+	if description == nil || len(description.Reservations) == 0 ||
+		len(description.Reservations[0].Instances) == 0 ||
+		len(description.Reservations[0].Instances[0].NetworkInterfaces) == 0 ||
+		description.Reservations[0].Instances[0].NetworkInterfaces[0].Association == nil ||
+		description.Reservations[0].Instances[0].NetworkInterfaces[0].Association.PublicIp == nil {
+		return
+	}
+
+	ip = *description.Reservations[0].Instances[0].NetworkInterfaces[0].Association.PublicIp
+	if ip != "" {
+		ready = true
+	}
+	return
+}
+
 func (p *Provisioner) waitForInstanceToBeReady(instanceID string) (string, error) {
 	var ip string
+	var ipReady bool
 	for {
 		time.Sleep(pollrate)
 		description, err := p.client.DescribeInstancesWithContext(p.args.Context, &ec2.DescribeInstancesInput{
@@ -342,16 +359,8 @@ func (p *Provisioner) waitForInstanceToBeReady(instanceID string) (string, error
 			continue
 		case 16:
 			p.args.Logger.Infof("Instance status: running.")
-			if description == nil || len(description.Reservations) == 0 ||
-				len(description.Reservations[0].Instances) == 0 ||
-				len(description.Reservations[0].Instances[0].NetworkInterfaces) == 0 ||
-				description.Reservations[0].Instances[0].NetworkInterfaces[0].Association == nil ||
-				description.Reservations[0].Instances[0].NetworkInterfaces[0].Association.PublicIp == nil {
-				continue
-			}
-
-			ip = *description.Reservations[0].Instances[0].NetworkInterfaces[0].Association.PublicIp
-			if ip == "" {
+			ip, ipReady = ec2PublicIPReady(description)
+			if ipReady {
 				continue
 			}
 		case 32:

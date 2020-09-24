@@ -513,13 +513,18 @@ func (p *Provisioner) uploadedPayloadToInstance(ip string) error {
 	checksum := hex.EncodeToString(hasher.Sum(nil))
 	p.args.Logger.Infof("Our checksum: %s\n", checksum)
 
+	var responseError error
 	data, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return fmt.Errorf("error reading response body: %v", err)
+		responseError = fmt.Errorf("error reading response body: %v", err)
 	}
 
 	if resp.StatusCode != 200 {
-		return fmt.Errorf("server error [%d]: %s", resp.StatusCode, data)
+		responseError = fmt.Errorf("server error [%d]: %s", resp.StatusCode, data)
+	}
+
+	if responseError != nil {
+		return responseError
 	}
 
 	p.args.Logger.Infof("Server checksum: %s\n", data)

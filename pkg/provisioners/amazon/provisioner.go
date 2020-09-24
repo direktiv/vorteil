@@ -161,12 +161,21 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 		args.Logger.Infof("Instance status: terminated.")
 	}()
 
-	ip, err := p.waitForInstanceToBeReady(instanceID)
+	instanceIP, err := p.getInstancePublicIP(instanceID)
 	if err != nil {
 		return err
 	}
 
-	err = p.uploadedPayloadToInstance(ip)
+	p.args.Logger.Infof("Instance public IP address: %s\n", instanceIP)
+
+	err = p.instanceReadyForPayload(instanceIP, instanceID)
+	if err != nil {
+		return err
+	}
+
+	p.args.Logger.Infof("Instance is live and ready for payload.")
+
+	err = p.uploadedPayloadToInstance(instanceIP)
 	if err != nil {
 		return err
 	}
@@ -352,7 +361,8 @@ func ec2PublicIPReady(description *ec2.DescribeInstancesOutput) (ip string, read
 	return
 }
 
-func (p *Provisioner) waitForInstanceToBeReady(instanceID string) (string, error) {
+// getInstancePublicIP : Get Public Ip of Instance; Instance must be running or pending
+func (p *Provisioner) getInstancePublicIP(instanceID string) (string, error) {
 	var ip string
 	var ipReady bool
 	for {
@@ -400,11 +410,15 @@ func (p *Provisioner) waitForInstanceToBeReady(instanceID string) (string, error
 
 		break
 	}
-	p.args.Logger.Infof("Instance public IP address: %s\n", ip)
 
+	return ip, nil
+}
+
+// instanceReadyForPayload : Waits for instance ip to be ready for payload
+func (p *Provisioner) instanceReadyForPayload(ip, instanceID string) error {
 	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("https://%s:%d/", ip, securityGroupPort), nil)
 	if err != nil {
-		return ip, err
+		return err
 	}
 	req = req.WithContext(p.args.Context)
 	max := 6
@@ -421,7 +435,7 @@ func (p *Provisioner) waitForInstanceToBeReady(instanceID string) (string, error
 			p.args.Logger.Infof("Trying %v out of %v\n", tries, max)
 			p.args.Logger.Infof("Error on POST: %v\n", err)
 			if tries == max {
-				return ip, errors.New("instance failed to respond")
+				return errors.New("instance failed to respond")
 			}
 		}
 		if resp != nil && resp.Body != nil {
@@ -438,8 +452,7 @@ func (p *Provisioner) waitForInstanceToBeReady(instanceID string) (string, error
 		gap *= 2
 	}
 
-	p.args.Logger.Infof("Instance is live and ready for payload.")
-	return ip, nil
+	return nil
 }
 
 func (p *Provisioner) uploadedPayloadToInstance(ip string) error {

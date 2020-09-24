@@ -132,6 +132,9 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 	p.args = *args
 	var err error
 
+	provisionProgress := p.args.Logger.NewProgress("Provising to AWS", "", 0)
+	defer provisionProgress.Finish(true)
+
 	// Create EC2 Client
 	p.client, p.httpClient, p.ec2UserData, err = p.createClient()
 	if err != nil {
@@ -166,6 +169,13 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 	if err != nil {
 		return err
 	}
+
+	ami, err = p.pushAMI(instanceID)
+	if err != nil {
+		return err
+	}
+
+	p.args.Logger.Printf("Successfully Provisioned ami '%s'", ami)
 
 	return nil
 }
@@ -360,7 +370,7 @@ func (p *Provisioner) waitForInstanceToBeReady(instanceID string) (string, error
 		case 16:
 			p.args.Logger.Infof("Instance status: running.")
 			ip, ipReady = ec2PublicIPReady(description)
-			if ipReady {
+			if !ipReady {
 				continue
 			}
 		case 32:

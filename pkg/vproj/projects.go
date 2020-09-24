@@ -431,7 +431,7 @@ func TarFromPackage(w io.Writer, pkg vpkg.Reader) error {
 
 	if !vprjIncluded {
 		// Write default icon/vcfg to tar
-		err = defaultPNGAndVCFG(v, vprj, tw, ico, iconFile, iconName)
+		err = defaultPNGAndVCFG(&defaultIconAndConfigArgs{v: v, vprj: vprj, tw: tw, ico: ico, iconFile: iconFile, iconName: iconName})
 		if err != nil {
 			return err
 		}

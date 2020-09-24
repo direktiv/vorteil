@@ -245,25 +245,34 @@ func handleIcon(iconName string, ico vio.File, tw *tar.Writer, iconFile *os.File
 	return nil
 }
 
-func defaultPNGAndVCFG(v *vcfg.VCFG, vprj ProjectData, tw *tar.Writer, ico vio.File, iconFile *os.File, iconName string) error {
+type defaultIconAndConfigArgs struct {
+	v        *vcfg.VCFG
+	vprj     ProjectData
+	tw       *tar.Writer
+	ico      vio.File
+	iconFile *os.File
+	iconName string
+}
 
-	err := handleSplitVCFGs(v, tw)
+func defaultPNGAndVCFG(args *defaultIconAndConfigArgs) error {
+
+	err := handleSplitVCFGs(args.v, args.tw)
 	if err != nil {
 		return err
 	}
 
-	err = handleIcon(iconName, ico, tw, iconFile)
+	err = handleIcon(args.iconName, args.ico, args.tw, args.iconFile)
 	if err != nil {
 		return err
 	}
 
-	for i := range vprj.Targets {
-		if vprj.Targets[i].Name == "default" {
-			vprj.Targets[i].VCFGs = append(vprj.Targets[i].VCFGs, "readme.vcfg")
+	for i := range args.vprj.Targets {
+		if args.vprj.Targets[i].Name == "default" {
+			args.vprj.Targets[i].VCFGs = append(args.vprj.Targets[i].VCFGs, "readme.vcfg")
 		}
 	}
 
-	b, err := vprj.Marshal()
+	b, err := args.vprj.Marshal()
 	if err != nil {
 		return err
 	}
@@ -281,12 +290,12 @@ func defaultPNGAndVCFG(v *vcfg.VCFG, vprj ProjectData, tw *tar.Writer, ico vio.F
 		return err
 	}
 
-	err = tw.WriteHeader(vprjHeader)
+	err = args.tw.WriteHeader(vprjHeader)
 	if err != nil {
 		return err
 	}
 
-	_, err = io.Copy(tw, vprjTmp)
+	_, err = io.Copy(args.tw, vprjTmp)
 	if err != nil {
 		return err
 	}

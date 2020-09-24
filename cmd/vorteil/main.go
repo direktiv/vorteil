@@ -173,68 +173,84 @@ func initKernels() error {
 
 }
 
-func getPackageBuilder(argName, src string) (vpkg.Builder, error) {
-	var isURL bool
+type sourceType string
 
-	var pkgr vpkg.Reader
-	var pkgb vpkg.Builder
+const (
+	sourceURL     sourceType = "URL"
+	sourceFile               = "File"
+	sourceDir                = "Dir"
+	sourceINVALID            = "INVALID"
+)
 
-	// check if src is a url
+func getSourceType(src string) (sourceType, error) {
+	var err error
+	var fi os.FileInfo
+
+	// Check if Source is a URL
 	if _, err := url.ParseRequestURI(src); err == nil {
 		if u, uErr := url.Parse(src); uErr == nil && u.Scheme != "" && u.Host != "" && u.Path != "" {
-			isURL = true
+			return sourceURL, nil
 		}
 	}
 
-	// If src is a url, stream build package from remote src
-	if isURL {
-		resp, err := http.Get(src)
-		if err != nil {
-			resp.Body.Close()
-			return nil, err
-		}
-
-		pkgr, err = vpkg.Load(resp.Body)
-		if err != nil {
-			resp.Body.Close()
-			return nil, err
-		}
-
-		pkgb, err = vpkg.NewBuilderFromReader(pkgr)
-		if err != nil {
-			resp.Body.Close()
-			pkgr.Close()
-			return nil, err
-		}
-		return pkgb, nil
-	}
-
-	// check for a package file
-	fi, err := os.Stat(src)
+	// Check if Source is a file or dir
+	fi, err = os.Stat(src)
 	if !os.IsNotExist(err) && (fi != nil && !fi.IsDir()) {
-		f, err := os.Open(src)
-		if err != nil {
-			if !os.IsNotExist(err) {
-				return nil, err
-			}
-		} else {
-			pkgr, err = vpkg.Load(f)
-			if err != nil {
-				f.Close()
-				return nil, err
-			}
+		return sourceFile, nil
+	} else if !os.IsNotExist(err) && (fi != nil && fi.IsDir()) {
+		return sourceDir, nil
+	}
 
-			pkgb, err = vpkg.NewBuilderFromReader(pkgr)
-			if err != nil {
-				pkgr.Close()
-				f.Close()
-				return nil, err
-			}
-			return pkgb, nil
+	// Source is unknown and thus is invalid
+	return sourceINVALID, err
+}
+
+func getBuilderURL(argName, src string) (vpkg.Builder, error) {
+	resp, err := http.Get(src)
+	if err != nil {
+		resp.Body.Close()
+		return nil, err
+	}
+
+	pkgr, err := vpkg.Load(resp.Body)
+	if err != nil {
+		resp.Body.Close()
+		return nil, err
+	}
+
+	pkgb, err := vpkg.NewBuilderFromReader(pkgr)
+	if err != nil {
+		resp.Body.Close()
+		pkgr.Close()
+		return nil, err
+	}
+	return pkgb, nil
+}
+
+func getBuilderFile(argName, src string) (vpkg.Builder, error) {
+	f, err := os.Open(src)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return nil, err
 		}
 	}
 
-	// check for a project directory
+	pkgr, err := vpkg.Load(f)
+	if err != nil {
+		f.Close()
+		return nil, err
+	}
+
+	pkgb, err := vpkg.NewBuilderFromReader(pkgr)
+	if err != nil {
+		pkgr.Close()
+		f.Close()
+		return nil, err
+	}
+	return pkgb, nil
+}
+
+func getBuilderDir(argName, src string) (vpkg.Builder, error) {
 	var ptgt *vproj.Target
 	path, target := vproj.Split(src)
 	proj, err := vproj.LoadProject(path)
@@ -242,24 +258,42 @@ func getPackageBuilder(argName, src string) (vpkg.Builder, error) {
 		if !os.IsNotExist(err) {
 			return nil, err
 		}
-	} else {
-		ptgt, err = proj.Target(target)
-		if err != nil {
-			return nil, err
-		}
-
-		pkgb, err = ptgt.NewBuilder()
-		if err != nil {
-			return nil, err
-		}
-
-		return pkgb, nil
 	}
 
-	// TODO: check for urls
+	ptgt, err = proj.Target(target)
+	if err != nil {
+		return nil, err
+	}
+
+	pkgb, err := ptgt.NewBuilder()
+	if err != nil {
+		return nil, err
+	}
+
+	return pkgb, nil
+}
+
+func getPackageBuilder(argName, src string) (vpkg.Builder, error) {
+	sType, err := getSourceType(src)
+	if err != nil {
+		return nil, err
+	}
+
+	switch sType {
+	case sourceURL:
+		return getBuilderURL(argName, src)
+	case sourceFile:
+		return getBuilderFile(argName, src)
+	case sourceDir:
+		return getBuilderDir(argName, src)
+	case sourceINVALID:
+		fallthrough
+	default:
+		return nil, fmt.Errorf("failed to resolve %s '%s'", argName, src)
+	}
+
 	// TODO: check for vrepo strings
 
-	return nil, fmt.Errorf("failed to resolve %s '%s'", argName, src)
 }
 
 var (

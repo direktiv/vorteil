@@ -365,15 +365,17 @@ func ec2PublicIPReady(description *ec2.DescribeInstancesOutput) (ip string, read
 func (p *Provisioner) getInstancePublicIP(instanceID string) (string, error) {
 	var ip string
 	var ipReady bool
-	for {
+	var err error
+	for err == nil {
 		time.Sleep(pollrate)
-		description, err := p.client.DescribeInstancesWithContext(p.args.Context, &ec2.DescribeInstancesInput{
+		description, descErr := p.client.DescribeInstancesWithContext(p.args.Context, &ec2.DescribeInstancesInput{
 			InstanceIds: []*string{
 				&instanceID,
 			},
 		})
 		if err != nil {
-			return ip, err
+			err = descErr
+			break
 		}
 
 		if description == nil || len(description.Reservations) == 0 ||
@@ -388,30 +390,29 @@ func (p *Provisioner) getInstancePublicIP(instanceID string) (string, error) {
 		case 16:
 			p.args.Logger.Infof("Instance status: running.")
 			ip, ipReady = ec2PublicIPReady(description)
-			if !ipReady {
-				continue
+			if ipReady {
+				return ip, err
 			}
+			continue
 		case 32:
 			p.args.Logger.Infof("Instance status: shutting-down.")
-			return ip, errors.New("instance is shutting down for an unknown reason")
+			err = errors.New("instance is shutting down for an unknown reason")
 		case 48:
 			p.args.Logger.Infof("Instance status: terminated.")
-			return ip, errors.New("instance has been terminated for an unknown reason")
+			err = errors.New("instance has been terminated for an unknown reason")
 		case 64:
 			p.args.Logger.Infof("Instance status: stopping.")
-			return ip, errors.New("instance is stopping for an unknown reason")
+			err = errors.New("instance is stopping for an unknown reason")
 		case 80:
 			p.args.Logger.Infof("Instance status: stopped.")
-			return ip, errors.New("instance stopped for an unknown reason")
+			err = errors.New("instance stopped for an unknown reason")
 		default:
 			p.args.Logger.Infof("Instance status: unknown.")
 			continue
 		}
-
-		break
 	}
 
-	return ip, nil
+	return ip, err
 }
 
 // prepareInstaceForPayload : Waits for instance ip to be ready for payload

@@ -7,12 +7,14 @@ import (
 	"github.com/spf13/pflag"
 )
 
+// BoolFlag handles boolean flags
 type BoolFlag struct {
 	FlagPart
 	Value    bool
 	Validate func(Value BoolFlag) error
 }
 
+// AddTo satisfies the Flag interface requirement
 func (f *BoolFlag) AddTo(flagSet *pflag.FlagSet) {
 	if f.short == "" {
 		flagSet.BoolVar(&f.Value, f.Key, f.Value, f.usage)
@@ -25,6 +27,7 @@ func (f *BoolFlag) AddTo(flagSet *pflag.FlagSet) {
 	}
 }
 
+// AddUnhiddenTo satisfies the Flag interface requirement
 func (f *BoolFlag) AddUnhiddenTo(flagSet *pflag.FlagSet) {
 	if f.short == "" {
 		flagSet.BoolVar(&f.Value, f.Key, f.Value, f.usage)
@@ -33,6 +36,7 @@ func (f *BoolFlag) AddUnhiddenTo(flagSet *pflag.FlagSet) {
 	}
 }
 
+// FlagValidate satisfies the Flag interface requirement
 func (f BoolFlag) FlagValidate() error {
 	if f.Validate == nil {
 		return nil
@@ -40,6 +44,7 @@ func (f BoolFlag) FlagValidate() error {
 	return f.Validate(f)
 }
 
+// NBoolFlag handle bool flags in cases with a varying number of possible occurrences of the flat (ie --flag[x].my-bool)
 type NBoolFlag struct {
 	FlagPart
 	Total    *int
@@ -48,6 +53,7 @@ type NBoolFlag struct {
 	Validate func(f NBoolFlag) error
 }
 
+// NewNBoolFlag returns a new NBoolFlag object
 func NewNBoolFlag(key, usage string, total *int, hidden bool, validate func(NBoolFlag) error) NBoolFlag {
 	return NBoolFlag{
 		FlagPart: NewFlagPart(key, usage, hidden),
@@ -56,6 +62,7 @@ func NewNBoolFlag(key, usage string, total *int, hidden bool, validate func(NBoo
 	}
 }
 
+// AddTo satisfies the Flag interface requirement
 func (f *NBoolFlag) AddTo(flagSet *pflag.FlagSet) {
 
 	if f.Value == nil {
@@ -85,6 +92,7 @@ func (f NBoolFlag) nKey(n int) string {
 	return strings.Replace(f.Key, "<<N>>", fmt.Sprintf("%d", n), -1)
 }
 
+// AddUnhiddenTo satisfies the Flag interface requirement
 func (f *NBoolFlag) AddUnhiddenTo(flagSet *pflag.FlagSet) {
 
 	if f.Value == nil {
@@ -102,6 +110,7 @@ func (f *NBoolFlag) AddUnhiddenTo(flagSet *pflag.FlagSet) {
 
 }
 
+// FlagValidate satisfies the Flag interface requirement
 func (f NBoolFlag) FlagValidate() error {
 
 	if f.void {

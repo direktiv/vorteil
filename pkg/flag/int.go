@@ -2,12 +2,14 @@ package flag
 
 import "github.com/spf13/pflag"
 
+// UintFlag handles uint flags
 type UintFlag struct {
 	FlagPart
 	Value    uint
 	Validate func(f UintFlag) error
 }
 
+// NewUintFlag returns a new UintFlag object
 func NewUintFlag(key, usage string, hidden bool, validate func(UintFlag) error) UintFlag {
 	return UintFlag{
 		FlagPart: NewFlagPart(key, usage, hidden),
@@ -15,6 +17,7 @@ func NewUintFlag(key, usage string, hidden bool, validate func(UintFlag) error) 
 	}
 }
 
+// AddTo satisfies the Flag interface requirement
 func (f *UintFlag) AddTo(flagSet *pflag.FlagSet) {
 	if f.short == "" {
 		flagSet.UintVar(&f.Value, f.Key, f.Value, f.usage)
@@ -27,6 +30,7 @@ func (f *UintFlag) AddTo(flagSet *pflag.FlagSet) {
 	}
 }
 
+// AddUnhiddenTo satisfies the Flag interface requirement
 func (f *UintFlag) AddUnhiddenTo(flagSet *pflag.FlagSet) {
 	if f.short == "" {
 		flagSet.UintVar(&f.Value, f.Key, f.Value, f.usage)
@@ -35,6 +39,7 @@ func (f *UintFlag) AddUnhiddenTo(flagSet *pflag.FlagSet) {
 	}
 }
 
+// FlagValidate satisfies the Flag interface requirement
 func (f UintFlag) FlagValidate() error {
 	if f.Validate == nil {
 		return nil

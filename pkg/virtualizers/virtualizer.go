@@ -117,6 +117,7 @@ type NetworkRoute struct {
 	Address string
 }
 
+// Source is a struct that contains the contents of the virtual machine
 type Source struct {
 	Name       string   `json:"name"`
 	Type       string   `json:"type"`
@@ -126,11 +127,13 @@ type Source struct {
 	Job        string   `json:"job"`
 }
 
+// RouteMap contains a port and an address
 type RouteMap struct {
 	Port    string `json:"port"`
 	Address string `json:"address"`
 }
 
+// NetworkInterface is the routes for the machine
 type NetworkInterface struct {
 	Name    string     `json:"name"`
 	IP      string     `json:"ip"`
@@ -142,13 +145,14 @@ type NetworkInterface struct {
 	HTTPS   []RouteMap `json:"https"`
 }
 
-// Programs ..
+// ProgramSummaries contains the programs that the machine will run
 type ProgramSummaries struct {
 	Binary string   `json:"binary,omitempty"`
 	Args   string   `json:"args,omitempty"`
 	Env    []string `json:"env,omitempty"`
 }
 
+// VirtualMachine is a struct that contains details about the virtual machine
 type VirtualMachine struct {
 	ID       string    `json:"id"`
 	Instance string    `json:"instance"`
@@ -183,12 +187,14 @@ type VirtualMachine struct {
 	Serial LogChunk `json:"serial"`
 }
 
+// LogChunk is struct to control the Serial Logger output
 type LogChunk struct {
 	Cursor string `json:"cursor"`
 	More   bool   `json:"more"`
 	Data   string `json:"data"`
 }
 
+// Bytes decodes the data of a LogChunk
 func (l *LogChunk) Bytes() ([]byte, error) {
 	return base64.StdEncoding.DecodeString(l.Data)
 }

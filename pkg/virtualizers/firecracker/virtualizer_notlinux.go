@@ -103,7 +103,7 @@ func (v *Virtualizer) Download() (vio.File, error) {
 	return nil, nil
 }
 
-// Close shuts down the virutal machien and cleans up the disk and folders
+// Close shuts down the virtual machine and cleans up the disk and folders
 func (v *Virtualizer) Close(force bool) error {
 	return nil
 }

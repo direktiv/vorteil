@@ -168,6 +168,11 @@ func (b *Builder) Close() error {
 
 }
 
+// KernelUsed returns the calver the disk was built with
+func (b *Builder) KernelUsed() vkern.CalVer {
+	return b.kernel
+}
+
 // MinimumSize returns the minimum number of bytes that are needed to build the
 // image.
 func (b *Builder) MinimumSize() int64 {

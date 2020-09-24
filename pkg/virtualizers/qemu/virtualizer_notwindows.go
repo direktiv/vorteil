@@ -49,7 +49,6 @@ func (v *Virtualizer) Start() error {
 				}
 				if count == 10 {
 					v.logger.Errorf("Error: unable to start QEMU as socket wasn't created in time")
-					break
 				}
 				v.sock, err = net.Dial("unix", filepath.ToSlash(filepath.Join(v.folder, "monitor.sock")))
 				if err == nil {
@@ -72,12 +71,15 @@ func (v *Virtualizer) Start() error {
 
 			v.state = virtualizers.Ready
 
-			v.sock.Close()
+			if v.sock != nil {
+				v.sock.Close()
 
-			// vm should be stopped by now so close the pipes
-			v.errPipe.Close()
-			v.outPipe.Close()
-			v.disk.Close()
+				// vm should be stopped by now so close the pipes
+				v.errPipe.Close()
+				v.outPipe.Close()
+				v.disk.Close()
+			}
+
 		}()
 	}
 	return nil

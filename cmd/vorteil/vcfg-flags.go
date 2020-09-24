@@ -382,16 +382,19 @@ var vmCPUsFlagValidator = func(f flag.UintFlag) error {
 	return nil
 }
 
+func overwriteSizeFieldFromString(f flag.StringFlag, field *vcfg.Bytes) error {
+	var err error
+	*field, err = vcfg.ParseBytes(f.Value)
+	if err != nil {
+		return fmt.Errorf("--%s=%s: %v", f.Key, f.Value, err)
+	}
+	return nil
+}
+
 // --vm.disk-size
 var vmDiskSizeFlag = flag.NewStringFlag("vm.disk-size", "disk image capacity to allocate to app", hideFlags, vmDiskSizeFlagValidator)
 var vmDiskSizeFlagValidator = func(f flag.StringFlag) error {
-	var err error
-	overrideVCFG.VM.DiskSize, err = vcfg.ParseBytes(f.Value)
-	if err != nil {
-		return fmt.Errorf("--%s=%s: %v", f.Key,
-			f.Value, err)
-	}
-	return nil
+	return overwriteSizeFieldFromString(f, &overrideVCFG.VM.DiskSize)
 }
 
 // --vm.inodes
@@ -413,13 +416,7 @@ var vmKernelFlagValidator = func(f flag.StringFlag) error {
 // --vm.ram
 var vmRAMFlag = flag.NewStringFlag("vm.ram", "memory to allocate to app", hideFlags, vmRAMFlagValidator)
 var vmRAMFlagValidator = func(f flag.StringFlag) error {
-	var err error
-	overrideVCFG.VM.RAM, err = vcfg.ParseBytes(f.Value)
-	if err != nil {
-		return fmt.Errorf("--%s=%s: %v", f.Key,
-			f.Value, err)
-	}
-	return nil
+	return overwriteSizeFieldFromString(f, &overrideVCFG.VM.RAM)
 }
 
 var initRequiredProgramsWithoutFlag = func(l, i int) {

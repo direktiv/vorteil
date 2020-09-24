@@ -16,6 +16,7 @@ import (
 	"github.com/vbauerster/mpb/v5/decor"
 )
 
+// Logger is an interface that has the ability to hide debug/info
 type Logger interface {
 	Debugf(format string, x ...interface{})
 	Errorf(format string, x ...interface{})
@@ -26,6 +27,7 @@ type Logger interface {
 	IsDebugEnabled() bool
 }
 
+// Progress is an interface to display progress bars for certain operations
 type Progress interface {
 	Finish(success bool)
 	Increment(n int64)
@@ -34,15 +36,18 @@ type Progress interface {
 	ProxyReader(r io.Reader) io.ReadCloser
 }
 
+// ProgressReporter is an interface that contains the ability to create a Progress bar object.
 type ProgressReporter interface {
 	NewProgress(label string, units string, total int64) Progress
 }
 
+// View is an interface that contains a logger and the ability to create progress objects
 type View interface {
 	Logger
 	ProgressReporter
 }
 
+// CLI is a generic object setup for logging to terminal outputs
 type CLI struct {
 	DisableColors      bool
 	DisableTTY         bool
@@ -55,38 +60,46 @@ type CLI struct {
 	progressContainer  *mpb.Progress
 }
 
+// Debugf is a wrapper function that executes logrus.Tracef if debug is enabled.
 func (log *CLI) Debugf(format string, x ...interface{}) {
 	if log.IsDebug {
 		logrus.Tracef(format, x...)
 	}
 }
 
+// Errorf is a wrapper function that executes logrus.Errorf
 func (log *CLI) Errorf(format string, x ...interface{}) {
 	logrus.Errorf(format, x...)
 }
 
+// Infof is a wrapper function that executes logrus.Debugf only if verbose is enabled.
 func (log *CLI) Infof(format string, x ...interface{}) {
 	if log.IsVerbose {
 		logrus.Debugf(format, x...)
 	}
 }
 
+// Printf is a wrapper function that executes logrus.Printf
 func (log *CLI) Printf(format string, x ...interface{}) {
 	logrus.Printf(format, x...)
 }
 
+// Warnf is a wrapper function that executes logrus.Warnf
 func (log *CLI) Warnf(format string, x ...interface{}) {
 	logrus.Warnf(format, x...)
 }
 
+// IsInfoEnabled returns whether InfoLevel logging is enabled
 func (log *CLI) IsInfoEnabled() bool {
 	return logrus.IsLevelEnabled(logrus.InfoLevel)
 }
 
+// IsDebugEnabled returns whether DebugLevel logging is enabled
 func (log *CLI) IsDebugEnabled() bool {
 	return logrus.IsLevelEnabled(logrus.DebugLevel)
 }
 
+// NewProgress creates a progress object and returns
 func (log *CLI) NewProgress(label string, units string, total int64) Progress {
 
 	if log.DisableTTY {
@@ -157,20 +170,24 @@ type nilProgress struct {
 	total  int64
 }
 
+// Increment nilProgress does nothing...
 func (np *nilProgress) Increment(n int64) {
 
 }
 
+// Finish nilProgress does nothing...
 func (np *nilProgress) Finish(success bool) {
 
 }
 
+// Write nilProgress writes to the cursor
 func (np *nilProgress) Write(p []byte) (n int, err error) {
 	n = len(p)
 	np.cursor += int64(n)
 	return
 }
 
+// Seek nilProgress creates the infinite loader symbol
 func (np *nilProgress) Seek(offset int64, whence int) (int64, error) {
 	var abs int64
 
@@ -189,6 +206,7 @@ func (np *nilProgress) Seek(offset int64, whence int) (int64, error) {
 	return abs, nil
 }
 
+// ProxyReader nillProgress does nothing with the reader
 func (np *nilProgress) ProxyReader(r io.Reader) io.ReadCloser {
 
 	if rc, ok := r.(io.ReadCloser); ok {
@@ -211,6 +229,7 @@ type pb struct {
 	nextUpdate time.Time
 }
 
+// Increment increaes the progress on the bar
 func (pb *pb) Increment(n int64) {
 	pb.buffered += n
 	pb.bar += n
@@ -225,6 +244,7 @@ func (pb *pb) flush() {
 	pb.buffered = 0
 }
 
+// Finish closes the progress bar object
 func (pb *pb) Finish(success bool) {
 	if pb.closed {
 		return
@@ -250,6 +270,7 @@ func (pb *pb) Finish(success bool) {
 	}
 }
 
+// Write writes to the progress bar object
 func (pb *pb) Write(p []byte) (n int, err error) {
 	n = len(p)
 	pb.cursor += int64(n)
@@ -259,6 +280,7 @@ func (pb *pb) Write(p []byte) (n int, err error) {
 	return
 }
 
+// Seek applies the offset to the progressbar cursor
 func (pb *pb) Seek(offset int64, whence int) (int64, error) {
 	var abs int64
 
@@ -281,6 +303,7 @@ func (pb *pb) Seek(offset int64, whence int) (int64, error) {
 	return abs, nil
 }
 
+// ProxyReader returns the ready of the progress bar
 func (pb *pb) ProxyReader(r io.Reader) io.ReadCloser {
 	return pb.p.ProxyReader(r)
 }
@@ -289,12 +312,14 @@ type mws struct {
 	w []io.WriteSeeker
 }
 
+// MultiWriteSeeker returns a MultiWriteSeeker object
 func MultiWriteSeeker(writeseekers ...io.WriteSeeker) io.WriteSeeker {
 	return &mws{
 		w: writeseekers,
 	}
 }
 
+// Write writes to the multi write seekers
 func (mws *mws) Write(p []byte) (n int, err error) {
 	for _, w := range mws.w {
 		n, err = w.Write(p)
@@ -309,6 +334,7 @@ func (mws *mws) Write(p []byte) (n int, err error) {
 	return len(p), nil
 }
 
+// Seek moves to the offset
 func (mws *mws) Seek(offset int64, whence int) (int64, error) {
 
 	var abs int64
@@ -330,6 +356,7 @@ func (mws *mws) Seek(offset int64, whence int) (int64, error) {
 	return abs, nil
 }
 
+// Format formats our logger for terminal use
 func (log *CLI) Format(entry *logrus.Entry) ([]byte, error) {
 
 	faint := color.New(color.Faint).SprintFunc()

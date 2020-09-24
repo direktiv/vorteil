@@ -382,38 +382,8 @@ func vcfgSansInfo(cfg *vcfg.VCFG, name string) (vio.File, error) {
 	}), nil
 }
 
-// TarFromPackage writes a tar to w from the package reader
-func TarFromPackage(w io.Writer, pkg vpkg.Reader) error {
-
-	tw := tar.NewWriter(w)
-	defer tw.Close()
-
-	cfg := pkg.VCFG()
-	defer cfg.Close()
-
-	v, err := vcfg.LoadFile(cfg)
-	if err != nil {
-		return err
-	}
-
-	ico := pkg.Icon()
-	defer ico.Close()
-
-	iconName := "default.png"
-	iconFile, err := ioutil.TempFile(os.TempDir(), UnpackTempPattern)
-	if err != nil {
-		return err
-	}
-	defer os.Remove(iconFile.Name())
-	defer iconFile.Close()
-
-	_, err = io.Copy(iconFile, ico)
-	if err != nil {
-		return err
-	}
-
-	var vprjIncluded bool
-	vprj := ProjectData{
+func genericProjectData() ProjectData {
+	return ProjectData{
 		IgnorePatterns: []string{FileName},
 		Targets: []TargetData{
 			{
@@ -424,7 +394,36 @@ func TarFromPackage(w io.Writer, pkg vpkg.Reader) error {
 			},
 		},
 	}
+}
 
+// TarFromPackage writes a tar to w from the package reader
+func TarFromPackage(w io.Writer, pkg vpkg.Reader) error {
+
+	// Create tar writer
+	tw := tar.NewWriter(w)
+	defer tw.Close()
+
+	// Load VCFG from package
+	v, cfg, err := vcfgFromPkg(pkg)
+	if err != nil {
+		return err
+	}
+	defer cfg.Close()
+
+	// Load icon from package
+	iconName := "default.png"
+	ico, iconFile, err := iconFromPkg(pkg)
+	if err != nil {
+		return err
+	}
+	defer ico.Close()
+	defer os.Remove(iconFile.Name())
+
+	// Load generic project data object
+	var vprjIncluded bool
+	vprj := genericProjectData()
+
+	// Walk pkg filesystem
 	files := make([]string, 0)
 	err = walkFilesystem(pkg, files, tw, vprjIncluded, vprj)
 	if err != nil {
@@ -432,13 +431,14 @@ func TarFromPackage(w io.Writer, pkg vpkg.Reader) error {
 	}
 
 	if !vprjIncluded {
-		// write icon as default.png and config as default.vcfg
+		// Write default icon/vcfg to tar
 		err = defaultPNGAndVCFG(v, vprj, tw, ico, iconFile, iconName)
 		if err != nil {
 			return err
 		}
 	} else {
-		err = fromVorteilProject(v, vprj, files, tw)
+		// Write from the vorteil project definition
+		err = tarFromVorteilProject(v, vprj, files, tw)
 		if err != nil {
 			return err
 		}
@@ -447,79 +447,149 @@ func TarFromPackage(w io.Writer, pkg vpkg.Reader) error {
 	return nil
 }
 
+func vcfgFromPkg(pkg vpkg.Reader) (*vcfg.VCFG, vio.File, error) {
+
+	var v *vcfg.VCFG
+	var err error
+
+	cfg := pkg.VCFG()
+	defer func() {
+		if err != nil {
+			cfg.Close()
+		}
+	}()
+
+	v, err = vcfg.LoadFile(cfg)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return v, cfg, nil
+}
+
+func iconFromPkg(pkg vpkg.Reader) (vio.File, *os.File, error) {
+
+	var err error
+	var iconFile *os.File
+
+	ico := pkg.Icon()
+	defer func() {
+		if err != nil {
+			ico.Close()
+		}
+	}()
+
+	iconFile, err = ioutil.TempFile(os.TempDir(), UnpackTempPattern)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer func() {
+		if err != nil {
+			iconFile.Close()
+			os.Remove(iconFile.Name())
+		}
+	}()
+
+	_, err = io.Copy(iconFile, ico)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return ico, iconFile, nil
+}
+
 func walkFilesystem(pkg vpkg.Reader, files []string, tw *tar.Writer, vprjIncluded bool, vprj ProjectData) error {
 
 	return pkg.FS().Walk(func(path string, f vio.File) error {
 		defer f.Close()
 		defer io.Copy(ioutil.Discard, f)
 
-		var link string
-		if f.IsSymlink() {
-			data, err := ioutil.ReadAll(f)
-			if err != nil {
-				return err
-			}
-			link = string(data)
-		}
-
-		header, err := tar.FileInfoHeader(vio.Info(f), link)
+		link, err := handleSymlink(f)
 		if err != nil {
 			return err
 		}
 
 		var mw io.Writer
-		var tf *os.File
-		var x bool
-
-		header.Name = strings.TrimPrefix(path, "./")
-		files = append(files, header.Name)
-		if header.Name == FileName && !vprjIncluded {
-
-			tf, err = ioutil.TempFile(os.TempDir(), UnpackTempPattern)
-			if err != nil {
-				return err
-			}
-			defer os.Remove(tf.Name())
-			defer tf.Close()
-			x = true
-
-			mw = io.MultiWriter(tf, tw)
-			vprjIncluded = true
-
-		} else {
-			mw = tw
-		}
-
-		err = tw.WriteHeader(header)
+		header, err := handleFile(mw, f, path, link, vprjIncluded, vprj, tw)
 		if err != nil {
 			return err
 		}
-
-		// TODO: check for missed error
-		if !f.IsDir() {
-			_, err = io.Copy(mw, f)
-			if err != nil {
-				return err
-			}
-		}
-
-		if x {
-			b, err := ioutil.ReadFile(tf.Name())
-			if err != nil {
-				return err
-			}
-
-			err = toml.Unmarshal(b, &vprj)
-			if err != nil {
-				return err
-			}
-		}
+		files = append(files, header.Name)
 
 		return nil
 	})
 }
 
-func defaultPNGAndVCFG(v *vcfg.VCFG, vprj ProjectData, tw *tar.Writer, ico vio.File, iconFile *os.File, iconName string) error {
+// if link is not empty, file is a symlink
+func handleSymlink(f vio.File) (string, error) {
+	var link string
+	if f.IsSymlink() {
+		data, err := ioutil.ReadAll(f)
+		if err != nil {
+			return link, err
+		}
+		link = string(data)
+	}
+	return link, nil
+}
+
+func handleFile(mw io.Writer, f vio.File, path, link string, vprjIncluded bool, vprj ProjectData, tw *tar.Writer) (*tar.Header, error) {
+
+	header, err := tar.FileInfoHeader(vio.Info(f), link)
+	if err != nil {
+		return nil, err
+	}
+
+	var tf *os.File
+	var x bool
+
+	header.Name = strings.TrimPrefix(path, "./")
+	if header.Name == FileName && !vprjIncluded {
+
+		tf, err = ioutil.TempFile(os.TempDir(), UnpackTempPattern)
+		if err != nil {
+			return nil, err
+		}
+		defer os.Remove(tf.Name())
+		defer tf.Close()
+		x = true
+
+		mw = io.MultiWriter(tf, tw)
+		vprjIncluded = true
+
+	} else {
+		mw = tw
+	}
+
+	err = tw.WriteHeader(header)
+	if err != nil {
+		return nil, err
+	}
+
+	if !f.IsDir() {
+		_, err = io.Copy(mw, f)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if x {
+		b, err := ioutil.ReadFile(tf.Name())
+		if err != nil {
+			return nil, err
+		}
+
+		err = toml.Unmarshal(b, &vprj)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return header, nil
+}
+
+func handleSplitVCFGs(v *vcfg.VCFG, tw *tar.Writer) error {
+
 	cfgTmp, err := vcfgSansInfo(v, "")
 	if err != nil {
 		return err
@@ -562,34 +632,55 @@ func defaultPNGAndVCFG(v *vcfg.VCFG, vprj ProjectData, tw *tar.Writer, ico vio.F
 		return err
 	}
 	cfgTmp.Close()
-	if ico.Size() != 0 {
-		_, err = iconFile.Seek(0, 0)
-		if err != nil {
-			return err
-		}
 
-		icoTmp := vio.CustomFile(vio.CustomFileArgs{
-			ModTime:    ico.ModTime(),
-			Name:       iconName,
-			ReadCloser: iconFile,
-			Size:       ico.Size(),
-		})
-		defer icoTmp.Close()
+	return nil
+}
 
-		icoHeader, err := tar.FileInfoHeader(vio.Info(icoTmp), "")
-		if err != nil {
-			return err
-		}
+func handleIcon(iconName string, ico vio.File, tw *tar.Writer, iconFile *os.File) error {
+	if ico.Size() == 0 {
+		return nil
+	}
+	_, err := iconFile.Seek(0, 0)
+	if err != nil {
+		return err
+	}
 
-		err = tw.WriteHeader(icoHeader)
-		if err != nil {
-			return err
-		}
+	icoTmp := vio.CustomFile(vio.CustomFileArgs{
+		ModTime:    ico.ModTime(),
+		Name:       iconName,
+		ReadCloser: iconFile,
+		Size:       ico.Size(),
+	})
+	defer icoTmp.Close()
 
-		_, err = io.Copy(tw, icoTmp)
-		if err != nil {
-			return err
-		}
+	icoHeader, err := tar.FileInfoHeader(vio.Info(icoTmp), "")
+	if err != nil {
+		return err
+	}
+
+	err = tw.WriteHeader(icoHeader)
+	if err != nil {
+		return err
+	}
+
+	_, err = io.Copy(tw, icoTmp)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func defaultPNGAndVCFG(v *vcfg.VCFG, vprj ProjectData, tw *tar.Writer, ico vio.File, iconFile *os.File, iconName string) error {
+
+	err := handleSplitVCFGs(v, tw)
+	if err != nil {
+		return err
+	}
+
+	err = handleIcon(iconName, ico, tw, iconFile)
+	if err != nil {
+		return err
 	}
 
 	for i := range vprj.Targets {
@@ -629,7 +720,7 @@ func defaultPNGAndVCFG(v *vcfg.VCFG, vprj ProjectData, tw *tar.Writer, ico vio.F
 	return nil
 }
 
-func fromVorteilProject(v *vcfg.VCFG, vprj ProjectData, files []string, tw *tar.Writer) error {
+func tarFromVorteilProject(v *vcfg.VCFG, vprj ProjectData, files []string, tw *tar.Writer) error {
 	for _, x := range vprj.Targets[0].VCFGs {
 		for _, s := range files {
 			if s == FileName {

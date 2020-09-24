@@ -189,7 +189,7 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG, name st
 		return err
 	}
 
-	_ = virt.Prepare(&virtualizers.PrepareArgs{
+	vo := virt.Prepare(&virtualizers.PrepareArgs{
 		Name:      fmt.Sprintf("%s-%s", name, randstr.Hex(4)),
 		PName:     virt.Type(),
 		Start:     true,
@@ -221,10 +221,28 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG, name st
 		}
 	}()
 
+	var prepareError error
+	// listen to prepare operation
+	go func() {
+		select {
+		case err, errch := <-vo.Error:
+			if !errch {
+				break
+			}
+			if err != nil {
+				prepareError = err
+			}
+		}
+	}()
+
 	var hasBeenAlive bool
 	for {
 		select {
 		case <-time.After(time.Millisecond * 200):
+			// Check prepare error from vm operation
+			if prepareError != nil {
+				return prepareError
+			}
 			if virt.State() == virtualizers.Alive && !routesChecked {
 				routesChecked = true
 				lines := gatherNetworkDetails(util.ConvertToVM(virt.Details()).(*virtualizers.VirtualMachine))
@@ -260,6 +278,7 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG, name st
 				}
 			}()
 			finished = true
+
 		case <-chBool:
 			return nil
 		}

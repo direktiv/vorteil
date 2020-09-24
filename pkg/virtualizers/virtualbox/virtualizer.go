@@ -67,6 +67,9 @@ func (v *Virtualizer) getState() (string, error) {
 
 	err := v.execute(cmd)
 	if err != nil {
+		if strings.Contains(err.Error(), "Could not find a registered machine named") {
+			return "", nil
+		}
 		return "", err
 	}
 
@@ -224,7 +227,10 @@ func (v *Virtualizer) Close(force bool) error {
 	stopVM := func() error {
 		err := v.execute(exec.Command("VBoxManage", "unregistervm", v.name))
 		if err != nil {
-			return err
+			if !strings.Contains(err.Error(),
+				fmt.Sprintf("Could not find a registered machine named")) {
+				return err
+			}
 		}
 		return nil
 	}
@@ -234,6 +240,7 @@ func (v *Virtualizer) Close(force bool) error {
 			fmt.Sprintf("Cannot unregister the machine '%s' while it is locked",
 				v.name)) && !strings.Contains(err.Error(),
 			fmt.Sprintf("Could not find a registered machine")) && !strings.Contains(err.Error(), "(MISSING)") {
+
 			return err
 		}
 	}
@@ -243,10 +250,6 @@ func (v *Virtualizer) Close(force bool) error {
 	}
 	v.disk.Close()
 	virtualizers.ActiveVMs.Delete(v.name)
-	// err = os.RemoveAll(v.folder)
-	// if err != nil {
-	// 	return err
-	// }
 
 	return nil
 }
@@ -420,7 +423,7 @@ func (v *Virtualizer) checkState() {
 	for {
 		state, err := v.getState()
 		if err != nil {
-			if !strings.Contains(err.Error(), "Could not find a registered machine") {
+			if !strings.Contains(err.Error(), "Could not find a registered machine") || !strings.Contains(err.Error(), "exit status 3221225786") || !strings.Contains(err.Error(), "The object is not ready") {
 				v.logger.Errorf("Getting VM State: %s", err.Error())
 			}
 		}

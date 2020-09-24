@@ -44,7 +44,7 @@ type Provisioner struct {
 // Config contains configuration fields required by the Provisioner
 type Config struct {
 	Container          string `json:"container"`          // Azure storage container name
-	Key                string `json:"key"`                // Base64 encoded contents of an Azure service pricipal credentials file
+	Key                string `json:"key"`                // Base64 encoded contents of an Azure service principal credentials file
 	Location           string `json:"location"`           // Azure location
 	ResourceGroup      string `json:"resourceGroup"`      // Azure resource group name
 	StorageAccountKey  string `json:"storageAccountKey"`  // Azure storage account key

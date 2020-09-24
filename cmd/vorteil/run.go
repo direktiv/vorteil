@@ -30,7 +30,7 @@ var initFirecrackerCmd = &cobra.Command{
 	Hidden: true,
 	Args:   cobra.MaximumNArgs(0),
 	Run: func(cmd *cobra.Command, args []string) {
-		err := firecracker.SetupBridgeAndDHCPServer()
+		err := firecracker.SetupBridgeAndDHCPServer(log)
 		if err != nil {
 			log.Errorf("%v", err)
 			os.Exit(1)
@@ -189,7 +189,7 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG, name st
 		return err
 	}
 
-	_ = virt.Prepare(&virtualizers.PrepareArgs{
+	vo := virt.Prepare(&virtualizers.PrepareArgs{
 		Name:      fmt.Sprintf("%s-%s", name, randstr.Hex(4)),
 		PName:     virt.Type(),
 		Start:     true,
@@ -205,7 +205,7 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG, name st
 	defer serialSubscription.Close()
 	defer serial.Close()
 
-	signalChannel, chBool := listenForInterupt()
+	signalChannel, chBool := listenForInterrupt()
 
 	var finished bool
 	var routesChecked bool
@@ -221,10 +221,28 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG, name st
 		}
 	}()
 
+	var prepareError error
+	// listen to prepare operation
+	go func() {
+		select {
+		case err, errch := <-vo.Error:
+			if !errch {
+				break
+			}
+			if err != nil {
+				prepareError = err
+			}
+		}
+	}()
+
 	var hasBeenAlive bool
 	for {
 		select {
 		case <-time.After(time.Millisecond * 200):
+			// Check prepare error from vm operation
+			if prepareError != nil {
+				return prepareError
+			}
 			if virt.State() == virtualizers.Alive && !routesChecked {
 				routesChecked = true
 				lines := gatherNetworkDetails(util.ConvertToVM(virt.Details()).(*virtualizers.VirtualMachine))
@@ -260,6 +278,7 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG, name st
 				}
 			}()
 			finished = true
+
 		case <-chBool:
 			return nil
 		}
@@ -325,7 +344,7 @@ func raw(start bool) error {
 	return nil
 }
 
-func listenForInterupt() (chan os.Signal, chan bool) {
+func listenForInterrupt() (chan os.Signal, chan bool) {
 	var signalChannel chan os.Signal
 	signalChannel = make(chan os.Signal, 1)
 	signal.Notify(signalChannel, os.Interrupt, syscall.SIGTERM)

@@ -55,12 +55,15 @@ func (v *Virtualizer) Start() error {
 
 			v.state = virtualizers.Ready
 
-			v.sock.Close()
+			if v.sock != nil {
+				v.sock.Close()
 
-			// vm should be stopped by now so close the pipes
-			v.errPipe.Close()
-			v.outPipe.Close()
-			v.disk.Close()
+				// vm should be stopped by now so close the pipes
+				v.errPipe.Close()
+				v.outPipe.Close()
+				v.disk.Close()
+			}
+
 		}()
 
 	default:

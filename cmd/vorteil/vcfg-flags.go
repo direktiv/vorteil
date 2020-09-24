@@ -232,13 +232,20 @@ var nfsServerFlagValidator = func(f flag.NStringFlag) error {
 	return nil
 }
 
+func initRequiredNetworks(l, i int) {
+	if l == 0 {
+		return
+	}
+	for len(overrideVCFG.Networks) < i+1 {
+		overrideVCFG.Networks = append(overrideVCFG.Networks, vcfg.NetworkInterface{IP: "dhcp"})
+	}
+}
+
 // --network.tcpdump
 var networkTCPDumpFlag = flag.NewNBoolFlag("network[<<N>>].tcpdump", "configure this network to run with tcpdump", &maxNetworkFlags, hideFlags, networkTCPDumpFlagValidator)
 var networkTCPDumpFlagValidator = func(f flag.NBoolFlag) error {
 	for i := 0; i < *f.Total; i++ {
-		for len(overrideVCFG.Networks) < i+1 {
-			overrideVCFG.Networks = append(overrideVCFG.Networks, vcfg.NetworkInterface{})
-		}
+		initRequiredNetworks(len(f.Value), i)
 		val := f.Value[i]
 		overrideVCFG.Networks[i].TCPDUMP = val
 	}
@@ -249,31 +256,17 @@ var networkTCPDumpFlagValidator = func(f flag.NBoolFlag) error {
 var networkGatewayFlag = flag.NewNStringFlag("network[<<N>>].gateway", "configure app's network gateway", &maxNetworkFlags, hideFlags, networkGatewayFlagValidator)
 var networkGatewayFlagValidator = func(f flag.NStringFlag) error {
 	for i := 0; i < *f.Total; i++ {
-		if f.Value[i] == "" {
-			continue
-		}
+		initRequiredNetworks(len(f.Value), i)
 		s := f.Value[i]
-		for len(overrideVCFG.Networks) < i+1 {
-			overrideVCFG.Networks = append(overrideVCFG.Networks, vcfg.NetworkInterface{IP: "dhcp"})
-		}
 		nic := &overrideVCFG.Networks[i]
 		nic.Gateway = s
 	}
 	return nil
 }
 
-func initRequiredNetworks(f flag.NStringSliceFlag, i int) {
-	if len(f.Value[i]) == 0 {
-		return
-	}
-	for len(overrideVCFG.Networks) < i+1 {
-		overrideVCFG.Networks = append(overrideVCFG.Networks, vcfg.NetworkInterface{IP: "dhcp"})
-	}
-}
-
 var networkFlagValidator = func(f flag.NStringSliceFlag, fn func(nic *vcfg.NetworkInterface, s interface{})) error {
 	for i := 0; i < *f.Total; i++ {
-		initRequiredNetworks(f, i)
+		initRequiredNetworks(len(f.Value[i]), i)
 		s := f.Value[i]
 		nic := &overrideVCFG.Networks[i]
 		fn(nic, s)
@@ -297,13 +290,8 @@ var networkHTTPSFlagValidator = func(f flag.NStringSliceFlag) error {
 var networkIPFlag = flag.NewNStringFlag("network[<<N>>].ip", "configure app's network IP address", &maxNetworkFlags, hideFlags, networkIPFlagValidator)
 var networkIPFlagValidator = func(f flag.NStringFlag) error {
 	for i := 0; i < *f.Total; i++ {
-		if f.Value[i] == "" {
-			continue
-		}
+		initRequiredNetworks(len(f.Value), i)
 		s := f.Value[i]
-		for len(overrideVCFG.Networks) < i+1 {
-			overrideVCFG.Networks = append(overrideVCFG.Networks, vcfg.NetworkInterface{IP: "dhcp"})
-		}
 		nic := &overrideVCFG.Networks[i]
 		nic.IP = s
 	}
@@ -314,16 +302,11 @@ var networkIPFlagValidator = func(f flag.NStringFlag) error {
 var networkMTUFlag = flag.NewNStringFlag("network[<<N>>].mtu", "configure app's network interface MTU", &maxNetworkFlags, hideFlags, networkMTUFlagValidator)
 var networkMTUFlagValidator = func(f flag.NStringFlag) error {
 	for i := 0; i < *f.Total; i++ {
-		if f.Value[i] == "" {
-			continue
-		}
+		initRequiredNetworks(len(f.Value), i)
 		s := f.Value[i]
 		x, err := strconv.ParseUint(s, 10, 64)
 		if err != nil {
 			return err
-		}
-		for len(overrideVCFG.Networks) < i+1 {
-			overrideVCFG.Networks = append(overrideVCFG.Networks, vcfg.NetworkInterface{IP: "dhcp"})
 		}
 		nic := &overrideVCFG.Networks[i]
 		nic.MTU = uint(x)
@@ -335,13 +318,8 @@ var networkMTUFlagValidator = func(f flag.NStringFlag) error {
 var networkMaskFlag = flag.NewNStringFlag("network[<<N>>].mask", "configure app's subnet mask", &maxNetworkFlags, hideFlags, networkMaskFlagValidator)
 var networkMaskFlagValidator = func(f flag.NStringFlag) error {
 	for i := 0; i < *f.Total; i++ {
-		if f.Value[i] == "" {
-			continue
-		}
+		initRequiredNetworks(len(f.Value), i)
 		s := f.Value[i]
-		for len(overrideVCFG.Networks) < i+1 {
-			overrideVCFG.Networks = append(overrideVCFG.Networks, vcfg.NetworkInterface{IP: "dhcp"})
-		}
 		nic := &overrideVCFG.Networks[i]
 		nic.Mask = s
 	}

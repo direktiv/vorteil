@@ -145,6 +145,7 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 	if err != nil {
 		return err
 	}
+	p.args.Logger.Infof("Created empty instance: %s.\n", instanceID)
 
 	defer func() {
 		var err error
@@ -237,28 +238,47 @@ func (p *Provisioner) createClient() (*ec2.EC2, *http.Client, string, error) {
 	return ec2Client, httpClient, userdata, nil
 }
 
-func (p *Provisioner) createEmptyInstance() (string, error) {
-	var instanceID string
-	var err error
-
-	// if not being forced up check if it exists
+func (p *Provisioner) forceOverwriteCheck() error {
 	if !p.args.Force {
-
 		filterForce := &ec2.Filter{
 			Name:   aws.String("name"),
 			Values: []*string{aws.String(p.args.Name)},
 		}
 		var imagesForce *ec2.DescribeImagesOutput
-		imagesForce, err = p.client.DescribeImages(&ec2.DescribeImagesInput{
+		imagesForce, err := p.client.DescribeImages(&ec2.DescribeImagesInput{
 			Filters: []*ec2.Filter{filterForce},
 		})
 		if err != nil {
-			return instanceID, err
+			return err
 		}
 		if len(imagesForce.Images) > 0 {
-			return instanceID, errors.New("ami exists: try using the --force flag")
+			return errors.New("ami exists: try using the --force flag")
 		}
 	}
+
+	return nil
+}
+
+func checkSecurityGroupAccess(securityGroup *ec2.SecurityGroup) bool {
+	for _, perm := range securityGroup.IpPermissions {
+		if (perm.FromPort != nil && *perm.FromPort == securityGroupPort) &&
+			(perm.ToPort != nil && *perm.ToPort == securityGroupPort) &&
+			(perm.IpProtocol != nil && *perm.IpProtocol == "tcp") {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (p *Provisioner) createEmptyInstance() (string, error) {
+	var instanceID string
+
+	// Check force flag: if force is false and ami exists return error
+	if forceErr := p.forceOverwriteCheck(); forceErr != nil {
+		return instanceID, forceErr
+	}
+
 	p.args.Logger.Infof("Looking up security group ID...")
 
 	secgrps, err := p.client.DescribeSecurityGroups(&ec2.DescribeSecurityGroupsInput{
@@ -268,16 +288,7 @@ func (p *Provisioner) createEmptyInstance() (string, error) {
 		return instanceID, err
 	}
 
-	var hasAccess bool
-	for _, perm := range secgrps.SecurityGroups[0].IpPermissions {
-		if (perm.FromPort != nil && *perm.FromPort == securityGroupPort) &&
-			(perm.ToPort != nil && *perm.ToPort == securityGroupPort) &&
-			(perm.IpProtocol != nil && *perm.IpProtocol == "tcp") {
-			hasAccess = true
-		}
-	}
-
-	if !hasAccess {
+	if !checkSecurityGroupAccess(secgrps.SecurityGroups[0]) {
 		return instanceID, fmt.Errorf("the %s security group must allow TCP ingress on port %d", securityGroupName, securityGroupPort)
 	}
 
@@ -322,9 +333,6 @@ func (p *Provisioner) createEmptyInstance() (string, error) {
 		return instanceID, err
 	}
 	instanceID = *reservation.Instances[0].InstanceId
-
-	p.args.Logger.Infof("Created empty instance: %s.\n", instanceID)
-
 	return instanceID, nil
 }
 

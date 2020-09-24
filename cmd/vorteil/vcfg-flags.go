@@ -65,7 +65,6 @@ func setFlagArgArray(arg string) {
 			tallyRepeatableFlag(&maxRedirectFlags, elems[1])
 		}
 	}
-
 }
 
 func tallyRepeatableFlag(v *int, s string) {

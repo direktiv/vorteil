@@ -12,6 +12,27 @@ func testResetOverrideVCFG() {
 	overrideVCFG = vcfg.VCFG{}
 }
 
+func TestSetFlagArray(t *testing.T) {
+
+	testResetOverrideVCFG()
+
+	setFlagArgArray("--network[3].blah")
+	assert.Equal(t, 4, maxNetworkFlags)
+
+	setFlagArgArray("--program[3].blah")
+	assert.Equal(t, 4, maxProgramFlags)
+
+	setFlagArgArray("--logging[3].blah")
+	assert.Equal(t, 4, maxLoggingFlags)
+
+	setFlagArgArray("--nfs[3].blah")
+	assert.Equal(t, 4, maxNFSFlags)
+
+	setFlagArgArray("--redirect[3].blah")
+	assert.Equal(t, 4, maxRedirectFlags)
+
+}
+
 func TestVMCPUsFlag(t *testing.T) {
 
 	testResetOverrideVCFG()
@@ -494,7 +515,7 @@ func TestSystemDNSFlag(t *testing.T) {
 
 }
 
-func TestHostnameFlag(t *testing.T) {
+func TestSystemHostnameFlag(t *testing.T) {
 
 	testResetOverrideVCFG()
 
@@ -505,5 +526,262 @@ func TestHostnameFlag(t *testing.T) {
 	err := systemHostnameFlagValidator(f)
 	assert.NoError(t, err)
 	assert.Equal(t, f.Value, overrideVCFG.System.Hostname)
+
+}
+
+func TestSystemFSFlag(t *testing.T) {
+
+	testResetOverrideVCFG()
+
+	// set --system.filesystem="ext2"
+	f := systemFilesystemFlag
+	f.Value = "ext2"
+
+	err := systemFilesystemFlagValidator(f)
+	assert.NoError(t, err)
+	assert.Equal(t, vcfg.Filesystem(f.Value), overrideVCFG.System.Filesystem)
+
+}
+
+func TestSystemMaxFDsFlag(t *testing.T) {
+
+	testResetOverrideVCFG()
+
+	// set --system.maxfds="4096"
+	f := systemMaxFDsFlag
+	f.Value = 4096
+
+	err := systemMaxFDsFlagValidator(f)
+	assert.NoError(t, err)
+	assert.Equal(t, f.Value, overrideVCFG.System.MaxFDs)
+
+}
+
+func TestSystemOutputModeFlag(t *testing.T) {
+
+	testResetOverrideVCFG()
+
+	// set --system.output-mode="screen"
+	f := systemOutputModeFlag
+	f.Value = "screen"
+
+	err := systemOutputModeFlagValidator(f)
+	assert.NoError(t, err)
+	assert.Equal(t, vcfg.StdoutModeScreenOnly, overrideVCFG.System.StdoutMode)
+
+	// set --system.output-mode="serial"
+	f.Value = "serial"
+
+	err = systemOutputModeFlagValidator(f)
+	assert.NoError(t, err)
+	assert.Equal(t, vcfg.StdoutModeSerialOnly, overrideVCFG.System.StdoutMode)
+
+	// set --system.output-mode="disabled"
+	f.Value = "disabled"
+
+	err = systemOutputModeFlagValidator(f)
+	assert.NoError(t, err)
+	assert.Equal(t, vcfg.StdoutModeDisabled, overrideVCFG.System.StdoutMode)
+
+}
+
+func TestSystemUserFlag(t *testing.T) {
+
+	testResetOverrideVCFG()
+
+	// set --system.user="jconnor"
+	f := systemUserFlag
+	f.Value = "jconnor"
+
+	err := systemUserFlagValidator(f)
+	assert.NoError(t, err)
+	assert.Equal(t, f.Value, overrideVCFG.System.User)
+
+}
+
+func TestProgramBinaryFlag(t *testing.T) {
+
+	testResetOverrideVCFG()
+
+	// set --program[3].binary="test"
+	f := programBinaryFlag
+	f.Value = []string{"", "", "test"}
+	nProgs := 3
+	f.Total = &nProgs
+
+	err := programBinaryFlagValidator(f)
+	assert.NoError(t, err)
+	assert.Equal(t, nProgs, len(overrideVCFG.Programs))
+	assert.Equal(t, f.Value[2], overrideVCFG.Programs[2].Binary)
+
+}
+
+func TestProgramArgsFlag(t *testing.T) {
+
+	testResetOverrideVCFG()
+
+	// set --program[1].args="test1" --program[2].args="test2" --program[3].args="test3"
+	f := programArgsFlag
+	f.Value = []string{"test1", "test2", "test3"}
+	nProgs := 3
+	f.Total = &nProgs
+
+	err := programArgsFlagValidator(f)
+	assert.NoError(t, err)
+	assert.Equal(t, nProgs, len(overrideVCFG.Programs))
+	assert.Equal(t, f.Value[2], overrideVCFG.Programs[2].Args)
+	assert.Equal(t, f.Value[1], overrideVCFG.Programs[1].Args)
+	assert.Equal(t, f.Value[0], overrideVCFG.Programs[0].Args)
+
+}
+
+func TestProgramEnvFlag(t *testing.T) {
+
+	testResetOverrideVCFG()
+
+	// set --program[2].env="A=B"
+	f := programEnvFlag
+	f.Value = [][]string{[]string{}, []string{"A=B"}}
+	nProgs := 2
+	f.Total = &nProgs
+
+	err := programEnvFlagValidator(f)
+	assert.NoError(t, err)
+	assert.Equal(t, nProgs, len(overrideVCFG.Programs))
+	assert.Equal(t, "A=B", overrideVCFG.Programs[1].Env[0])
+
+}
+
+func TestProgramPrivilegesFlag(t *testing.T) {
+
+	testResetOverrideVCFG()
+
+	// set --program[2].privileges="superuser" --program[1].privileges="root"
+	f := programPrivilegesFlag
+	f.Value = []string{"root", "superuser"}
+	nProgs := 2
+	f.Total = &nProgs
+
+	err := programPrivilegesFlagValidator(f)
+	assert.NoError(t, err)
+	assert.Equal(t, nProgs, len(overrideVCFG.Programs))
+	assert.Equal(t, vcfg.Privilege(f.Value[0]), overrideVCFG.Programs[0].Privilege)
+	assert.Equal(t, vcfg.Privilege(f.Value[1]), overrideVCFG.Programs[1].Privilege)
+
+}
+
+func TestProgramStdoutFlag(t *testing.T) {
+
+	testResetOverrideVCFG()
+
+	// set --program[2].stdout="test"
+	f := programStdoutFlag
+	f.Value = []string{"", "test"}
+	nProgs := 2
+	f.Total = &nProgs
+
+	err := programStdoutFlagValidator(f)
+	assert.NoError(t, err)
+	assert.Equal(t, nProgs, len(overrideVCFG.Programs))
+	assert.Equal(t, f.Value[1], overrideVCFG.Programs[1].Stdout)
+
+}
+
+func TestProgramStderrFlag(t *testing.T) {
+
+	testResetOverrideVCFG()
+
+	// set --program[2].stderr="test"
+	f := programStderrFlag
+	f.Value = []string{"", "test"}
+	nProgs := 2
+	f.Total = &nProgs
+
+	err := programStderrFlagValidator(f)
+	assert.NoError(t, err)
+	assert.Equal(t, nProgs, len(overrideVCFG.Programs))
+	assert.Equal(t, f.Value[1], overrideVCFG.Programs[1].Stderr)
+
+}
+
+func TestProgramsCWDFlag(t *testing.T) {
+
+	testResetOverrideVCFG()
+
+	// set --program[2].cwd="/test"
+	f := programCWDFlag
+	f.Value = []string{"", "/test"}
+	nProgs := 2
+	f.Total = &nProgs
+
+	err := programCWDFlagValidator(f)
+	assert.NoError(t, err)
+	assert.Equal(t, nProgs, len(overrideVCFG.Programs))
+	assert.Equal(t, f.Value[1], overrideVCFG.Programs[1].Cwd)
+
+}
+
+func TestProgramsBootstrapFlag(t *testing.T) {
+
+	testResetOverrideVCFG()
+
+	// set --program[2].bootstrap="SLEEP 3000" --program[2].bootstrap="WAIT_FILE test"
+	f := programBootstrapFlag
+	f.Value = [][]string{[]string{}, []string{"SLEEP 3000", "WAIT_FILE test"}}
+	nProgs := 2
+	f.Total = &nProgs
+
+	err := programBootstrapFlagValidator(f)
+	assert.NoError(t, err)
+	assert.Equal(t, nProgs, len(overrideVCFG.Programs))
+	assert.Equal(t, f.Value[1], overrideVCFG.Programs[1].Bootstrap)
+
+}
+
+func TestProgramsLogfilesFlag(t *testing.T) {
+
+	testResetOverrideVCFG()
+
+	// set --program[2].logfiles="test"
+	f := programLogFilesFlag
+	f.Value = [][]string{[]string{}, []string{"test"}}
+	nProgs := 2
+	f.Total = &nProgs
+
+	err := programLogFilesFlagValidator(f)
+	assert.NoError(t, err)
+	assert.Equal(t, nProgs, len(overrideVCFG.Programs))
+	assert.Equal(t, f.Value[1], overrideVCFG.Programs[1].LogFiles)
+
+}
+
+func TestProgramsStraceFlag(t *testing.T) {
+
+	testResetOverrideVCFG()
+
+	// set --program[2].strace=true
+	f := programStraceFlag
+	f.Value = []bool{false, true}
+	nProgs := 2
+	f.Total = &nProgs
+
+	err := programStraceFlagValidator(f)
+	assert.NoError(t, err)
+	assert.Equal(t, nProgs, len(overrideVCFG.Programs))
+	assert.Equal(t, f.Value[1], overrideVCFG.Programs[1].Strace)
+
+}
+
+func TestSysctlFlag(t *testing.T) {
+
+	testResetOverrideVCFG()
+
+	// set --sysctl A=B
+	f := sysctlFlag
+	f.Value = []string{"A=B"}
+
+	err := sysctlFlagValidator(f)
+	assert.NoError(t, err)
+	assert.Equal(t, "B", overrideVCFG.Sysctl["A"])
 
 }

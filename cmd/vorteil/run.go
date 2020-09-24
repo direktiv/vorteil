@@ -30,7 +30,7 @@ var initFirecrackerCmd = &cobra.Command{
 	Hidden: true,
 	Args:   cobra.MaximumNArgs(0),
 	Run: func(cmd *cobra.Command, args []string) {
-		err := firecracker.SetupBridgeAndDHCPServer()
+		err := firecracker.SetupBridgeAndDHCPServer(log)
 		if err != nil {
 			log.Errorf("%v", err)
 			os.Exit(1)

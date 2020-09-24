@@ -181,55 +181,36 @@ var loggingTypeFlagValidator = func(f flag.NStringFlag) error {
 	return nil
 }
 
-// --nfs.mount
-var nfsMountFlag = flag.NewNStringFlag("nfs[<<N>>].mount", "configure app's nfs mounts", &maxNFSFlags, hideFlags, nfsMountFlagValidator)
-var nfsMountFlagValidator = func(f flag.NStringFlag) error {
+var initRequiredNFS = func(f flag.NStringFlag, fn func(nfs *vcfg.NFSSettings, s string)) error {
 	for i := 0; i < *f.Total; i++ {
-		if f.Value[i] == "" {
+		s := f.Value[i]
+		if s == "" {
 			continue
 		}
-		s := f.Value[i]
 		for len(overrideVCFG.NFS) < i+1 {
 			overrideVCFG.NFS = append(overrideVCFG.NFS, vcfg.NFSSettings{})
 		}
-		mount := &overrideVCFG.NFS[i]
-		mount.MountPoint = s
+		fn(&overrideVCFG.NFS[i], s)
 	}
 	return nil
+}
+
+// --nfs.mount
+var nfsMountFlag = flag.NewNStringFlag("nfs[<<N>>].mount", "configure app's nfs mounts", &maxNFSFlags, hideFlags, nfsMountFlagValidator)
+var nfsMountFlagValidator = func(f flag.NStringFlag) error {
+	return initRequiredNFS(f, func(nfs *vcfg.NFSSettings, s string) { nfs.MountPoint = s })
 }
 
 // --nfs.options
 var nfsOptionsFlag = flag.NewNStringFlag("nfs[<<N>>].options", "configure app's nfs options", &maxNFSFlags, hideFlags, nfsOptionsFlagValidator)
 var nfsOptionsFlagValidator = func(f flag.NStringFlag) error {
-	for i := 0; i < *f.Total; i++ {
-		if f.Value[i] == "" {
-			continue
-		}
-		s := f.Value[i]
-		for len(overrideVCFG.NFS) < i+1 {
-			overrideVCFG.NFS = append(overrideVCFG.NFS, vcfg.NFSSettings{})
-		}
-		mount := &overrideVCFG.NFS[i]
-		mount.Arguments = s
-	}
-	return nil
+	return initRequiredNFS(f, func(nfs *vcfg.NFSSettings, s string) { nfs.Arguments = s })
 }
 
 // --nfs.server
 var nfsServerFlag = flag.NewNStringFlag("nfs[<<N>>].server", "configure app's nfs servers", &maxNFSFlags, hideFlags, nfsServerFlagValidator)
 var nfsServerFlagValidator = func(f flag.NStringFlag) error {
-	for i := 0; i < *f.Total; i++ {
-		if f.Value[i] == "" {
-			continue
-		}
-		s := f.Value[i]
-		for len(overrideVCFG.NFS) < i+1 {
-			overrideVCFG.NFS = append(overrideVCFG.NFS, vcfg.NFSSettings{})
-		}
-		mount := &overrideVCFG.NFS[i]
-		mount.Server = s
-	}
-	return nil
+	return initRequiredNFS(f, func(nfs *vcfg.NFSSettings, s string) { nfs.Server = s })
 }
 
 func initRequiredNetworks(l, i int) {

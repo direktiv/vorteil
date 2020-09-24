@@ -438,41 +438,39 @@ var vmRAMFlagValidator = func(f flag.StringFlag) error {
 	return nil
 }
 
-// --program.binary
-var programBinaryFlag = flag.NewNStringFlag("program[<<N>>].binary", "configure a program binary", &maxProgramFlags, hideFlags, programBinaryFlagValidator)
-var programBinaryFlagValidator = func(f flag.NStringFlag) error {
-	for i := 0; i < *f.Total; i++ {
+var initRequiredProgramsWithoutFlag = func(l, i int) {
+	if l == 0 {
+		return
+	}
+	for len(overrideVCFG.Networks) < i+1 {
+		overrideVCFG.Networks = append(overrideVCFG.Networks, vcfg.NetworkInterface{IP: "dhcp"})
+	}
+}
 
-		if f.Value[i] == "" {
+var initRequiredPrograms = func(f flag.NStringFlag, fn func(prog *vcfg.Program, s interface{})) error {
+	for i := 0; i < *f.Total; i++ {
+		s := f.Value[i]
+		if s == "" {
 			continue
 		}
-
 		for len(overrideVCFG.Programs) < i+1 {
 			overrideVCFG.Programs = append(overrideVCFG.Programs, vcfg.Program{})
 		}
-
-		overrideVCFG.Programs[i].Binary = f.Value[i]
+		fn(&overrideVCFG.Programs[i], s)
 	}
-
 	return nil
+}
 
+// --program.binary
+var programBinaryFlag = flag.NewNStringFlag("program[<<N>>].binary", "configure a program binary", &maxProgramFlags, hideFlags, programBinaryFlagValidator)
+var programBinaryFlagValidator = func(f flag.NStringFlag) error {
+	return initRequiredPrograms(f, func(prog *vcfg.Program, s interface{}) { prog.Binary = s.(string) })
 }
 
 // --program.privileges
 var programPrivilegesFlag = flag.NewNStringFlag("program[<<N>>].privilege", "configure program privileges (root, superuser, user)", &maxProgramFlags, hideFlags, programPrivilegesFlagValidator)
 var programPrivilegesFlagValidator = func(f flag.NStringFlag) error {
-
-	for i := 0; i < *f.Total; i++ {
-		for len(overrideVCFG.Programs) < i+1 {
-			overrideVCFG.Programs = append(overrideVCFG.Programs, vcfg.Program{})
-		}
-
-		val := f.Value[i]
-		overrideVCFG.Programs[i].Privilege = vcfg.Privilege(val)
-	}
-
-	return nil
-
+	return initRequiredPrograms(f, func(prog *vcfg.Program, s interface{}) { prog.Privilege = vcfg.Privilege(s.(string)) })
 }
 
 // --program.env
@@ -482,11 +480,9 @@ var programEnvFlagValidator = func(f flag.NStringSliceFlag) error {
 		if f.Value[i] == nil {
 			continue
 		}
-
 		for len(overrideVCFG.Programs) < i+1 {
 			overrideVCFG.Programs = append(overrideVCFG.Programs, vcfg.Program{})
 		}
-
 		overrideVCFG.Programs[i].Env = f.Value[i]
 	}
 
@@ -496,19 +492,7 @@ var programEnvFlagValidator = func(f flag.NStringSliceFlag) error {
 // --program.cwd
 var programCWDFlag = flag.NewNStringFlag("program[<<N>>].cwd", "configure the working directory of a program", &maxProgramFlags, hideFlags, programCWDFlagValidator)
 var programCWDFlagValidator = func(f flag.NStringFlag) error {
-	for i := 0; i < *f.Total; i++ {
-
-		if f.Value[i] == "" {
-			continue
-		}
-
-		for len(overrideVCFG.Programs) < i+1 {
-			overrideVCFG.Programs = append(overrideVCFG.Programs, vcfg.Program{})
-		}
-
-		overrideVCFG.Programs[i].Cwd = f.Value[i]
-	}
-	return nil
+	return initRequiredPrograms(f, func(prog *vcfg.Program, s interface{}) { prog.Cwd = s.(string) })
 }
 
 // --program.logfiles
@@ -547,31 +531,13 @@ var programBootstrapFlagValidator = func(f flag.NStringSliceFlag) error {
 // --program.stdout
 var programStdoutFlag = flag.NewNStringFlag("program[<<N>>].stdout", "configure programs stdout", &maxProgramFlags, hideFlags, programStdoutFlagValidator)
 var programStdoutFlagValidator = func(f flag.NStringFlag) error {
-	for i := 0; i < *f.Total; i++ {
-		if f.Value[i] == "" {
-			continue
-		}
-		for len(overrideVCFG.Programs) < i+1 {
-			overrideVCFG.Programs = append(overrideVCFG.Programs, vcfg.Program{})
-		}
-		overrideVCFG.Programs[i].Stdout = f.Value[i]
-	}
-	return nil
+	return initRequiredPrograms(f, func(prog *vcfg.Program, s interface{}) { prog.Stdout = s.(string) })
 }
 
 // --program.stderr
 var programStderrFlag = flag.NewNStringFlag("program[<<N>>].stderr", "configure programs stderr", &maxProgramFlags, hideFlags, programStderrFlagValidator)
 var programStderrFlagValidator = func(f flag.NStringFlag) error {
-	for i := 0; i < *f.Total; i++ {
-		if f.Value[i] == "" {
-			continue
-		}
-		for len(overrideVCFG.Programs) < i+1 {
-			overrideVCFG.Programs = append(overrideVCFG.Programs, vcfg.Program{})
-		}
-		overrideVCFG.Programs[i].Stderr = f.Value[i]
-	}
-	return nil
+	return initRequiredPrograms(f, func(prog *vcfg.Program, s interface{}) { prog.Stderr = s.(string) })
 }
 
 // --program.strace
@@ -590,16 +556,7 @@ var programStraceFlagValidator = func(f flag.NBoolFlag) error {
 // --program.args
 var programArgsFlag = flag.NewNStringFlag("program[<<N>>].args", "configure programs args", &maxProgramFlags, hideFlags, programArgsFlagValidator)
 var programArgsFlagValidator = func(f flag.NStringFlag) error {
-	for i := 0; i < *f.Total; i++ {
-		if f.Value[i] == "" {
-			continue
-		}
-		for len(overrideVCFG.Programs) < i+1 {
-			overrideVCFG.Programs = append(overrideVCFG.Programs, vcfg.Program{})
-		}
-		overrideVCFG.Programs[i].Args = f.Value[i]
-	}
-	return nil
+	return initRequiredPrograms(f, func(prog *vcfg.Program, s interface{}) { prog.Args = s.(string) })
 }
 
 var vcfgFlags = flag.FlagsList{

@@ -182,17 +182,12 @@ var loggingTypeFlagValidator = func(f flag.NStringFlag) error {
 }
 
 var initRequiredNFS = func(f flag.NStringFlag, fn func(nfs *vcfg.NFSSettings, s string)) error {
-	for i := 0; i < *f.Total; i++ {
-		s := f.Value[i]
-		if s == "" {
-			continue
-		}
+	return initFromNStringFlag(f, func(i int, s string) {
 		for len(overrideVCFG.NFS) < i+1 {
 			overrideVCFG.NFS = append(overrideVCFG.NFS, vcfg.NFSSettings{})
 		}
 		fn(&overrideVCFG.NFS[i], s)
-	}
-	return nil
+	})
 }
 
 // --nfs.mount
@@ -222,6 +217,13 @@ func initRequiredNetworks(l, i int) {
 	}
 }
 
+var initRequiredNetworksFromString = func(f flag.NStringFlag, fn func(nic *vcfg.NetworkInterface, s string)) error {
+	return initFromNStringFlag(f, func(i int, s string) {
+		initRequiredNetworks(len(f.Value), i)
+		fn(&overrideVCFG.Networks[i], s)
+	})
+}
+
 // --network.tcpdump
 var networkTCPDumpFlag = flag.NewNBoolFlag("network[<<N>>].tcpdump", "configure this network to run with tcpdump", &maxNetworkFlags, hideFlags, networkTCPDumpFlagValidator)
 var networkTCPDumpFlagValidator = func(f flag.NBoolFlag) error {
@@ -236,13 +238,7 @@ var networkTCPDumpFlagValidator = func(f flag.NBoolFlag) error {
 // --network.gateway
 var networkGatewayFlag = flag.NewNStringFlag("network[<<N>>].gateway", "configure app's network gateway", &maxNetworkFlags, hideFlags, networkGatewayFlagValidator)
 var networkGatewayFlagValidator = func(f flag.NStringFlag) error {
-	for i := 0; i < *f.Total; i++ {
-		initRequiredNetworks(len(f.Value), i)
-		s := f.Value[i]
-		nic := &overrideVCFG.Networks[i]
-		nic.Gateway = s
-	}
-	return nil
+	return initRequiredNetworksFromString(f, func(nic *vcfg.NetworkInterface, s string) { nic.Gateway = s })
 }
 
 var networkFlagValidator = func(f flag.NStringSliceFlag, fn func(nic *vcfg.NetworkInterface, s interface{})) error {
@@ -270,13 +266,7 @@ var networkHTTPSFlagValidator = func(f flag.NStringSliceFlag) error {
 // --network.ip
 var networkIPFlag = flag.NewNStringFlag("network[<<N>>].ip", "configure app's network IP address", &maxNetworkFlags, hideFlags, networkIPFlagValidator)
 var networkIPFlagValidator = func(f flag.NStringFlag) error {
-	for i := 0; i < *f.Total; i++ {
-		initRequiredNetworks(len(f.Value), i)
-		s := f.Value[i]
-		nic := &overrideVCFG.Networks[i]
-		nic.IP = s
-	}
-	return nil
+	return initRequiredNetworksFromString(f, func(nic *vcfg.NetworkInterface, s string) { nic.IP = s })
 }
 
 // --network.mtu
@@ -298,13 +288,7 @@ var networkMTUFlagValidator = func(f flag.NStringFlag) error {
 // --network.mask
 var networkMaskFlag = flag.NewNStringFlag("network[<<N>>].mask", "configure app's subnet mask", &maxNetworkFlags, hideFlags, networkMaskFlagValidator)
 var networkMaskFlagValidator = func(f flag.NStringFlag) error {
-	for i := 0; i < *f.Total; i++ {
-		initRequiredNetworks(len(f.Value), i)
-		s := f.Value[i]
-		nic := &overrideVCFG.Networks[i]
-		nic.Mask = s
-	}
-	return nil
+	return initRequiredNetworksFromString(f, func(nic *vcfg.NetworkInterface, s string) { nic.Mask = s })
 }
 
 // --network.tcp
@@ -447,18 +431,24 @@ var initRequiredProgramsWithoutFlag = func(l, i int) {
 	}
 }
 
-var initRequiredProgramsFromString = func(f flag.NStringFlag, fn func(prog *vcfg.Program, s string)) error {
+var initFromNStringFlag = func(f flag.NStringFlag, fn func(i int, s string)) error {
 	for i := 0; i < *f.Total; i++ {
 		s := f.Value[i]
 		if s == "" {
 			continue
 		}
+		fn(i, s)
+	}
+	return nil
+}
+
+var initRequiredProgramsFromString = func(f flag.NStringFlag, fn func(prog *vcfg.Program, s string)) error {
+	return initFromNStringFlag(f, func(i int, s string) {
 		for len(overrideVCFG.Programs) < i+1 {
 			overrideVCFG.Programs = append(overrideVCFG.Programs, vcfg.Program{})
 		}
 		fn(&overrideVCFG.Programs[i], s)
-	}
-	return nil
+	})
 }
 
 var initRequiredProgramsFromBool = func(f flag.NBoolFlag, fn func(prog *vcfg.Program, s bool)) error {

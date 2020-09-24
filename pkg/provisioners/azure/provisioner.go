@@ -26,6 +26,7 @@ import (
 	"github.com/vorteil/vorteil/pkg/vdisk"
 )
 
+// ProvisionerType : Constant string value used to represent the provisioner type azure
 const ProvisionerType = "microsoft-azure"
 
 // Provisioner satisfies the provisioners.Provisioner interface
@@ -151,10 +152,12 @@ func (p *Provisioner) init() error {
 
 }
 
+// SizeAlign returns vcfg GiB size in bytes
 func (p *Provisioner) SizeAlign() vcfg.Bytes {
 	return vcfg.Bytes(0)
 }
 
+// Provision will provision the configured vorteil project to your configured gcp provisioner
 func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 
 	creds, err := azblob.NewSharedKeyCredential(p.cfg.StorageAccountName, p.cfg.StorageAccountKey)
@@ -350,6 +353,7 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 	return nil
 }
 
+// Marshal returns json provisioner as bytes
 func (p *Provisioner) Marshal() ([]byte, error) {
 
 	m := make(map[string]interface{})

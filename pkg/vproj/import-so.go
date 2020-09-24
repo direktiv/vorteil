@@ -18,14 +18,14 @@ import (
 )
 
 const (
-	DynamicLinkerConfig     = "/etc/ld.so.conf"
-	DefaultLinuxUserLibPath = "/usr/lib"
-	DefaultLinuxLibPath     = "/lib"
+	dynamicLinkerConfig     = "/etc/ld.so.conf"
+	defaultLinuxUserLibPath = "/usr/lib"
+	defaultLinuxLibPath     = "/lib"
 )
 
-var DefaultLibs = []string{"libnss_dns.so.2", "libnss_files.so.2", "libresolv.so.2"}
+var defaultLibs = []string{"libnss_dns.so.2", "libnss_files.so.2", "libresolv.so.2"}
 
-// NewImportSharedObject: This function is used to create and initialize a importSharedObjectsOperation.
+// NewImportSharedObject : This function is used to create and initialize a importSharedObjectsOperation.
 // 	This function requires three args:
 //			projectPath: The target project you wish to scan, and import shared objects to.
 //			excludeDefaultLibs: Whether or not to exclude default libraries.
@@ -34,6 +34,12 @@ var DefaultLibs = []string{"libnss_dns.so.2", "libnss_files.so.2", "libresolv.so
 // 	Running importSharedObjectsOperation.Start() will then begin the operation.
 func NewImportSharedObject(projectPath string, excludeDefaultLibs bool, logger elog.View) (*importSharedObjectsOperation, error) {
 	var isoOperation importSharedObjectsOperation
+
+	if fi, err := os.Stat(projectPath); os.IsNotExist(err) {
+		return nil, fmt.Errorf("'%s' path does not exist", projectPath)
+	} else if !fi.IsDir() {
+		return nil, fmt.Errorf("'%s' path is not a directory", projectPath)
+	}
 
 	isoOperation.projectDir = projectPath
 	isoOperation.excludeDefaultLibs = excludeDefaultLibs
@@ -113,7 +119,7 @@ func (isoOp *importSharedObjectsOperation) loadLDPathsFromLinkerConfig(path stri
 			if strings.HasPrefix(line, "#") || strings.Contains(line, "*") {
 				continue
 			}
-			return fmt.Errorf("unexpected line in '%s' file: %s", DynamicLinkerConfig, line)
+			return fmt.Errorf("unexpected line in '%s' file: %s", dynamicLinkerConfig, line)
 		}
 	}
 	return nil
@@ -124,12 +130,12 @@ func (isoOp *importSharedObjectsOperation) initLDPATHS() error {
 	// Load paths from env
 	isoOp.ldPATHS = getLDPathsFromENV()
 	// Load paths from linker config
-	if err := isoOp.loadLDPathsFromLinkerConfig(DynamicLinkerConfig); err != nil {
+	if err := isoOp.loadLDPathsFromLinkerConfig(dynamicLinkerConfig); err != nil {
 		return err
 	}
 	// Append Common Linux Lib Paths
-	isoOp.ldPATHS = append(isoOp.ldPATHS, DefaultLinuxLibPath)
-	isoOp.ldPATHS = append(isoOp.ldPATHS, DefaultLinuxUserLibPath)
+	isoOp.ldPATHS = append(isoOp.ldPATHS, defaultLinuxLibPath)
+	isoOp.ldPATHS = append(isoOp.ldPATHS, defaultLinuxUserLibPath)
 	return nil
 }
 
@@ -162,16 +168,16 @@ func (isoOp *importSharedObjectsOperation) Start() error {
 	if !isoOp.excludeDefaultLibs {
 		isoOp.logger.Infof("including Default Libs")
 		for i := range classesImported {
-			for j := range DefaultLibs {
-				elfLibPath, found, err := isoOp.findLib(DefaultLibs[j], classesImported[i])
+			for j := range defaultLibs {
+				elfLibPath, found, err := isoOp.findLib(defaultLibs[j], classesImported[i])
 				if err == nil && found {
-					isoOp.sharedObjects[DefaultLibs[j]] = elfLibPath
+					isoOp.sharedObjects[defaultLibs[j]] = elfLibPath
 					err := isoOp.addSharedObjects(elfLibPath)
 					if err != nil {
 						goto ERROR
 					}
 				} else if err == nil {
-					isoOp.sharedObjects[DefaultLibs[j]] = elfLibPath
+					isoOp.sharedObjects[defaultLibs[j]] = elfLibPath
 				} else {
 					goto ERROR
 				}

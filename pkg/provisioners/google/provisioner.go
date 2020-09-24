@@ -20,10 +20,12 @@ import (
 	"github.com/google/uuid"
 	"github.com/vorteil/vorteil/pkg/provisioners"
 	"golang.org/x/oauth2/google"
+	"golang.org/x/oauth2/jwt"
 	"google.golang.org/api/compute/v1"
 	"google.golang.org/api/option"
 )
 
+// ProvisionerType : Constant string value used to represent the provisioner type for google
 const ProvisionerType = "google-compute"
 
 // Provisioner satisfies the provisioners.Provisioner interface
@@ -88,41 +90,51 @@ var scopes = []string{
 }
 
 func (p *Provisioner) init() error {
+	// Delcare vars
+	var err error
+	var key []byte
+	var oauthToken *jwt.Config
+	var storageClient *storage.Client
+	var bucketHandler *storage.BucketHandle
 
 	// Using the values stored within p.cfg,
 	// attempt to verify that the provisioner
 	// is valid
 
-	key, err := base64.StdEncoding.DecodeString(p.cfg.Key)
+	key, err = base64.StdEncoding.DecodeString(p.cfg.Key)
 	if err != nil {
-		return err
+		goto ERROR
 	}
 
-	oauthToken, err := google.JWTConfigFromJSON(key, scopes...)
+	oauthToken, err = google.JWTConfigFromJSON(key, scopes...)
 	if err != nil {
-		return err
+		goto ERROR
 	}
 
-	storageClient, err := storage.NewClient(context.Background(), option.WithCredentialsJSON(key))
+	storageClient, err = storage.NewClient(context.Background(), option.WithCredentialsJSON(key))
 	if err != nil {
-		return err
+		goto ERROR
 	}
 	defer storageClient.Close()
 
-	bucketHandler := storageClient.Bucket(p.cfg.Bucket)
+	bucketHandler = storageClient.Bucket(p.cfg.Bucket)
 	_, err = bucketHandler.Attrs(context.Background())
 	if err != nil {
-		return err
+		goto ERROR
 	}
 
 	_, err = compute.New(oauthToken.Client(context.Background()))
 	if err != nil {
-		return err
+		goto ERROR
 	}
 
 	return nil
+
+ERROR:
+	return err
 }
 
+// Provision ...
 func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 
 	key, err := base64.StdEncoding.DecodeString(p.cfg.Key)

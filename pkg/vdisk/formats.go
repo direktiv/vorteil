@@ -172,7 +172,8 @@ func (x *Format) DefaultMTU() uint {
 	return defaultMTUs[*x]
 }
 
-func (x *Format) build(ctx context.Context, w io.WriteSeeker, b *vimg.Builder, cfg *vcfg.VCFG) error {
+// Builds the disk to the appropriate format ...
+func (x *Format) Build(ctx context.Context, w io.WriteSeeker, b *vimg.Builder, cfg *vcfg.VCFG) error {
 
 	w, err := buildFuncs[*x](w, b, cfg)
 	if err != nil {

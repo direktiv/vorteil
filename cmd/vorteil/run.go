@@ -205,7 +205,7 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG, name st
 	defer serialSubscription.Close()
 	defer serial.Close()
 
-	signalChannel, chBool := listenForInterupt()
+	signalChannel, chBool := listenForInterrupt()
 
 	var finished bool
 	var routesChecked bool
@@ -344,7 +344,7 @@ func raw(start bool) error {
 	return nil
 }
 
-func listenForInterupt() (chan os.Signal, chan bool) {
+func listenForInterrupt() (chan os.Signal, chan bool) {
 	var signalChannel chan os.Signal
 	signalChannel = make(chan os.Signal, 1)
 	signal.Notify(signalChannel, os.Interrupt, syscall.SIGTERM)

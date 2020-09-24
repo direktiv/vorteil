@@ -25,6 +25,7 @@ import (
 	dhcp "github.com/krolaw/dhcp4"
 	conn "github.com/krolaw/dhcp4/conn"
 	"github.com/milosgajdos/tenus"
+	"github.com/sirupsen/logrus"
 	log "github.com/sirupsen/logrus"
 	"github.com/songgao/water"
 	"github.com/vorteil/vorteil/pkg/elog"
@@ -99,6 +100,8 @@ func SetupBridgeAndDHCPServer(log elog.View) error {
 	go func() {
 		http.ListenAndServe(":7476", nil)
 	}()
+	fmt.Printf("Listening on '7476' for creating and deleting TAP devices")
+	fmt.Printf("Listening on 'vorteil-bridge' for DHCP requests")
 	// Start dhcp server to listen
 	dhcp.Serve(pc, server)
 
@@ -511,9 +514,6 @@ func (o *operation) finished(err error) {
 		o.Status <- fmt.Sprintf("Failed: %v", err)
 		o.Error <- err
 	}
-	if err != nil {
-		o.logger.Errorf("Error: %v", err)
-	}
 
 	close(o.Logs)
 	close(o.Status)
@@ -533,17 +533,20 @@ func (v *Virtualizer) Serial() *logger.Logger {
 
 // Stop stops the vm and changes it back to ready
 func (v *Virtualizer) Stop() error {
-	v.logger.Debugf("Stopping VM")
-	if v.state != virtualizers.Ready {
-		v.state = virtualizers.Changing
+	// Error might've happened before in the prepare so machine would be nil
+	if v.machine != nil {
+		v.logger.Debugf("Stopping VM")
+		if v.state != virtualizers.Ready {
+			v.state = virtualizers.Changing
 
-		err := v.machine.Shutdown(v.vmmCtx)
-		if err != nil {
-			return err
+			err := v.machine.Shutdown(v.vmmCtx)
+			if err != nil {
+				return err
+			}
+
+		} else {
+			return errors.New("vm is already stopped")
 		}
-
-	} else {
-		return errors.New("vm is already stopped")
 	}
 	return nil
 }
@@ -570,46 +573,49 @@ func (v *Virtualizer) Download() (vio.File, error) {
 
 // Close shuts down the virtual machine and cleans up the disk and folders
 func (v *Virtualizer) Close(force bool) error {
-	v.logger.Debugf("Deleting VM")
+	// Error might've happened before in the prepare so machine would be nil
+	if v.machine != nil {
+		v.logger.Debugf("Deleting VM")
 
-	if !force {
-		// if state not ready stop it so it is
-		if !(v.state == virtualizers.Ready) {
-			// stop
-			err := v.Stop()
-			if err != nil {
-				return err
+		if !force {
+			// if state not ready stop it so it is
+			if !(v.state == virtualizers.Ready) {
+				// stop
+				err := v.Stop()
+				if err != nil {
+					return err
+				}
 			}
 		}
+
+		// stopVMM
+		err := v.machine.StopVMM()
+		if err != nil {
+			return err
+		}
+
+		client := &http.Client{}
+		cdm, err := json.Marshal(v.tapDevice)
+		if err != nil {
+			return err
+		}
+
+		req, err := http.NewRequest("DELETE", "http://localhost:7476/", bytes.NewBuffer(cdm))
+		if err != nil {
+			return err
+		}
+
+		resp, err := client.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+
+		v.state = virtualizers.Deleted
+
+		// remove virtualizer from active vms
+		virtualizers.ActiveVMs.Delete(v.name)
 	}
-
-	// stopVMM
-	err := v.machine.StopVMM()
-	if err != nil {
-		return err
-	}
-
-	client := &http.Client{}
-	cdm, err := json.Marshal(v.tapDevice)
-	if err != nil {
-		return err
-	}
-
-	req, err := http.NewRequest("DELETE", "http://localhost:7476/", bytes.NewBuffer(cdm))
-	if err != nil {
-		return err
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	v.state = virtualizers.Deleted
-
-	// remove virtualizer from active vms
-	virtualizers.ActiveVMs.Delete(v.name)
 
 	return nil
 }
@@ -689,8 +695,16 @@ func (v *Virtualizer) Prepare(args *virtualizers.PrepareArgs) *virtualizers.Virt
 // Cant use logger interface as it duplicates
 func (v *Virtualizer) Write(d []byte) (n int, err error) {
 	n = len(d)
-	fmt.Print(string(d))
+	v.logger.Infof(string(d))
 	return
+}
+
+type firecrackerFormatter struct {
+	logrus.TextFormatter
+}
+
+func (f *firecrackerFormatter) Format(entry *logrus.Entry) ([]byte, error) {
+	return []byte(entry.Message), nil
 }
 
 // prepare sets the fields and arguments to spawn the virtual machine
@@ -714,10 +728,10 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	diskpath := filepath.ToSlash(args.ImagePath)
 
 	logger := log.New()
-	logger.SetFormatter(&log.TextFormatter{
+	logger.SetFormatter(&firecrackerFormatter{log.TextFormatter{
 		DisableColors: false,
 		ForceColors:   true,
-	})
+	}})
 	logger.Out = o
 
 	ctx := context.Background()

@@ -275,6 +275,9 @@ var networkMTUFlagValidator = func(f flag.NStringFlag) error {
 	for i := 0; i < *f.Total; i++ {
 		initRequiredNetworks(len(f.Value), i)
 		s := f.Value[i]
+		if s == "" {
+			continue
+		}
 		x, err := strconv.ParseUint(s, 10, 64)
 		if err != nil {
 			return err

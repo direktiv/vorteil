@@ -100,7 +100,7 @@ func SetupBridgeAndDHCPServer(log elog.View) error {
 	go func() {
 		http.ListenAndServe(":7476", nil)
 	}()
-	fmt.Printf("Listening on '7476' for creating and deleting TAP devices")
+	fmt.Printf("Listening on '7476' for creating and deleting TAP devices\n")
 	fmt.Printf("Listening on 'vorteil-bridge' for DHCP requests")
 	// Start dhcp server to listen
 	dhcp.Serve(pc, server)

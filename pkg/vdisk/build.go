@@ -62,11 +62,20 @@ func NegotiateSize(ctx context.Context, vimgBuilder *vimg.Builder, cfg *vcfg.VCF
 
 }
 
+// CreateBuilder creates a vimg.Builder with args provided.
+func CreateBuilder(ctx context.Context, args *vimg.BuilderArgs) (*vimg.Builder, error) {
+	vimgBuilder, err := vimg.NewBuilder(ctx, args)
+	if err != nil {
+		return nil, err
+	}
+	return vimgBuilder, nil
+}
+
 func build(ctx context.Context, w io.WriteSeeker, cfg *vcfg.VCFG, args *BuildArgs) error {
 
 	log := args.Logger
 
-	vimgBuilder, err := vimg.NewBuilder(ctx, &vimg.BuilderArgs{
+	vimgBuilder, err := CreateBuilder(ctx, &vimg.BuilderArgs{
 		Kernel: vimg.KernelOptions{
 			Shell: args.KernelOptions.Shell,
 		},

@@ -4,7 +4,7 @@ import "github.com/spf13/pflag"
 
 // UintFlag handles uint flags
 type UintFlag struct {
-	FlagPart
+	Part
 	Value    uint
 	Validate func(f UintFlag) error
 }
@@ -12,7 +12,7 @@ type UintFlag struct {
 // NewUintFlag returns a new UintFlag object
 func NewUintFlag(key, usage string, hidden bool, validate func(UintFlag) error) UintFlag {
 	return UintFlag{
-		FlagPart: NewFlagPart(key, usage, hidden),
+		Part:     NewFlagPart(key, usage, hidden),
 		Validate: validate,
 	}
 }

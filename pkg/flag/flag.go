@@ -12,17 +12,17 @@ type Flag interface {
 	AddUnhiddenTo(flagSet *pflag.FlagSet)
 }
 
-// FlagPart object contains important information for any flag type
-type FlagPart struct {
+// Part object contains important information for any flag type
+type Part struct {
 	Key    string
 	short  string
 	usage  string
 	hidden bool
 }
 
-// NewFlagPart returns a new FlagPart object
-func NewFlagPart(key, usage string, hidden bool) FlagPart {
-	return FlagPart{
+// NewFlagPart returns a new Part object
+func NewFlagPart(key, usage string, hidden bool) Part {
+	return Part{
 		Key:    key,
 		usage:  usage,
 		hidden: hidden,
@@ -30,16 +30,16 @@ func NewFlagPart(key, usage string, hidden bool) FlagPart {
 }
 
 // FlagKey returns the flag key
-func (p FlagPart) FlagKey() string {
+func (p Part) FlagKey() string {
 	return p.Key
 }
 
 // FlagShort returns the flag 'short' info field
-func (p FlagPart) FlagShort() string {
+func (p Part) FlagShort() string {
 	return p.short
 }
 
 // FlagUsage returns the flag 'usage' info field
-func (p FlagPart) FlagUsage() string {
+func (p Part) FlagUsage() string {
 	return p.usage
 }

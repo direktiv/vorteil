@@ -24,7 +24,7 @@ import (
 
 // buildFirecracker does the same thing as vdisk.Build but it returns me a calver of the kernel being used
 func buildFirecracker(ctx context.Context, w io.WriteSeeker, cfg *vcfg.VCFG, args *vdisk.BuildArgs) (string, error) {
-	vimgBuilder, err := vimg.NewBuilder(ctx, &vimg.BuilderArgs{
+	vimgBuilder, err := vdisk.CreateBuilder(ctx, &vimg.BuilderArgs{
 		Kernel: vimg.KernelOptions{
 			Shell: args.KernelOptions.Shell,
 		},

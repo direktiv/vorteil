@@ -4,14 +4,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"runtime"
 
 	"github.com/thanhpk/randstr"
+	"github.com/vorteil/vorteil/pkg/ext"
 	"github.com/vorteil/vorteil/pkg/vcfg"
 	"github.com/vorteil/vorteil/pkg/vdisk"
+	"github.com/vorteil/vorteil/pkg/vimg"
 	"github.com/vorteil/vorteil/pkg/virtualizers/firecracker"
 	"github.com/vorteil/vorteil/pkg/virtualizers/hyperv"
 	"github.com/vorteil/vorteil/pkg/virtualizers/qemu"
@@ -19,6 +22,37 @@ import (
 	"github.com/vorteil/vorteil/pkg/vpkg"
 )
 
+// buildFirecracker does the same thing as vdisk.Build but it returns me a calver of the kernel being used
+func buildFirecracker(ctx context.Context, w io.WriteSeeker, cfg *vcfg.VCFG, args *vdisk.BuildArgs) (string, error) {
+	vimgBuilder, err := vimg.NewBuilder(ctx, &vimg.BuilderArgs{
+		Kernel: vimg.KernelOptions{
+			Shell: args.KernelOptions.Shell,
+		},
+		FSCompiler: ext.NewCompiler(&ext.CompilerArgs{
+			FileTree: args.PackageReader.FS(),
+			Logger:   args.Logger,
+		}),
+		VCFG:   cfg,
+		Logger: log,
+	})
+	if err != nil {
+		return "", err
+	}
+	defer vimgBuilder.Close()
+	vimgBuilder.SetDefaultMTU(args.Format.DefaultMTU())
+	err = vdisk.NegotiateSize(ctx, vimgBuilder, cfg, args)
+	if err != nil {
+		return "", err
+	}
+
+	err = args.Format.Build(ctx, w, vimgBuilder, cfg)
+	if err != nil {
+		return "", err
+	}
+	return string(vimgBuilder.KernelUsed()), nil
+}
+
+// runFirecracker needs a longer build process so we can pull the calver of the kernel used to build the disk
 func runFirecracker(pkgReader vpkg.Reader, cfg *vcfg.VCFG, name string) error {
 	if runtime.GOOS != "linux" {
 		return errors.New("firecracker is only available on linux")
@@ -54,7 +88,7 @@ func runFirecracker(pkgReader vpkg.Reader, cfg *vcfg.VCFG, name string) error {
 
 	defer os.Remove(parent)
 
-	err = vdisk.Build(context.Background(), f, &vdisk.BuildArgs{
+	kernelVer, err := buildFirecracker(context.Background(), f, cfg, &vdisk.BuildArgs{
 		PackageReader: pkgReader,
 		Format:        firecracker.Allocator.DiskFormat(),
 		KernelOptions: vdisk.KernelOptions{
@@ -66,6 +100,9 @@ func runFirecracker(pkgReader vpkg.Reader, cfg *vcfg.VCFG, name string) error {
 		log.Errorf("%v", err)
 		os.Exit(1)
 	}
+
+	// assign kernel version that was built with vcfg
+	cfg.VM.Kernel = kernelVer
 
 	err = f.Close()
 	if err != nil {

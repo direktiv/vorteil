@@ -22,7 +22,7 @@ type KernelOptions struct {
 	Shell bool
 }
 
-// BuildArgs conains all arguments a caller can use to customize the behaviour
+// BuildArgs contains all arguments a caller can use to customize the behaviour
 // of the Build function.
 type BuildArgs struct {
 	PackageReader vpkg.Reader
@@ -32,7 +32,8 @@ type BuildArgs struct {
 	Logger        elog.View
 }
 
-func negotiateSize(ctx context.Context, vimgBuilder *vimg.Builder, cfg *vcfg.VCFG, args *BuildArgs) error {
+// NegotiateSize prebuilds the minimum amount for a disk.
+func NegotiateSize(ctx context.Context, vimgBuilder *vimg.Builder, cfg *vcfg.VCFG, args *BuildArgs) error {
 	size := vimgBuilder.MinimumSize()
 	if !cfg.VM.DiskSize.IsDelta() {
 		if size > int64(cfg.VM.DiskSize.Units(vcfg.Byte)) {
@@ -83,12 +84,12 @@ func build(ctx context.Context, w io.WriteSeeker, cfg *vcfg.VCFG, args *BuildArg
 
 	vimgBuilder.SetDefaultMTU(args.Format.DefaultMTU())
 
-	err = negotiateSize(ctx, vimgBuilder, cfg, args)
+	err = NegotiateSize(ctx, vimgBuilder, cfg, args)
 	if err != nil {
 		return err
 	}
 
-	err = args.Format.build(ctx, w, vimgBuilder, cfg)
+	err = args.Format.Build(ctx, w, vimgBuilder, cfg)
 	if err != nil {
 		return err
 	}

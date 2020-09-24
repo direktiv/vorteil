@@ -447,7 +447,7 @@ var initRequiredProgramsWithoutFlag = func(l, i int) {
 	}
 }
 
-var initRequiredPrograms = func(f flag.NStringFlag, fn func(prog *vcfg.Program, s interface{})) error {
+var initRequiredProgramsFromString = func(f flag.NStringFlag, fn func(prog *vcfg.Program, s string)) error {
 	for i := 0; i < *f.Total; i++ {
 		s := f.Value[i]
 		if s == "" {
@@ -461,102 +461,88 @@ var initRequiredPrograms = func(f flag.NStringFlag, fn func(prog *vcfg.Program, 
 	return nil
 }
 
+var initRequiredProgramsFromBool = func(f flag.NBoolFlag, fn func(prog *vcfg.Program, s bool)) error {
+	for i := 0; i < *f.Total; i++ {
+		for len(overrideVCFG.Programs) < i+1 {
+			overrideVCFG.Programs = append(overrideVCFG.Programs, vcfg.Program{})
+		}
+		fn(&overrideVCFG.Programs[i], f.Value[i])
+	}
+	return nil
+}
+
+var initRequiredProgramsFromStringSlice = func(f flag.NStringSliceFlag, fn func(prog *vcfg.Program, s []string)) error {
+	for i := 0; i < *f.Total; i++ {
+		s := f.Value[i]
+		if s == nil {
+			continue
+		}
+		for len(overrideVCFG.Programs) < i+1 {
+			overrideVCFG.Programs = append(overrideVCFG.Programs, vcfg.Program{})
+		}
+		fn(&overrideVCFG.Programs[i], s)
+	}
+	return nil
+}
+
 // --program.binary
 var programBinaryFlag = flag.NewNStringFlag("program[<<N>>].binary", "configure a program binary", &maxProgramFlags, hideFlags, programBinaryFlagValidator)
 var programBinaryFlagValidator = func(f flag.NStringFlag) error {
-	return initRequiredPrograms(f, func(prog *vcfg.Program, s interface{}) { prog.Binary = s.(string) })
+	return initRequiredProgramsFromString(f, func(prog *vcfg.Program, s string) { prog.Binary = s })
 }
 
 // --program.privileges
 var programPrivilegesFlag = flag.NewNStringFlag("program[<<N>>].privilege", "configure program privileges (root, superuser, user)", &maxProgramFlags, hideFlags, programPrivilegesFlagValidator)
 var programPrivilegesFlagValidator = func(f flag.NStringFlag) error {
-	return initRequiredPrograms(f, func(prog *vcfg.Program, s interface{}) { prog.Privilege = vcfg.Privilege(s.(string)) })
+	return initRequiredProgramsFromString(f, func(prog *vcfg.Program, s string) { prog.Privilege = vcfg.Privilege(s) })
 }
 
 // --program.env
 var programEnvFlag = flag.NewNStringSliceFlag("program[<<N>>].env", "configure the environment variables of a program", &maxProgramFlags, hideFlags, programEnvFlagValidator)
 var programEnvFlagValidator = func(f flag.NStringSliceFlag) error {
-	for i := 0; i < *f.Total; i++ {
-		if f.Value[i] == nil {
-			continue
-		}
-		for len(overrideVCFG.Programs) < i+1 {
-			overrideVCFG.Programs = append(overrideVCFG.Programs, vcfg.Program{})
-		}
-		overrideVCFG.Programs[i].Env = f.Value[i]
-	}
-
-	return nil
+	return initRequiredProgramsFromStringSlice(f, func(prog *vcfg.Program, s []string) { prog.Env = s })
 }
 
 // --program.cwd
 var programCWDFlag = flag.NewNStringFlag("program[<<N>>].cwd", "configure the working directory of a program", &maxProgramFlags, hideFlags, programCWDFlagValidator)
 var programCWDFlagValidator = func(f flag.NStringFlag) error {
-	return initRequiredPrograms(f, func(prog *vcfg.Program, s interface{}) { prog.Cwd = s.(string) })
+	return initRequiredProgramsFromString(f, func(prog *vcfg.Program, s string) { prog.Cwd = s })
 }
 
 // --program.logfiles
 var programLogFilesFlag = flag.NewNStringSliceFlag("program[<<N>>].logfiles", "gure the logfiles of a program", &maxProgramFlags, hideFlags, programLogFilesFlagValidator)
 var programLogFilesFlagValidator = func(f flag.NStringSliceFlag) error {
-	for i := 0; i < *f.Total; i++ {
-		if f.Value[i] == nil {
-			continue
-		}
-
-		for len(overrideVCFG.Programs) < i+1 {
-			overrideVCFG.Programs = append(overrideVCFG.Programs, vcfg.Program{})
-		}
-
-		overrideVCFG.Programs[i].LogFiles = f.Value[i]
-	}
-
-	return nil
+	return initRequiredProgramsFromStringSlice(f, func(prog *vcfg.Program, s []string) { prog.LogFiles = s })
 }
 
 // --program.bootstrap
 var programBootstrapFlag = flag.NewNStringSliceFlag("program[<<N>>].bootstrap", "configure the bootstrap parameters of a program", &maxProgramFlags, hideFlags, programBootstrapFlagValidator)
 var programBootstrapFlagValidator = func(f flag.NStringSliceFlag) error {
-	for i := 0; i < *f.Total; i++ {
-		if f.Value[i] == nil {
-			continue
-		}
-		for len(overrideVCFG.Programs) < i+1 {
-			overrideVCFG.Programs = append(overrideVCFG.Programs, vcfg.Program{})
-		}
-		overrideVCFG.Programs[i].Bootstrap = f.Value[i]
-	}
-	return nil
+	return initRequiredProgramsFromStringSlice(f, func(prog *vcfg.Program, s []string) { prog.Bootstrap = s })
 }
 
 // --program.stdout
 var programStdoutFlag = flag.NewNStringFlag("program[<<N>>].stdout", "configure programs stdout", &maxProgramFlags, hideFlags, programStdoutFlagValidator)
 var programStdoutFlagValidator = func(f flag.NStringFlag) error {
-	return initRequiredPrograms(f, func(prog *vcfg.Program, s interface{}) { prog.Stdout = s.(string) })
+	return initRequiredProgramsFromString(f, func(prog *vcfg.Program, s string) { prog.Stdout = s })
 }
 
 // --program.stderr
 var programStderrFlag = flag.NewNStringFlag("program[<<N>>].stderr", "configure programs stderr", &maxProgramFlags, hideFlags, programStderrFlagValidator)
 var programStderrFlagValidator = func(f flag.NStringFlag) error {
-	return initRequiredPrograms(f, func(prog *vcfg.Program, s interface{}) { prog.Stderr = s.(string) })
+	return initRequiredProgramsFromString(f, func(prog *vcfg.Program, s string) { prog.Stderr = s })
 }
 
 // --program.strace
 var programStraceFlag = flag.NewNBoolFlag("program[<<N>>].strace", "configure the program to run with strace", &maxProgramFlags, hideFlags, programStraceFlagValidator)
 var programStraceFlagValidator = func(f flag.NBoolFlag) error {
-	for i := 0; i < *f.Total; i++ {
-		for len(overrideVCFG.Programs) < i+1 {
-			overrideVCFG.Programs = append(overrideVCFG.Programs, vcfg.Program{})
-		}
-		val := f.Value[i]
-		overrideVCFG.Programs[i].Strace = val
-	}
-	return nil
+	return initRequiredProgramsFromBool(f, func(prog *vcfg.Program, s bool) { prog.Strace = s })
 }
 
 // --program.args
 var programArgsFlag = flag.NewNStringFlag("program[<<N>>].args", "configure programs args", &maxProgramFlags, hideFlags, programArgsFlagValidator)
 var programArgsFlagValidator = func(f flag.NStringFlag) error {
-	return initRequiredPrograms(f, func(prog *vcfg.Program, s interface{}) { prog.Args = s.(string) })
+	return initRequiredProgramsFromString(f, func(prog *vcfg.Program, s string) { prog.Args = s })
 }
 
 var vcfgFlags = flag.FlagsList{

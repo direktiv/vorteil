@@ -490,7 +490,7 @@ func (p *Provisioner) uploadedPayloadToInstance(ip string) error {
 	return nil
 }
 
-func (p *Provisioner) pushAMI(instanceID string) (string, error) {
+func (p *Provisioner) waitForInstanceToStop(instanceID string) error {
 	for {
 		time.Sleep(pollrate)
 		description, err := p.client.DescribeInstancesWithContext(p.args.Context, &ec2.DescribeInstancesInput{
@@ -499,7 +499,7 @@ func (p *Provisioner) pushAMI(instanceID string) (string, error) {
 			},
 		})
 		if err != nil {
-			return "", err
+			return err
 		}
 
 		if description == nil || len(description.Reservations) == 0 ||
@@ -510,7 +510,7 @@ func (p *Provisioner) pushAMI(instanceID string) (string, error) {
 		switch *description.Reservations[0].Instances[0].State.Code & 0xFF {
 		case 0:
 			p.args.Logger.Infof("Instance status: pending.")
-			return "", errors.New("instance is restarting for an unknown reason")
+			return errors.New("instance is restarting for an unknown reason")
 		case 16:
 			p.args.Logger.Infof("Instance status: running.")
 			continue
@@ -519,7 +519,7 @@ func (p *Provisioner) pushAMI(instanceID string) (string, error) {
 			continue
 		case 48:
 			p.args.Logger.Infof("Instance status: terminated.")
-			return "", errors.New("instance has been terminated for an unknown reason")
+			return errors.New("instance has been terminated for an unknown reason")
 		case 64:
 			p.args.Logger.Infof("Instance status: stopping.")
 			continue
@@ -533,30 +533,44 @@ func (p *Provisioner) pushAMI(instanceID string) (string, error) {
 		break
 	}
 
-	p.args.Logger.Infof("Instance has stopped.")
+	return nil
+}
 
-	// make AMI
-	// if args.Force, check if ami exists with same name
-	if p.args.Force {
-		filterForce := &ec2.Filter{
-			Name:   aws.String("name"),
-			Values: []*string{aws.String(p.args.Name)},
-		}
-		imagesForce, err := p.client.DescribeImages(&ec2.DescribeImagesInput{
-			Filters: []*ec2.Filter{filterForce},
+// deregisterAMI : If ami with same name is found, deregister it
+func (p *Provisioner) deregisterAMI() error {
+	filterForce := &ec2.Filter{
+		Name:   aws.String("name"),
+		Values: []*string{aws.String(p.args.Name)},
+	}
+	imagesForce, err := p.client.DescribeImages(&ec2.DescribeImagesInput{
+		Filters: []*ec2.Filter{filterForce},
+	})
+	if err != nil {
+		return err
+	}
+	if len(imagesForce.Images) > 0 {
+		// deregister current live version as were force pushing
+		p.args.Logger.Infof("deregistering old ami: %v\n", imagesForce.Images[0].ImageId)
+		_, err := p.client.DeregisterImageWithContext(p.args.Context, &ec2.DeregisterImageInput{
+			ImageId: imagesForce.Images[0].ImageId,
 		})
 		if err != nil {
-			return "", err
+			return err
 		}
-		if len(imagesForce.Images) > 0 {
-			// deregister current live version as were force pushing
-			p.args.Logger.Infof("deregistering old ami: %v\n", imagesForce.Images[0].ImageId)
-			_, err := p.client.DeregisterImageWithContext(p.args.Context, &ec2.DeregisterImageInput{
-				ImageId: imagesForce.Images[0].ImageId,
-			})
-			if err != nil {
-				return "", err
-			}
+	}
+	return nil
+}
+
+func (p *Provisioner) pushAMI(instanceID string) (string, error) {
+	if err := p.waitForInstanceToStop(instanceID); err != nil {
+		return "", err
+	}
+	p.args.Logger.Infof("Instance has stopped.")
+
+	if p.args.Force {
+		// attemp to deregister AMI
+		if err := p.deregisterAMI(); err != nil {
+			return "", err
 		}
 	}
 

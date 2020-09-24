@@ -574,18 +574,27 @@ func handleFile(mw io.Writer, f vio.File, path, link string, vprjIncluded bool, 
 	}
 
 	if x {
-		b, err := ioutil.ReadFile(tf.Name())
-		if err != nil {
-			return nil, err
-		}
-
-		err = toml.Unmarshal(b, &vprj)
+		err = readAndUnmarshalVprj(tf.Name(), &vprj)
 		if err != nil {
 			return nil, err
 		}
 	}
 
 	return header, nil
+}
+
+func readAndUnmarshalVprj(name string, vprj *ProjectData) error {
+	b, err := ioutil.ReadFile(name)
+	if err != nil {
+		return err
+	}
+
+	err = toml.Unmarshal(b, vprj)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func handleSplitVCFGs(v *vcfg.VCFG, tw *tar.Writer) error {

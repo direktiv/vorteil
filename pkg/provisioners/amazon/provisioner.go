@@ -357,10 +357,15 @@ func (p *Provisioner) createEmptyInstance() (string, error) {
 }
 
 func ec2PublicIPReady(description *ec2.DescribeInstancesOutput) (ip string, ready bool) {
+	// Check if children exist
 	if description == nil || len(description.Reservations) == 0 ||
 		len(description.Reservations[0].Instances) == 0 ||
-		len(description.Reservations[0].Instances[0].NetworkInterfaces) == 0 ||
-		description.Reservations[0].Instances[0].NetworkInterfaces[0].Association == nil ||
+		len(description.Reservations[0].Instances[0].NetworkInterfaces) == 0 {
+		return
+	}
+
+	// Check if publicIP exists
+	if description.Reservations[0].Instances[0].NetworkInterfaces[0].Association == nil ||
 		description.Reservations[0].Instances[0].NetworkInterfaces[0].Association.PublicIp == nil {
 		return
 	}

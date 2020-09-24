@@ -32,6 +32,8 @@ type ArchiveFunc func(path string, f File) error
 // that (e.g. "./a").
 type WalkFunc func(path string, f File) error
 
+// WalkNodeFunc is the type of function called for each node
+// visited by FileTree.WalkNode.
 type WalkNodeFunc func(path string, n *TreeNode) error
 
 // ErrSkip can be passed as the result from a WalkFunc to
@@ -291,6 +293,7 @@ type tree struct {
 	nodeCount  int
 }
 
+// TreeNode is the structure that all nodes in a FileTree are built on.
 type TreeNode struct {
 	File               File
 	Parent             *TreeNode
@@ -308,6 +311,7 @@ type fi struct {
 	ModTime   time.Time
 }
 
+// MarshalJSON implements json.Marshaler.
 func (n *TreeNode) MarshalJSON() ([]byte, error) {
 
 	if n.File.Size() < 0 {
@@ -703,10 +707,15 @@ func (t *tree) Close() error {
 		return errors.New("already closed")
 	}
 	t.closed = true
-	t.Walk(func(path string, f File) error {
-		f.Close()
-		return nil
+	if t.closeFunc != nil {
+		defer t.closeFunc()
+	}
+	err := t.Walk(func(path string, f File) error {
+		return f.Close()
 	})
+	if err != nil {
+		return err
+	}
 	if t.closeFunc != nil {
 		return t.closeFunc()
 	}
@@ -863,6 +872,11 @@ func (t *tree) Map(path string, f File) error {
 	path = filepath.ToSlash(path)
 	path = filepath.Clean(path)
 	path = filepath.ToSlash(path)
+	path = filepath.Join("/", path)
+	path = strings.TrimPrefix(path, "/")
+	if path == "" {
+		return errors.New("cannot map over the root node")
+	}
 
 	f = CustomFile(CustomFileArgs{
 		Name:               filepath.Base(path),

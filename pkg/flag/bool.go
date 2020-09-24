@@ -9,7 +9,7 @@ import (
 
 // BoolFlag handles boolean flags
 type BoolFlag struct {
-	FlagPart
+	Part
 	Value    bool
 	Validate func(Value BoolFlag) error
 }
@@ -44,9 +44,9 @@ func (f BoolFlag) FlagValidate() error {
 	return f.Validate(f)
 }
 
-// NBoolFlag handle bool flags in cases with a varying number of possible occurrences of the flat (ie --flag[x].my-bool)
+// NBoolFlag handle bool flags in cases with a varying number of possible occurrences of the flag (ie --flag[x].my-bool)
 type NBoolFlag struct {
-	FlagPart
+	Part
 	Total    *int
 	void     bool
 	Value    []bool
@@ -56,7 +56,7 @@ type NBoolFlag struct {
 // NewNBoolFlag returns a new NBoolFlag object
 func NewNBoolFlag(key, usage string, total *int, hidden bool, validate func(NBoolFlag) error) NBoolFlag {
 	return NBoolFlag{
-		FlagPart: NewFlagPart(key, usage, hidden),
+		Part:     NewFlagPart(key, usage, hidden),
 		Total:    total,
 		Validate: validate,
 	}

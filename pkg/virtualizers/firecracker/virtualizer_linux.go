@@ -38,10 +38,13 @@ import (
 	"github.com/vorteil/vorteil/pkg/virtualizers/util"
 )
 
+
 const (
 	vorteilBridge = "vorteil-bridge"
 )
 
+
+// FetchBridgeDev attempts to retrieve the bridge device
 func FetchBridgeDev() error {
 	// Check if bridge device exists
 	_, err := tenus.BridgeFromName(vorteilBridge)
@@ -50,6 +53,10 @@ func FetchBridgeDev() error {
 	}
 	return err
 }
+
+
+// SetupBridgeAndDHCPServer initializes a dhcp server, bridge device and a http listener to create TAP devices
+func SetupBridgeAndDHCPServer() error {
 
 // SetupBridgeAndDHCPServer creates the bridge which provides DHCP addresses todo
 // firecracker instances.
@@ -108,11 +115,13 @@ func SetupBridgeAndDHCPServer(log elog.View) error {
 	return nil
 }
 
+// CreateDevices is a struct used to tell the process to create TAP devices via a rest request
 type CreateDevices struct {
 	Id     string `json:"id"`
 	Routes int    `json:"count"`
 }
 
+// Devices is a struct used to tell the process to deleted TAP devices via a delete request
 type Devices struct {
 	Devices []string `json:"devices"`
 }

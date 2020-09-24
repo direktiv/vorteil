@@ -281,9 +281,15 @@ func (p *Provisioner) forceOverwriteCheck() error {
 
 func checkSecurityGroupAccess(securityGroup *ec2.SecurityGroup) bool {
 	for _, perm := range securityGroup.IpPermissions {
-		if (perm.FromPort != nil && *perm.FromPort == securityGroupPort) &&
-			(perm.ToPort != nil && *perm.ToPort == securityGroupPort) &&
-			(perm.IpProtocol != nil && *perm.IpProtocol == "tcp") {
+		// Check if permissions are nil
+		if perm.FromPort == nil || perm.ToPort == nil || perm.IpProtocol == nil {
+			continue
+		}
+
+		// Check if permissions are valid
+		if *perm.FromPort == securityGroupPort &&
+			*perm.ToPort == securityGroupPort &&
+			*perm.IpProtocol == "tcp" {
 			return true
 		}
 	}

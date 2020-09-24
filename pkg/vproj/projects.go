@@ -605,32 +605,28 @@ func handleSplitVCFGs(v *vcfg.VCFG, tw *tar.Writer) error {
 	}
 	defer cfgTmp.Close()
 
-	cfgHeader, err := tar.FileInfoHeader(vio.Info(cfgTmp), "")
-	if err != nil {
-		return err
-	}
-	cfgHeader.Name = "default.vcfg"
-	err = tw.WriteHeader(cfgHeader)
+	err = handleSplitVCFG(tw, "default.vcfg", cfgTmp)
 	if err != nil {
 		return err
 	}
 
-	_, err = io.Copy(tw, cfgTmp)
-	if err != nil {
-		return err
-	}
-	cfgTmp.Close()
 	// write info field as readme.vcfg
 	cfgTmp, err = vcfgInfo(v)
 	if err != nil {
 		return err
 	}
 
-	cfgHeader, err = tar.FileInfoHeader(vio.Info(cfgTmp), "")
+	err = handleSplitVCFG(tw, "readme.vcfg", cfgTmp)
+	return err
+}
+
+func handleSplitVCFG(tw *tar.Writer, name string, cfgTmp vio.File) error {
+
+	cfgHeader, err := tar.FileInfoHeader(vio.Info(cfgTmp), "")
 	if err != nil {
 		return err
 	}
-	cfgHeader.Name = "readme.vcfg"
+	cfgHeader.Name = name
 	err = tw.WriteHeader(cfgHeader)
 	if err != nil {
 		return err

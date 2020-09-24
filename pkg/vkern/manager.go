@@ -674,16 +674,20 @@ func (mgr *CompoundManager) Get(ctx context.Context, version CalVer) (*ManagedBu
 	}
 
 	tuple, err := list.BestMatch(version)
-	if err != nil {
-		return nil, err
+	if err == nil {
+		return mgr.mgrs[tuple.Idx].Get(ctx, tuple.Version)
 	}
 
-	b, err := mgr.mgrs[tuple.Idx].Get(ctx, tuple.Version)
-	if err != nil {
-		return nil, err
+	// this branch in logic exists to handle CLI-style situations where the list might not update until the get call
+	for _, m := range mgr.mgrs {
+		b, e := m.Get(ctx, version)
+		if e == nil {
+			return b, nil
+		}
 	}
 
-	return b, nil
+	return nil, err
+
 }
 
 // List ..

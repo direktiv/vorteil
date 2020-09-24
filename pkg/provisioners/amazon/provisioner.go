@@ -168,7 +168,7 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 
 	p.args.Logger.Infof("Instance public IP address: %s\n", instanceIP)
 
-	err = p.instanceReadyForPayload(instanceIP, instanceID)
+	err = p.prepareInstaceForPayload(instanceIP, instanceID)
 	if err != nil {
 		return err
 	}
@@ -414,8 +414,8 @@ func (p *Provisioner) getInstancePublicIP(instanceID string) (string, error) {
 	return ip, nil
 }
 
-// instanceReadyForPayload : Waits for instance ip to be ready for payload
-func (p *Provisioner) instanceReadyForPayload(ip, instanceID string) error {
+// prepareInstaceForPayload : Waits for instance ip to be ready for payload
+func (p *Provisioner) prepareInstaceForPayload(ip, instanceID string) error {
 	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("https://%s:%d/", ip, securityGroupPort), nil)
 	if err != nil {
 		return err

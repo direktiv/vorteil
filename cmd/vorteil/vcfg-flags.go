@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/mattn/go-shellwords"
-	"github.com/spf13/pflag"
+	"github.com/vorteil/vorteil/pkg/flag"
 	"github.com/vorteil/vorteil/pkg/vcfg"
 )
 
@@ -74,408 +74,11 @@ func tallyRepeatableFlag(v *int, s string) {
 	}
 }
 
-type flag interface {
-	FlagKey() string
-	FlagShort() string
-	FlagUsage() string
-	FlagValidate() error
-	AddTo(flagSet *pflag.FlagSet)
-	AddUnhiddenTo(flagSet *pflag.FlagSet)
-}
-
-type flagsList []flag
-
-func (f flagsList) AddTo(flagSet *pflag.FlagSet) {
-	for _, x := range f {
-		x.AddTo(flagSet)
-	}
-}
-
-func (f flagsList) AddUnhiddenTo(flagSet *pflag.FlagSet) {
-	for _, x := range f {
-		x.AddUnhiddenTo(flagSet)
-	}
-}
-
-func (f flagsList) Validate() error {
-	for _, x := range f {
-		err := x.FlagValidate()
-		if err != nil {
-			fmt.Println(x.FlagKey())
-			return err
-		}
-	}
-	return nil
-}
-
-type flagPart struct {
-	key    string
-	short  string
-	usage  string
-	hidden bool
-}
-
-func (p flagPart) FlagKey() string {
-	return p.key
-}
-
-func (p flagPart) FlagShort() string {
-	return p.short
-}
-
-func (p flagPart) FlagUsage() string {
-	return p.usage
-}
-
-type boolFlag struct {
-	flagPart
-	value    bool
-	validate func(value boolFlag) error
-}
-
-func (f *boolFlag) AddTo(flagSet *pflag.FlagSet) {
-	if f.short == "" {
-		flagSet.BoolVar(&f.value, f.key, f.value, f.usage)
-	} else {
-		flagSet.BoolVarP(&f.value, f.key, f.short, f.value, f.usage)
-	}
-	if f.hidden {
-		flag := flagSet.Lookup(f.key)
-		flag.Hidden = true
-	}
-}
-
-func (f *boolFlag) AddUnhiddenTo(flagSet *pflag.FlagSet) {
-	if f.short == "" {
-		flagSet.BoolVar(&f.value, f.key, f.value, f.usage)
-	} else {
-		flagSet.BoolVarP(&f.value, f.key, f.short, f.value, f.usage)
-	}
-}
-
-func (f boolFlag) FlagValidate() error {
-	if f.validate == nil {
-		return nil
-	}
-	return f.validate(f)
-}
-
-type nBoolFlag struct {
-	flagPart
-	total    *int
-	void     bool
-	value    []bool
-	validate func(f nBoolFlag) error
-}
-
-func (f *nBoolFlag) AddTo(flagSet *pflag.FlagSet) {
-
-	if f.value == nil {
-		f.value = make([]bool, *f.total, *f.total)
-	}
-
-	key := strings.Replace(f.key, "<<N>>", "i", -1)
-	flagSet.BoolVar(&f.void, key, f.void, f.usage)
-	if f.hidden {
-		flag := flagSet.Lookup(key)
-		flag.Hidden = true
-	}
-
-	for i := 0; i < *f.total; i++ {
-		key = f.nKey(i)
-		flagSet.BoolVar(&f.value[i], key, f.value[i], f.usage)
-		flagSet.MarkHidden(key)
-		if f.hidden {
-			flag := flagSet.Lookup(key)
-			flag.Hidden = true
-		}
-	}
-
-}
-
-func (f nBoolFlag) nKey(n int) string {
-	return strings.Replace(f.key, "<<N>>", fmt.Sprintf("%d", n), -1)
-}
-
-func (f *nBoolFlag) AddUnhiddenTo(flagSet *pflag.FlagSet) {
-
-	if f.value == nil {
-		f.value = make([]bool, *f.total, *f.total)
-	}
-
-	key := strings.Replace(f.key, "<<N>>", "i", -1)
-	flagSet.BoolVar(&f.void, key, f.void, f.usage)
-
-	for i := 0; i < *f.total; i++ {
-		key = f.nKey(i)
-		flagSet.BoolVar(&f.value[i], key, f.value[i], f.usage)
-		flagSet.MarkHidden(key)
-	}
-
-}
-
-func (f nBoolFlag) FlagValidate() error {
-
-	if f.void {
-		key := strings.Replace(f.key, "<<N>>", "i", -1)
-		suggest := strings.Replace(f.key, "<<N>>", "0", -1)
-		return fmt.Errorf("unknown flag: --%s (substitute 'N' for 0-%d, e.g. %s)", key, f.total, suggest)
-	}
-
-	if f.validate == nil {
-		return nil
-	}
-
-	return f.validate(f)
-
-}
-
-type nStringFlag struct {
-	flagPart
-	total    *int
-	void     string
-	value    []string
-	validate func(f nStringFlag) error
-}
-
-func (f *nStringFlag) AddTo(flagSet *pflag.FlagSet) {
-	if f.value == nil {
-		f.value = make([]string, *f.total, *f.total)
-	}
-
-	key := strings.Replace(f.key, "<<N>>", "i", -1)
-	flagSet.StringVar(&f.void, key, f.void, f.usage)
-	if f.hidden {
-		flag := flagSet.Lookup(key)
-		flag.Hidden = true
-	}
-	for i := 0; i < *f.total; i++ {
-		key = f.nKey(i)
-		flagSet.StringVar(&f.value[i], key, f.value[i], f.usage)
-		flagSet.MarkHidden(key)
-		if f.hidden {
-			flag := flagSet.Lookup(key)
-			flag.Hidden = true
-		}
-	}
-
-}
-
-func (f *nStringFlag) AddUnhiddenTo(flagSet *pflag.FlagSet) {
-
-	if f.value == nil {
-		f.value = make([]string, *f.total, *f.total)
-	}
-
-	key := strings.Replace(f.key, "<<N>>", "i", -1)
-	flagSet.StringVar(&f.void, key, f.void, f.usage)
-
-	for i := 0; i < *f.total; i++ {
-		key = f.nKey(i)
-		flagSet.StringVar(&f.value[i], key, f.value[i], f.usage)
-		flagSet.MarkHidden(key)
-	}
-
-}
-
-func (f nStringFlag) FlagValidate() error {
-
-	if f.void != "" {
-		key := strings.Replace(f.key, "<<N>>", "i", -1)
-		suggest := strings.Replace(f.key, "<<N>>", "0", -1)
-		return fmt.Errorf("unknown flag: --%s (substitute 'N' for 0-%d, e.g. %s)", key, f.total, suggest)
-	}
-
-	if f.validate == nil {
-		return nil
-	}
-
-	return f.validate(f)
-
-}
-
-func (f nStringFlag) nKey(n int) string {
-	return strings.Replace(f.key, "<<N>>", fmt.Sprintf("%d", n), -1)
-}
-
-type nStringSliceFlag struct {
-	flagPart
-	total    *int
-	void     []string
-	value    [][]string
-	validate func(f nStringSliceFlag) error
-}
-
-func (f *nStringSliceFlag) AddTo(flagSet *pflag.FlagSet) {
-
-	if f.value == nil {
-		f.value = make([][]string, *f.total, *f.total)
-	}
-
-	key := strings.Replace(f.key, "<<N>>", "i", -1)
-	flagSet.StringSliceVar(&f.void, key, f.void, f.usage)
-	if f.hidden {
-		flag := flagSet.Lookup(key)
-		flag.Hidden = true
-	}
-
-	for i := 0; i < *f.total; i++ {
-		key = f.nKey(i)
-		flagSet.StringSliceVar(&f.value[i], key, f.value[i], f.usage)
-		flagSet.MarkHidden(key)
-		if f.hidden {
-			flag := flagSet.Lookup(key)
-			flag.Hidden = true
-		}
-	}
-
-}
-
-func (f *nStringSliceFlag) AddUnhiddenTo(flagSet *pflag.FlagSet) {
-
-	if f.value == nil {
-		f.value = make([][]string, *f.total, *f.total)
-	}
-
-	key := strings.Replace(f.key, "<<N>>", "i", -1)
-	flagSet.StringSliceVar(&f.void, key, f.void, f.usage)
-
-	for i := 0; i < *f.total; i++ {
-		key = f.nKey(i)
-		flagSet.StringSliceVar(&f.value[i], key, f.value[i], f.usage)
-		flagSet.MarkHidden(key)
-	}
-
-}
-
-func (f nStringSliceFlag) FlagValidate() error {
-
-	if len(f.void) != 0 {
-		key := strings.Replace(f.key, "<<N>>", "i", -1)
-		suggest := strings.Replace(f.key, "<<N>>", "0", -1)
-		return fmt.Errorf("unknown flag: --%s (substitute 'N' for 0-%d, e.g. %s)", key, f.total, suggest)
-	}
-
-	if f.validate == nil {
-		return nil
-	}
-
-	return f.validate(f)
-
-}
-
-func (f nStringSliceFlag) nKey(n int) string {
-	return strings.Replace(f.key, "<<N>>", fmt.Sprintf("%d", n), -1)
-}
-
-type stringFlag struct {
-	flagPart
-	value    string
-	validate func(value stringFlag) error
-}
-
-func (f *stringFlag) AddTo(flagSet *pflag.FlagSet) {
-	if f.short == "" {
-		flagSet.StringVar(&f.value, f.key, f.value, f.usage)
-	} else {
-		flagSet.StringVarP(&f.value, f.key, f.short, f.value, f.usage)
-	}
-	if f.hidden {
-		flag := flagSet.Lookup(f.key)
-		flag.Hidden = true
-	}
-}
-
-func (f *stringFlag) AddUnhiddenTo(flagSet *pflag.FlagSet) {
-	if f.short == "" {
-		flagSet.StringVar(&f.value, f.key, f.value, f.usage)
-	} else {
-		flagSet.StringVarP(&f.value, f.key, f.short, f.value, f.usage)
-	}
-}
-
-func (f stringFlag) FlagValidate() error {
-	if f.validate == nil {
-		return nil
-	}
-	return f.validate(f)
-}
-
-type stringSliceFlag struct {
-	flagPart
-	value    []string
-	validate func(f stringSliceFlag) error
-}
-
-func (f *stringSliceFlag) AddTo(flagSet *pflag.FlagSet) {
-	if f.short == "" {
-		flagSet.StringSliceVar(&f.value, f.key, f.value, f.usage)
-	} else {
-		flagSet.StringSliceVarP(&f.value, f.key, f.short, f.value, f.usage)
-	}
-	if f.hidden {
-		flag := flagSet.Lookup(f.key)
-		flag.Hidden = true
-	}
-}
-
-func (f *stringSliceFlag) AddUnhiddenTo(flagSet *pflag.FlagSet) {
-	if f.short == "" {
-		flagSet.StringSliceVar(&f.value, f.key, f.value, f.usage)
-	} else {
-		flagSet.StringSliceVarP(&f.value, f.key, f.short, f.value, f.usage)
-	}
-}
-
-func (f stringSliceFlag) FlagValidate() error {
-	if f.validate == nil {
-		return nil
-	}
-	return f.validate(f)
-}
-
-type uintFlag struct {
-	flagPart
-	value    uint
-	validate func(f uintFlag) error
-}
-
-func (f *uintFlag) AddTo(flagSet *pflag.FlagSet) {
-	if f.short == "" {
-		flagSet.UintVar(&f.value, f.key, f.value, f.usage)
-	} else {
-		flagSet.UintVarP(&f.value, f.key, f.short, f.value, f.usage)
-	}
-	if f.hidden {
-		flag := flagSet.Lookup(f.key)
-		flag.Hidden = true
-	}
-}
-
-func (f *uintFlag) AddUnhiddenTo(flagSet *pflag.FlagSet) {
-	if f.short == "" {
-		flagSet.UintVar(&f.value, f.key, f.value, f.usage)
-	} else {
-		flagSet.UintVarP(&f.value, f.key, f.short, f.value, f.usage)
-	}
-}
-
-func (f uintFlag) FlagValidate() error {
-	if f.validate == nil {
-		return nil
-	}
-	return f.validate(f)
-}
-
 // --sysctl
-var sysctlFlag = stringSliceFlag{
-	flagPart: flagPart{
-		key:    "sysctl",
-		usage:  "add a sysctl key/value tuple",
-		hidden: hideFlags,
-	},
-	validate: func(f stringSliceFlag) error {
-		for _, s := range f.value {
+var sysctlFlag = flag.StringSliceFlag{
+	FlagPart: flag.NewFlagPart("sysctl", "add a sysctl key/value tuple", hideFlags),
+	Validate: func(f flag.StringSliceFlag) error {
+		for _, s := range f.Value {
 			x := strings.Split(s, "=")
 
 			if len(x) < 2 {
@@ -494,118 +97,86 @@ var sysctlFlag = stringSliceFlag{
 }
 
 // --info.author
-var infoAuthorFlag = stringFlag{
-	flagPart: flagPart{
-		key:    "info.author",
-		usage:  "name the author of the app",
-		hidden: hideFlags,
-	},
-	validate: func(f stringFlag) error {
-		overrideVCFG.Info.Author = f.value
+var infoAuthorFlag = flag.StringFlag{
+	FlagPart: flag.NewFlagPart("info.author", "name the author of the app", hideFlags),
+	Validate: func(f flag.StringFlag) error {
+		overrideVCFG.Info.Author = f.Value
 		return nil
 	},
 }
 
 // --info.date
-var infoDateFlag = stringFlag{
-	flagPart: flagPart{
-		key:    "info.date",
-		usage:  "date of app's release (YYYY-MM-DD)",
-		hidden: hideFlags,
-	},
-	validate: func(f stringFlag) error {
+var infoDateFlag = flag.StringFlag{
+	FlagPart: flag.NewFlagPart("info.date", "date of app's release (YYYY-MM-DD)", hideFlags),
+	Validate: func(f flag.StringFlag) error {
 		var err error
-		if f.value == "" {
+		if f.Value == "" {
 			return nil
 		}
-		overrideVCFG.Info.Date, err = vcfg.TimestampFromString(f.value)
+		overrideVCFG.Info.Date, err = vcfg.TimestampFromString(f.Value)
 		return err
 	},
 }
 
 // --info.description
-var infoDescriptionFlag = stringFlag{
-	flagPart: flagPart{
-		key:    "info.description",
-		usage:  "provide a description for the app",
-		hidden: hideFlags,
-	},
-	validate: func(f stringFlag) error {
-		overrideVCFG.Info.Description = f.value
+var infoDescriptionFlag = flag.StringFlag{
+	FlagPart: flag.NewFlagPart("info.description", "provide a description for the app", hideFlags),
+	Validate: func(f flag.StringFlag) error {
+		overrideVCFG.Info.Description = f.Value
 		return nil
 	},
 }
 
 // --info.name
-var infoNameFlag = stringFlag{
-	flagPart: flagPart{
-		key:    "info.name",
-		usage:  "name the app",
-		hidden: hideFlags,
-	},
-	validate: func(f stringFlag) error {
-		overrideVCFG.Info.Name = f.value
+var infoNameFlag = flag.StringFlag{
+	FlagPart: flag.NewFlagPart("info.name", "name of the app", hideFlags),
+	Validate: func(f flag.StringFlag) error {
+		overrideVCFG.Info.Name = f.Value
 		return nil
 	},
 }
 
 // --info.summary
-var infoSummaryFlag = stringFlag{
-	flagPart: flagPart{
-		key:    "info.summary",
-		usage:  "provide a short summary for the app",
-		hidden: hideFlags,
-	},
-	validate: func(f stringFlag) error {
-		overrideVCFG.Info.Summary = f.value
+var infoSummaryFlag = flag.StringFlag{
+	FlagPart: flag.NewFlagPart("info.summary", "provide a short summary for the app", hideFlags),
+	Validate: func(f flag.StringFlag) error {
+		overrideVCFG.Info.Summary = f.Value
 		return nil
 	},
 }
 
 // --info.url
-var infoURLFlag = stringFlag{
-	flagPart: flagPart{
-		key:    "info.url",
-		usage:  "URL for more information about the app",
-		hidden: hideFlags,
-	},
-	validate: func(f stringFlag) error {
+var infoURLFlag = flag.StringFlag{
+	FlagPart: flag.NewFlagPart("info.url", "URL for more information about the app", hideFlags),
+	Validate: func(f flag.StringFlag) error {
 		var err error
-		overrideVCFG.Info.URL, err = vcfg.URLFromString(f.value)
+		overrideVCFG.Info.URL, err = vcfg.URLFromString(f.Value)
 		return err
 	},
 }
 
 // --info.version
-var infoVersionFlag = stringFlag{
-	flagPart: flagPart{
-		key:    "info.version",
-		usage:  "identify the app's version",
-		hidden: hideFlags,
-	},
-	validate: func(f stringFlag) error {
-		overrideVCFG.Info.Version = f.value
+var infoVersionFlag = flag.StringFlag{
+	FlagPart: flag.NewFlagPart("info.version", "identify the app's version", hideFlags),
+	Validate: func(f flag.StringFlag) error {
+		overrideVCFG.Info.Version = f.Value
 		return nil
 	},
 }
 
 // --logging.config
-var loggingConfigFlag = nStringSliceFlag{
-	flagPart: flagPart{
-		key:    "logging[<<N>>].config",
-		usage:  "configure app's logging config",
-		hidden: hideFlags,
-	},
-	total: &maxLoggingFlags,
-	validate: func(f nStringSliceFlag) error {
+var loggingConfigFlag = flag.NStringSliceFlag{
+	FlagPart: flag.NewFlagPart("logging[<<N>>].config", "configure app's logging config", hideFlags),
+	Total:    &maxLoggingFlags,
+	Validate: func(f flag.NStringSliceFlag) error {
 
-		for i := 0; i < *f.total; i++ {
+		for i := 0; i < *f.Total; i++ {
 
-			if len(f.value[i]) == 0 {
+			if len(f.Value[i]) == 0 {
 				continue
 			}
 
-			s := f.value[i]
+			s := f.Value[i]
 			for len(overrideVCFG.Logging) < i+1 {
 				overrideVCFG.Logging = append(overrideVCFG.Logging, vcfg.Logging{})
 			}
@@ -622,20 +193,16 @@ var loggingConfigFlag = nStringSliceFlag{
 }
 
 // --logging.type
-var loggingTypeFlag = nStringFlag{
-	flagPart: flagPart{
-		key:    "logging[<<N>>].type",
-		usage:  "configure app's logging type",
-		hidden: hideFlags,
-	},
-	total: &maxLoggingFlags,
-	validate: func(f nStringFlag) error {
-		for i := 0; i < *f.total; i++ {
-			if f.value[i] == "" {
+var loggingTypeFlag = flag.NStringFlag{
+	FlagPart: flag.NewFlagPart("logging[<<N>>].type", "configure app's logging type", hideFlags),
+	Total:    &maxLoggingFlags,
+	Validate: func(f flag.NStringFlag) error {
+		for i := 0; i < *f.Total; i++ {
+			if f.Value[i] == "" {
 				continue
 			}
 
-			s := f.value[i]
+			s := f.Value[i]
 			for len(overrideVCFG.Logging) < i+1 {
 				overrideVCFG.Logging = append(overrideVCFG.Logging, vcfg.Logging{})
 			}
@@ -648,22 +215,18 @@ var loggingTypeFlag = nStringFlag{
 }
 
 // --nfs.mount
-var nfsMountFlag = nStringFlag{
-	flagPart: flagPart{
-		key:    "nfs[<<N>>].mount",
-		usage:  "configure app's nfs mounts",
-		hidden: hideFlags,
-	},
-	total: &maxNFSFlags,
-	validate: func(f nStringFlag) error {
+var nfsMountFlag = flag.NStringFlag{
+	FlagPart: flag.NewFlagPart("nfs[<<N>>].mount", "configure app's nfs mounts", hideFlags),
+	Total:    &maxNFSFlags,
+	Validate: func(f flag.NStringFlag) error {
 
-		for i := 0; i < *f.total; i++ {
+		for i := 0; i < *f.Total; i++ {
 
-			if f.value[i] == "" {
+			if f.Value[i] == "" {
 				continue
 			}
 
-			s := f.value[i]
+			s := f.Value[i]
 			for len(overrideVCFG.NFS) < i+1 {
 				overrideVCFG.NFS = append(overrideVCFG.NFS, vcfg.NFSSettings{})
 			}
@@ -677,22 +240,18 @@ var nfsMountFlag = nStringFlag{
 }
 
 // --nfs.options
-var nfsOptionsFlag = nStringFlag{
-	flagPart: flagPart{
-		key:    "nfs[<<N>>].options",
-		usage:  "configure app's nfs options",
-		hidden: hideFlags,
-	},
-	total: &maxNFSFlags,
-	validate: func(f nStringFlag) error {
+var nfsOptionsFlag = flag.NStringFlag{
+	FlagPart: flag.NewFlagPart("nfs[<<N>>].options", "configure app's nfs options", hideFlags),
+	Total:    &maxNFSFlags,
+	Validate: func(f flag.NStringFlag) error {
 
-		for i := 0; i < *f.total; i++ {
+		for i := 0; i < *f.Total; i++ {
 
-			if f.value[i] == "" {
+			if f.Value[i] == "" {
 				continue
 			}
 
-			s := f.value[i]
+			s := f.Value[i]
 			for len(overrideVCFG.NFS) < i+1 {
 				overrideVCFG.NFS = append(overrideVCFG.NFS, vcfg.NFSSettings{})
 			}
@@ -706,22 +265,18 @@ var nfsOptionsFlag = nStringFlag{
 }
 
 // --nfs.server
-var nfsServerFlag = nStringFlag{
-	flagPart: flagPart{
-		key:    "nfs[<<N>>].server",
-		usage:  "configure app's nfs servers",
-		hidden: hideFlags,
-	},
-	total: &maxNFSFlags,
-	validate: func(f nStringFlag) error {
+var nfsServerFlag = flag.NStringFlag{
+	FlagPart: flag.NewFlagPart("nfs[<<N>>].server", "configure app's nfs servers", hideFlags),
+	Total:    &maxNFSFlags,
+	Validate: func(f flag.NStringFlag) error {
 
-		for i := 0; i < *f.total; i++ {
+		for i := 0; i < *f.Total; i++ {
 
-			if f.value[i] == "" {
+			if f.Value[i] == "" {
 				continue
 			}
 
-			s := f.value[i]
+			s := f.Value[i]
 			for len(overrideVCFG.NFS) < i+1 {
 				overrideVCFG.NFS = append(overrideVCFG.NFS, vcfg.NFSSettings{})
 			}
@@ -735,21 +290,17 @@ var nfsServerFlag = nStringFlag{
 }
 
 // --network.tcpdump
-var networkTCPDumpFlag = nBoolFlag{
-	flagPart: flagPart{
-		key:    "network[<<N>>].tcpdump",
-		usage:  "configure this network to run with tcpdump",
-		hidden: hideFlags,
-	},
-	total: &maxNetworkFlags,
-	validate: func(f nBoolFlag) error {
-		for i := 0; i < *f.total; i++ {
+var networkTCPDumpFlag = flag.NBoolFlag{
+	FlagPart: flag.NewFlagPart("network[<<N>>].tcpdump", "configure this network to run with tcpdump", hideFlags),
+	Total:    &maxNetworkFlags,
+	Validate: func(f flag.NBoolFlag) error {
+		for i := 0; i < *f.Total; i++ {
 
 			for len(overrideVCFG.Networks) < i+1 {
 				overrideVCFG.Networks = append(overrideVCFG.Networks, vcfg.NetworkInterface{})
 			}
 
-			val := f.value[i]
+			val := f.Value[i]
 			overrideVCFG.Networks[i].TCPDUMP = val
 		}
 		return nil
@@ -757,22 +308,18 @@ var networkTCPDumpFlag = nBoolFlag{
 }
 
 // --network.gateway
-var networkGatewayFlag = nStringFlag{
-	flagPart: flagPart{
-		key:    "network[<<N>>].gateway",
-		usage:  "configure app's network gateway",
-		hidden: hideFlags,
-	},
-	total: &maxNetworkFlags,
-	validate: func(f nStringFlag) error {
+var networkGatewayFlag = flag.NStringFlag{
+	FlagPart: flag.NewFlagPart("network[<<N>>].gateway", "configure app's network gateway", hideFlags),
+	Total:    &maxNetworkFlags,
+	Validate: func(f flag.NStringFlag) error {
 
-		for i := 0; i < *f.total; i++ {
+		for i := 0; i < *f.Total; i++ {
 
-			if f.value[i] == "" {
+			if f.Value[i] == "" {
 				continue
 			}
 
-			s := f.value[i]
+			s := f.Value[i]
 			for len(overrideVCFG.Networks) < i+1 {
 				overrideVCFG.Networks = append(overrideVCFG.Networks, vcfg.NetworkInterface{IP: "dhcp"})
 			}
@@ -786,22 +333,18 @@ var networkGatewayFlag = nStringFlag{
 }
 
 // --network.http
-var networkHTTPFlag = nStringSliceFlag{
-	flagPart: flagPart{
-		key:    "network[<<N>>].http",
-		usage:  "expose http port",
-		hidden: hideFlags,
-	},
-	total: &maxNetworkFlags,
-	validate: func(f nStringSliceFlag) error {
+var networkHTTPFlag = flag.NStringSliceFlag{
+	FlagPart: flag.NewFlagPart("network[<<N>>].http", "expose http port", hideFlags),
+	Total:    &maxNetworkFlags,
+	Validate: func(f flag.NStringSliceFlag) error {
 
-		for i := 0; i < *f.total; i++ {
+		for i := 0; i < *f.Total; i++ {
 
-			if len(f.value[i]) == 0 {
+			if len(f.Value[i]) == 0 {
 				continue
 			}
 
-			s := f.value[i]
+			s := f.Value[i]
 			for len(overrideVCFG.Networks) < i+1 {
 				overrideVCFG.Networks = append(overrideVCFG.Networks, vcfg.NetworkInterface{IP: "dhcp"})
 			}
@@ -815,22 +358,18 @@ var networkHTTPFlag = nStringSliceFlag{
 }
 
 // --network.http
-var networkHTTPSFlag = nStringSliceFlag{
-	flagPart: flagPart{
-		key:    "network[<<N>>].https",
-		usage:  "expose https port",
-		hidden: hideFlags,
-	},
-	total: &maxNetworkFlags,
-	validate: func(f nStringSliceFlag) error {
+var networkHTTPSFlag = flag.NStringSliceFlag{
+	FlagPart: flag.NewFlagPart("network[<<N>>].https", "expose https port", hideFlags),
+	Total:    &maxNetworkFlags,
+	Validate: func(f flag.NStringSliceFlag) error {
 
-		for i := 0; i < *f.total; i++ {
+		for i := 0; i < *f.Total; i++ {
 
-			if len(f.value[i]) == 0 {
+			if len(f.Value[i]) == 0 {
 				continue
 			}
 
-			s := f.value[i]
+			s := f.Value[i]
 			for len(overrideVCFG.Networks) < i+1 {
 				overrideVCFG.Networks = append(overrideVCFG.Networks, vcfg.NetworkInterface{IP: "dhcp"})
 			}
@@ -844,22 +383,18 @@ var networkHTTPSFlag = nStringSliceFlag{
 }
 
 // --network.ip
-var networkIPFlag = nStringFlag{
-	flagPart: flagPart{
-		key:    "network[<<N>>].ip",
-		usage:  "configure app's network IP address",
-		hidden: hideFlags,
-	},
-	total: &maxNetworkFlags,
-	validate: func(f nStringFlag) error {
+var networkIPFlag = flag.NStringFlag{
+	FlagPart: flag.NewFlagPart("network[<<N>>].ip", "configure app's network IP address", hideFlags),
+	Total:    &maxNetworkFlags,
+	Validate: func(f flag.NStringFlag) error {
 
-		for i := 0; i < *f.total; i++ {
+		for i := 0; i < *f.Total; i++ {
 
-			if f.value[i] == "" {
+			if f.Value[i] == "" {
 				continue
 			}
 
-			s := f.value[i]
+			s := f.Value[i]
 			for len(overrideVCFG.Networks) < i+1 {
 				overrideVCFG.Networks = append(overrideVCFG.Networks, vcfg.NetworkInterface{IP: "dhcp"})
 			}
@@ -873,22 +408,18 @@ var networkIPFlag = nStringFlag{
 }
 
 // --network.mtu
-var networkMTUFlag = nStringFlag{
-	flagPart: flagPart{
-		key:    "network[<<N>>].mtu",
-		usage:  "configure app's network interface MTU",
-		hidden: hideFlags,
-	},
-	total: &maxNetworkFlags,
-	validate: func(f nStringFlag) error {
+var networkMTUFlag = flag.NStringFlag{
+	FlagPart: flag.NewFlagPart("network[<<N>>].mtu", "configure app's network interface MTU", hideFlags),
+	Total:    &maxNetworkFlags,
+	Validate: func(f flag.NStringFlag) error {
 
-		for i := 0; i < *f.total; i++ {
+		for i := 0; i < *f.Total; i++ {
 
-			if f.value[i] == "" {
+			if f.Value[i] == "" {
 				continue
 			}
 
-			s := f.value[i]
+			s := f.Value[i]
 			x, err := strconv.ParseUint(s, 10, 64)
 			if err != nil {
 				return err
@@ -907,22 +438,18 @@ var networkMTUFlag = nStringFlag{
 }
 
 // --network.mask
-var networkMaskFlag = nStringFlag{
-	flagPart: flagPart{
-		key:    "network[<<N>>].mask",
-		usage:  "configure app's subnet mask",
-		hidden: hideFlags,
-	},
-	total: &maxNetworkFlags,
-	validate: func(f nStringFlag) error {
+var networkMaskFlag = flag.NStringFlag{
+	FlagPart: flag.NewFlagPart("network[<<N>>].mask", "configure app's subnet mask", hideFlags),
+	Total:    &maxNetworkFlags,
+	Validate: func(f flag.NStringFlag) error {
 
-		for i := 0; i < *f.total; i++ {
+		for i := 0; i < *f.Total; i++ {
 
-			if f.value[i] == "" {
+			if f.Value[i] == "" {
 				continue
 			}
 
-			s := f.value[i]
+			s := f.Value[i]
 			for len(overrideVCFG.Networks) < i+1 {
 				overrideVCFG.Networks = append(overrideVCFG.Networks, vcfg.NetworkInterface{IP: "dhcp"})
 			}
@@ -936,22 +463,18 @@ var networkMaskFlag = nStringFlag{
 }
 
 // --network.tcp
-var networkTCPFlag = nStringSliceFlag{
-	flagPart: flagPart{
-		key:    "network[<<N>>].tcp",
-		usage:  "expose tcp port",
-		hidden: hideFlags,
-	},
-	total: &maxNetworkFlags,
-	validate: func(f nStringSliceFlag) error {
+var networkTCPFlag = flag.NStringSliceFlag{
+	FlagPart: flag.NewFlagPart("network[<<N>>].tcp", "expose tcp port", hideFlags),
+	Total:    &maxNetworkFlags,
+	Validate: func(f flag.NStringSliceFlag) error {
 
-		for i := 0; i < *f.total; i++ {
+		for i := 0; i < *f.Total; i++ {
 
-			if len(f.value[i]) == 0 {
+			if len(f.Value[i]) == 0 {
 				continue
 			}
 
-			s := f.value[i]
+			s := f.Value[i]
 			for len(overrideVCFG.Networks) < i+1 {
 				overrideVCFG.Networks = append(overrideVCFG.Networks, vcfg.NetworkInterface{IP: "dhcp"})
 			}
@@ -965,22 +488,18 @@ var networkTCPFlag = nStringSliceFlag{
 }
 
 // --network.udp
-var networkUDPFlag = nStringSliceFlag{
-	flagPart: flagPart{
-		key:    "network[<<N>>].udp",
-		usage:  "expose udp port",
-		hidden: hideFlags,
-	},
-	total: &maxNetworkFlags,
-	validate: func(f nStringSliceFlag) error {
+var networkUDPFlag = flag.NStringSliceFlag{
+	FlagPart: flag.NewFlagPart("network[<<N>>].udp", "expose udp port", hideFlags),
+	Total:    &maxNetworkFlags,
+	Validate: func(f flag.NStringSliceFlag) error {
 
-		for i := 0; i < *f.total; i++ {
+		for i := 0; i < *f.Total; i++ {
 
-			if len(f.value[i]) == 0 {
+			if len(f.Value[i]) == 0 {
 				continue
 			}
 
-			s := f.value[i]
+			s := f.Value[i]
 			for len(overrideVCFG.Networks) < i+1 {
 				overrideVCFG.Networks = append(overrideVCFG.Networks, vcfg.NetworkInterface{IP: "dhcp"})
 			}
@@ -994,92 +513,64 @@ var networkUDPFlag = nStringSliceFlag{
 }
 
 // --system.kernel-args
-var systemKernelArgsFlag = stringFlag{
-	flagPart: flagPart{
-		key:    "system.kernel-args",
-		usage:  "",
-		hidden: hideFlags,
-	},
-	validate: func(f stringFlag) error {
-		overrideVCFG.System.KernelArgs = f.value
+var systemKernelArgsFlag = flag.StringFlag{
+	FlagPart: flag.NewFlagPart("system.kernel-args", "", hideFlags),
+	Validate: func(f flag.StringFlag) error {
+		overrideVCFG.System.KernelArgs = f.Value
 		return nil
 	},
 }
 
 // --system.dns
-var systemDNSFlag = stringSliceFlag{
-	flagPart: flagPart{
-		key:    "system.dns",
-		usage:  "set the DNS server list for the system",
-		hidden: hideFlags,
-	},
-	validate: func(f stringSliceFlag) error {
-		overrideVCFG.System.DNS = f.value
+var systemDNSFlag = flag.StringSliceFlag{
+	FlagPart: flag.NewFlagPart("system.dns", "set the DNS server list for the system", hideFlags),
+	Validate: func(f flag.StringSliceFlag) error {
+		overrideVCFG.System.DNS = f.Value
 		return nil
 	},
 }
 
 // --system.hostname
-var systemHostnameFlag = stringFlag{
-	flagPart: flagPart{
-		key:    "system.hostname",
-		usage:  "set the hostname for the system",
-		hidden: hideFlags,
-	},
-	validate: func(f stringFlag) error {
-		overrideVCFG.System.Hostname = f.value
+var systemHostnameFlag = flag.StringFlag{
+	FlagPart: flag.NewFlagPart("system.hostname", "set the hostname for the system", hideFlags),
+	Validate: func(f flag.StringFlag) error {
+		overrideVCFG.System.Hostname = f.Value
 		return nil
 	},
 }
 
 // --system.filesystem
-var systemFilesystemFlag = stringFlag{
-	flagPart: flagPart{
-		key:    "system.filesystem",
-		usage:  "set the filesystem",
-		hidden: hideFlags,
-	},
-	validate: func(f stringFlag) error {
-		overrideVCFG.System.Filesystem = vcfg.Filesystem(f.value)
+var systemFilesystemFlag = flag.StringFlag{
+	FlagPart: flag.NewFlagPart("system.filesystem", "set the filesystem format", hideFlags),
+	Validate: func(f flag.StringFlag) error {
+		overrideVCFG.System.Filesystem = vcfg.Filesystem(f.Value)
 		return nil
 	},
 }
 
 // --system.max-fds
-var systemMaxFDsFlag = uintFlag{
-	flagPart: flagPart{
-		key:    "system.max-fds",
-		usage:  "maximum file descriptors available to app",
-		hidden: hideFlags,
-	},
-	validate: func(f uintFlag) error {
-		overrideVCFG.System.MaxFDs = f.value
+var systemMaxFDsFlag = flag.UintFlag{
+	FlagPart: flag.NewFlagPart("system.max-fds", "maximum file descriptors available to app", hideFlags),
+	Validate: func(f flag.UintFlag) error {
+		overrideVCFG.System.MaxFDs = f.Value
 		return nil
 	},
 }
 
 // --system.output-mode
-var systemOutputModeFlag = stringFlag{
-	flagPart: flagPart{
-		key:    "system.output-mode",
-		usage:  "specify vm output behaviour mode",
-		hidden: hideFlags,
-	},
-	validate: func(f stringFlag) error {
-		overrideVCFG.System.StdoutMode = vcfg.StdoutModeFromString(f.value)
+var systemOutputModeFlag = flag.StringFlag{
+	FlagPart: flag.NewFlagPart("system.output-mode", "specify vm output behaviour mode", hideFlags),
+	Validate: func(f flag.StringFlag) error {
+		overrideVCFG.System.StdoutMode = vcfg.StdoutModeFromString(f.Value)
 		return nil
 	},
 }
 
 // -- system.user
-var systemUserFlag = stringFlag{
-	flagPart: flagPart{
-		key:    "system.user",
-		usage:  "name of the non-root user (default: vorteil)",
-		hidden: hideFlags,
-	},
-	validate: func(f stringFlag) error {
-		overrideVCFG.System.User = f.value
+var systemUserFlag = flag.StringFlag{
+	FlagPart: flag.NewFlagPart("system.user", "name of the non-root user (default: vorteil)", hideFlags),
+	Validate: func(f flag.StringFlag) error {
+		overrideVCFG.System.User = f.Value
 		return nil
 	},
 }
@@ -1089,16 +580,12 @@ var systemUserFlag = stringFlag{
 var filesMap = make(map[string][]string)
 
 // --files
-var filesFlag = stringSliceFlag{
-	flagPart: flagPart{
-		key:    "files",
-		usage:  "<src>[:<dst>]   add files from the host filesystem to an existing folder in the virtual machine filesystem (dst defaults to '/')",
-		hidden: hideFlags,
-	},
-	validate: func(f stringSliceFlag) error {
-		for _, v := range f.value {
-			// value should have no more than 2 elements when split by ':'
-			x := strings.SplitN(v, ":", 2)
+var filesFlag = flag.StringSliceFlag{
+	FlagPart: flag.NewFlagPart("files", "<src>[@<dst>]   add files from the host filesystem to an existing folder in the virtual machine filesystem (dst defaults to '/')", hideFlags),
+	Validate: func(f flag.StringSliceFlag) error {
+		for _, v := range f.Value {
+			// value should have no more than 2 elements when split by '@'
+			x := strings.SplitN(v, "@", 2)
 
 			var src = x[0]
 			var dst = "/"
@@ -1118,94 +605,70 @@ var filesFlag = stringSliceFlag{
 }
 
 // --vm.cpus
-var vmCPUsFlag = uintFlag{
-	flagPart: flagPart{
-		key:    "vm.cpus",
-		usage:  "number of cpus to allocate to app",
-		hidden: hideFlags,
-	},
-	validate: func(f uintFlag) error {
-		overrideVCFG.VM.CPUs = f.value
+var vmCPUsFlag = flag.UintFlag{
+	FlagPart: flag.NewFlagPart("vm.cpus", "number of cpus to allocate to app", hideFlags),
+	Validate: func(f flag.UintFlag) error {
+		overrideVCFG.VM.CPUs = f.Value
 		return nil
 	},
 }
 
 // --vm.disk-size
-var vmDiskSizeFlag = stringFlag{
-	flagPart: flagPart{
-		key:    "vm.disk-size",
-		usage:  "disk image capacity to allocate to app",
-		hidden: hideFlags,
-	},
-	validate: func(f stringFlag) error {
+var vmDiskSizeFlag = flag.StringFlag{
+	FlagPart: flag.NewFlagPart("vm.disk-size", "disk image capacity to allocate to app", hideFlags),
+	Validate: func(f flag.StringFlag) error {
 		var err error
-		overrideVCFG.VM.DiskSize, err = vcfg.ParseBytes(f.value)
+		overrideVCFG.VM.DiskSize, err = vcfg.ParseBytes(f.Value)
 		if err != nil {
-			return fmt.Errorf("--%s=%s: %v", f.key,
-				f.value, err)
+			return fmt.Errorf("--%s=%s: %v", f.Key,
+				f.Value, err)
 		}
 		return nil
 	},
 }
 
 // --vm.inodes
-var vmInodesFlag = uintFlag{
-	flagPart: flagPart{
-		key:    "vm.inodes",
-		usage:  "number of inodes to build on disk image",
-		hidden: hideFlags,
-	},
-	validate: func(f uintFlag) error {
-		overrideVCFG.VM.Inodes = vcfg.InodesQuota(f.value)
+var vmInodesFlag = flag.UintFlag{
+	FlagPart: flag.NewFlagPart("vm.inodes", "number of inodes to build on disk image", hideFlags),
+	Validate: func(f flag.UintFlag) error {
+		overrideVCFG.VM.Inodes = vcfg.InodesQuota(f.Value)
 		return nil
 	},
 }
 
 // --vm.kernel
-var vmKernelFlag = stringFlag{
-	flagPart: flagPart{
-		key:    "vm.kernel",
-		usage:  "kernel to build app on",
-		hidden: hideFlags,
-	},
-	validate: func(f stringFlag) error {
-		if f.value != "" {
-			overrideVCFG.VM.Kernel = f.value
+var vmKernelFlag = flag.StringFlag{
+	FlagPart: flag.NewFlagPart("vm.kernel", "kernel to build app on", hideFlags),
+	Validate: func(f flag.StringFlag) error {
+		if f.Value != "" {
+			overrideVCFG.VM.Kernel = f.Value
 		}
 		return nil
 	},
 }
 
 // --vm.ram
-var vmRAMFlag = stringFlag{
-	flagPart: flagPart{
-		key:    "vm.ram",
-		usage:  "memory in MiB to allocate to app",
-		hidden: hideFlags,
-	},
-	validate: func(f stringFlag) error {
+var vmRAMFlag = flag.StringFlag{
+	FlagPart: flag.NewFlagPart("vm.ram", "memory to allocate to app", hideFlags),
+	Validate: func(f flag.StringFlag) error {
 		var err error
-		overrideVCFG.VM.RAM, err = vcfg.ParseBytes(f.value)
+		overrideVCFG.VM.RAM, err = vcfg.ParseBytes(f.Value)
 		if err != nil {
-			return fmt.Errorf("--%s=%s: %v", f.key,
-				f.value, err)
+			return fmt.Errorf("--%s=%s: %v", f.Key,
+				f.Value, err)
 		}
 		return nil
 	},
 }
 
 // --program.binary
-var programBinaryFlag = nStringFlag{
-	flagPart: flagPart{
-		key:    "program[<<N>>].binary",
-		usage:  "configure a program binary",
-		hidden: hideFlags,
-	},
-	total: &maxProgramFlags,
-	validate: func(f nStringFlag) error {
-		for i := 0; i < *f.total; i++ {
+var programBinaryFlag = flag.NStringFlag{
+	FlagPart: flag.NewFlagPart("program[<<N>>].binary", "configure a program binary", hideFlags),
+	Total:    &maxProgramFlags,
+	Validate: func(f flag.NStringFlag) error {
+		for i := 0; i < *f.Total; i++ {
 
-			if f.value[i] == "" {
+			if f.Value[i] == "" {
 				continue
 			}
 
@@ -1213,7 +676,7 @@ var programBinaryFlag = nStringFlag{
 				overrideVCFG.Programs = append(overrideVCFG.Programs, vcfg.Program{})
 			}
 
-			overrideVCFG.Programs[i].Binary = f.value[i]
+			overrideVCFG.Programs[i].Binary = f.Value[i]
 		}
 
 		return nil
@@ -1222,21 +685,17 @@ var programBinaryFlag = nStringFlag{
 }
 
 // --program.privileges
-var programPrivilegesFlag = nStringFlag{
-	flagPart: flagPart{
-		key:    "program[<<N>>].privilege",
-		usage:  "configure program privileges (root, superuser, user)",
-		hidden: hideFlags,
-	},
-	total: &maxProgramFlags,
-	validate: func(f nStringFlag) error {
+var programPrivilegesFlag = flag.NStringFlag{
+	FlagPart: flag.NewFlagPart("program[<<N>>].privilege", "configure program privileges (root, superuser, user)", hideFlags),
+	Total:    &maxProgramFlags,
+	Validate: func(f flag.NStringFlag) error {
 
-		for i := 0; i < *f.total; i++ {
+		for i := 0; i < *f.Total; i++ {
 			for len(overrideVCFG.Programs) < i+1 {
 				overrideVCFG.Programs = append(overrideVCFG.Programs, vcfg.Program{})
 			}
 
-			val := f.value[i]
+			val := f.Value[i]
 			overrideVCFG.Programs[i].Privilege = vcfg.Privilege(val)
 		}
 
@@ -1246,16 +705,12 @@ var programPrivilegesFlag = nStringFlag{
 }
 
 // --program.env
-var programEnvFlag = nStringSliceFlag{
-	flagPart: flagPart{
-		key:    "program[<<N>>].env",
-		usage:  "configure the environment variables of a program",
-		hidden: hideFlags,
-	},
-	total: &maxProgramFlags,
-	validate: func(f nStringSliceFlag) error {
-		for i := 0; i < *f.total; i++ {
-			if f.value[i] == nil {
+var programEnvFlag = flag.NStringSliceFlag{
+	FlagPart: flag.NewFlagPart("program[<<N>>].env", "configure the environment variables of a program", hideFlags),
+	Total:    &maxProgramFlags,
+	Validate: func(f flag.NStringSliceFlag) error {
+		for i := 0; i < *f.Total; i++ {
+			if f.Value[i] == nil {
 				continue
 			}
 
@@ -1263,7 +718,7 @@ var programEnvFlag = nStringSliceFlag{
 				overrideVCFG.Programs = append(overrideVCFG.Programs, vcfg.Program{})
 			}
 
-			overrideVCFG.Programs[i].Env = f.value[i]
+			overrideVCFG.Programs[i].Env = f.Value[i]
 		}
 
 		return nil
@@ -1271,17 +726,13 @@ var programEnvFlag = nStringSliceFlag{
 }
 
 // --program.cwd
-var programCWDFlag = nStringFlag{
-	flagPart: flagPart{
-		key:    "program[<<N>>].cwd",
-		usage:  "configure the working directory of a program",
-		hidden: hideFlags,
-	},
-	total: &maxProgramFlags,
-	validate: func(f nStringFlag) error {
-		for i := 0; i < *f.total; i++ {
+var programCWDFlag = flag.NStringFlag{
+	FlagPart: flag.NewFlagPart("program[<<N>>].cwd", "configure the working directory of a program", hideFlags),
+	Total:    &maxProgramFlags,
+	Validate: func(f flag.NStringFlag) error {
+		for i := 0; i < *f.Total; i++ {
 
-			if f.value[i] == "" {
+			if f.Value[i] == "" {
 				continue
 			}
 
@@ -1289,23 +740,19 @@ var programCWDFlag = nStringFlag{
 				overrideVCFG.Programs = append(overrideVCFG.Programs, vcfg.Program{})
 			}
 
-			overrideVCFG.Programs[i].Cwd = f.value[i]
+			overrideVCFG.Programs[i].Cwd = f.Value[i]
 		}
 		return nil
 	},
 }
 
 // --program.logfiles
-var programLogFilesFlag = nStringSliceFlag{
-	flagPart: flagPart{
-		key:    "program[<<N>>].logfiles",
-		usage:  "configure the logfiles of a program",
-		hidden: hideFlags,
-	},
-	total: &maxProgramFlags,
-	validate: func(f nStringSliceFlag) error {
-		for i := 0; i < *f.total; i++ {
-			if f.value[i] == nil {
+var programLogFilesFlag = flag.NStringSliceFlag{
+	FlagPart: flag.NewFlagPart("program[<<N>>].logfiles", "configure the logfiles of a program", hideFlags),
+	Total:    &maxProgramFlags,
+	Validate: func(f flag.NStringSliceFlag) error {
+		for i := 0; i < *f.Total; i++ {
+			if f.Value[i] == nil {
 				continue
 			}
 
@@ -1313,7 +760,7 @@ var programLogFilesFlag = nStringSliceFlag{
 				overrideVCFG.Programs = append(overrideVCFG.Programs, vcfg.Program{})
 			}
 
-			overrideVCFG.Programs[i].LogFiles = f.value[i]
+			overrideVCFG.Programs[i].LogFiles = f.Value[i]
 		}
 
 		return nil
@@ -1321,16 +768,12 @@ var programLogFilesFlag = nStringSliceFlag{
 }
 
 // --program.bootstrap
-var programBootstrapFlag = nStringSliceFlag{
-	flagPart: flagPart{
-		key:    "program[<<N>>].bootstrap",
-		usage:  "configure the bootstrap parameters of a program",
-		hidden: hideFlags,
-	},
-	total: &maxProgramFlags,
-	validate: func(f nStringSliceFlag) error {
-		for i := 0; i < *f.total; i++ {
-			if f.value[i] == nil {
+var programBootstrapFlag = flag.NStringSliceFlag{
+	FlagPart: flag.NewFlagPart("program[<<N>>].bootstrap", "configure the bootstrap parameters of a program", hideFlags),
+	Total:    &maxProgramFlags,
+	Validate: func(f flag.NStringSliceFlag) error {
+		for i := 0; i < *f.Total; i++ {
+			if f.Value[i] == nil {
 				continue
 			}
 
@@ -1338,7 +781,7 @@ var programBootstrapFlag = nStringSliceFlag{
 				overrideVCFG.Programs = append(overrideVCFG.Programs, vcfg.Program{})
 			}
 
-			overrideVCFG.Programs[i].Bootstrap = f.value[i]
+			overrideVCFG.Programs[i].Bootstrap = f.Value[i]
 		}
 
 		return nil
@@ -1346,18 +789,14 @@ var programBootstrapFlag = nStringSliceFlag{
 }
 
 // --program.stdout
-var programStdoutFlag = nStringFlag{
-	flagPart: flagPart{
-		key:    "program[<<N>>].stdout",
-		usage:  "configure programs stdout",
-		hidden: hideFlags,
-	},
-	total: &maxProgramFlags,
-	validate: func(f nStringFlag) error {
+var programStdoutFlag = flag.NStringFlag{
+	FlagPart: flag.NewFlagPart("program[<<N>>].stdout", "configure programs stdout", hideFlags),
+	Total:    &maxProgramFlags,
+	Validate: func(f flag.NStringFlag) error {
 
-		for i := 0; i < *f.total; i++ {
+		for i := 0; i < *f.Total; i++ {
 
-			if f.value[i] == "" {
+			if f.Value[i] == "" {
 				continue
 			}
 
@@ -1365,7 +804,7 @@ var programStdoutFlag = nStringFlag{
 				overrideVCFG.Programs = append(overrideVCFG.Programs, vcfg.Program{})
 			}
 
-			overrideVCFG.Programs[i].Stdout = f.value[i]
+			overrideVCFG.Programs[i].Stdout = f.Value[i]
 		}
 
 		return nil
@@ -1374,18 +813,14 @@ var programStdoutFlag = nStringFlag{
 }
 
 // --program.stderr
-var programStderrFlag = nStringFlag{
-	flagPart: flagPart{
-		key:    "program[<<N>>].stderr",
-		usage:  "configure programs stderr",
-		hidden: hideFlags,
-	},
-	total: &maxProgramFlags,
-	validate: func(f nStringFlag) error {
+var programStderrFlag = flag.NStringFlag{
+	FlagPart: flag.NewFlagPart("program[<<N>>].stderr", "configure programs stderr", hideFlags),
+	Total:    &maxProgramFlags,
+	Validate: func(f flag.NStringFlag) error {
 
-		for i := 0; i < *f.total; i++ {
+		for i := 0; i < *f.Total; i++ {
 
-			if f.value[i] == "" {
+			if f.Value[i] == "" {
 				continue
 			}
 
@@ -1393,7 +828,7 @@ var programStderrFlag = nStringFlag{
 				overrideVCFG.Programs = append(overrideVCFG.Programs, vcfg.Program{})
 			}
 
-			overrideVCFG.Programs[i].Stderr = f.value[i]
+			overrideVCFG.Programs[i].Stderr = f.Value[i]
 		}
 
 		return nil
@@ -1402,21 +837,17 @@ var programStderrFlag = nStringFlag{
 }
 
 // --program.strace
-var programStraceFlag = nBoolFlag{
-	flagPart: flagPart{
-		key:    "program[<<N>>].strace",
-		usage:  "configure the program to run with strace",
-		hidden: hideFlags,
-	},
-	total: &maxProgramFlags,
-	validate: func(f nBoolFlag) error {
-		for i := 0; i < *f.total; i++ {
+var programStraceFlag = flag.NBoolFlag{
+	FlagPart: flag.NewFlagPart("program[<<N>>].strace", "configure the program to run with strace", hideFlags),
+	Total:    &maxProgramFlags,
+	Validate: func(f flag.NBoolFlag) error {
+		for i := 0; i < *f.Total; i++ {
 
 			for len(overrideVCFG.Programs) < i+1 {
 				overrideVCFG.Programs = append(overrideVCFG.Programs, vcfg.Program{})
 			}
 
-			val := f.value[i]
+			val := f.Value[i]
 			overrideVCFG.Programs[i].Strace = val
 		}
 		return nil
@@ -1424,18 +855,14 @@ var programStraceFlag = nBoolFlag{
 }
 
 // --program.args
-var programArgsFlag = nStringFlag{
-	flagPart: flagPart{
-		key:    "program[<<N>>].args",
-		usage:  "configure programs args",
-		hidden: hideFlags,
-	},
-	total: &maxProgramFlags,
-	validate: func(f nStringFlag) error {
+var programArgsFlag = flag.NStringFlag{
+	FlagPart: flag.NewFlagPart("program[<<N>>].args", "configure programs args", hideFlags),
+	Total:    &maxProgramFlags,
+	Validate: func(f flag.NStringFlag) error {
 
-		for i := 0; i < *f.total; i++ {
+		for i := 0; i < *f.Total; i++ {
 
-			if f.value[i] == "" {
+			if f.Value[i] == "" {
 				continue
 			}
 
@@ -1443,7 +870,7 @@ var programArgsFlag = nStringFlag{
 				overrideVCFG.Programs = append(overrideVCFG.Programs, vcfg.Program{})
 			}
 
-			overrideVCFG.Programs[i].Args = f.value[i]
+			overrideVCFG.Programs[i].Args = f.Value[i]
 		}
 
 		return nil
@@ -1451,50 +878,17 @@ var programArgsFlag = nStringFlag{
 	},
 }
 
-var vcfgFlags = flagsList{
-	&vmCPUsFlag,
-	&vmDiskSizeFlag,
-	&vmInodesFlag,
-	&vmKernelFlag,
-	&vmRAMFlag,
-	&filesFlag,
-	&infoAuthorFlag,
-	&infoDateFlag,
-	&infoDescriptionFlag,
-	&infoNameFlag,
-	&infoSummaryFlag,
-	&infoURLFlag,
-	&infoVersionFlag,
-	&networkIPFlag,
-	&networkMaskFlag,
-	&networkGatewayFlag,
-	&networkUDPFlag,
-	&networkTCPFlag,
-	&networkHTTPFlag,
-	&networkHTTPSFlag,
-	&networkMTUFlag,
-	&networkTCPDumpFlag,
-	&loggingConfigFlag,
-	&loggingTypeFlag,
-	&nfsMountFlag,
-	&nfsServerFlag,
-	&nfsOptionsFlag,
-	&systemKernelArgsFlag,
-	&systemDNSFlag,
-	&systemHostnameFlag,
-	&systemFilesystemFlag,
-	&systemMaxFDsFlag,
-	&systemOutputModeFlag,
-	&systemUserFlag,
-	&programBinaryFlag,
-	&programPrivilegesFlag,
-	&programArgsFlag,
-	&programStdoutFlag,
-	&programStderrFlag,
-	&programLogFilesFlag,
-	&programBootstrapFlag,
-	&programEnvFlag,
-	&programCWDFlag,
-	&programStraceFlag,
-	&sysctlFlag,
+var vcfgFlags = flag.FlagsList{
+	&vmCPUsFlag, &vmDiskSizeFlag, &vmInodesFlag, &vmKernelFlag, &vmRAMFlag,
+	&filesFlag, &infoAuthorFlag, &infoDateFlag, &infoDescriptionFlag,
+	&infoNameFlag, &infoSummaryFlag, &infoURLFlag, &infoVersionFlag,
+	&networkIPFlag, &networkMaskFlag, &networkGatewayFlag, &networkUDPFlag,
+	&networkTCPFlag, &networkHTTPFlag, &networkHTTPSFlag, &networkMTUFlag,
+	&networkTCPDumpFlag, &loggingConfigFlag, &loggingTypeFlag, &nfsMountFlag,
+	&nfsServerFlag, &nfsOptionsFlag, &systemKernelArgsFlag, &systemDNSFlag,
+	&systemHostnameFlag, &systemFilesystemFlag, &systemMaxFDsFlag,
+	&systemOutputModeFlag, &systemUserFlag, &programBinaryFlag,
+	&programPrivilegesFlag, &programArgsFlag, &programStdoutFlag,
+	&programStderrFlag, &programLogFilesFlag, &programBootstrapFlag,
+	&programEnvFlag, &programCWDFlag, &programStraceFlag, &sysctlFlag,
 }

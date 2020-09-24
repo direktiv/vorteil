@@ -297,28 +297,35 @@ func checkSecurityGroupAccess(securityGroup *ec2.SecurityGroup) bool {
 	return false
 }
 
+func (p *Provisioner) getSecurityGroups() (*ec2.DescribeSecurityGroupsOutput, error) {
+	secGroups, err := p.client.DescribeSecurityGroups(&ec2.DescribeSecurityGroupsInput{
+		GroupNames: []*string{aws.String(securityGroupName)},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	if !checkSecurityGroupAccess(secGroups.SecurityGroups[0]) {
+		return nil, fmt.Errorf("the %s security group must allow TCP ingress on port %d", securityGroupName, securityGroupPort)
+	}
+
+	return secGroups, nil
+}
+
 func (p *Provisioner) createEmptyInstance() (string, error) {
 	var instanceID string
 
 	// Check force flag: if force is false and ami exists return error
 	if forceErr := p.forceOverwriteCheck(); forceErr != nil {
-		return instanceID, forceErr
 	}
 
 	p.args.Logger.Infof("Looking up security group ID...")
-
-	secgrps, err := p.client.DescribeSecurityGroups(&ec2.DescribeSecurityGroupsInput{
-		GroupNames: []*string{aws.String(securityGroupName)},
-	})
+	secGroups, err := p.getSecurityGroups()
 	if err != nil {
 		return instanceID, err
 	}
 
-	if !checkSecurityGroupAccess(secgrps.SecurityGroups[0]) {
-		return instanceID, fmt.Errorf("the %s security group must allow TCP ingress on port %d", securityGroupName, securityGroupPort)
-	}
-
-	securityGroupID := *secgrps.SecurityGroups[0].GroupId
+	securityGroupID := *secGroups.SecurityGroups[0].GroupId
 	p.args.Logger.Infof("Security group: %s\n", securityGroupID)
 	filter := &ec2.Filter{
 		Name:   aws.String("name"),
@@ -355,11 +362,10 @@ func (p *Provisioner) createEmptyInstance() (string, error) {
 		},
 		// TODO: resize disk
 	})
-	if err != nil {
-		return instanceID, err
+	if err == nil {
+		instanceID = *reservation.Instances[0].InstanceId
 	}
-	instanceID = *reservation.Instances[0].InstanceId
-	return instanceID, nil
+	return instanceID, err
 }
 
 func ec2PublicIPReady(description *ec2.DescribeInstancesOutput) (ip string, ready bool) {

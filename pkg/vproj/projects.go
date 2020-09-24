@@ -426,7 +426,30 @@ func TarFromPackage(w io.Writer, pkg vpkg.Reader) error {
 	}
 
 	files := make([]string, 0)
-	err = pkg.FS().Walk(func(path string, f vio.File) error {
+	err = walkFilesystem(pkg, files, tw, vprjIncluded, vprj)
+	if err != nil {
+		return err
+	}
+
+	if !vprjIncluded {
+		// write icon as default.png and config as default.vcfg
+		err = defaultPNGAndVCFG(v, vprj, tw, ico, iconFile, iconName)
+		if err != nil {
+			return err
+		}
+	} else {
+		err = fromVorteilProject(v, vprj, files, tw)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func walkFilesystem(pkg vpkg.Reader, files []string, tw *tar.Writer, vprjIncluded bool, vprj ProjectData) error {
+
+	return pkg.FS().Walk(func(path string, f vio.File) error {
 		defer f.Close()
 		defer io.Copy(ioutil.Discard, f)
 
@@ -494,207 +517,207 @@ func TarFromPackage(w io.Writer, pkg vpkg.Reader) error {
 
 		return nil
 	})
+}
+
+func defaultPNGAndVCFG(v *vcfg.VCFG, vprj ProjectData, tw *tar.Writer, ico vio.File, iconFile *os.File, iconName string) error {
+	cfgTmp, err := vcfgSansInfo(v, "")
+	if err != nil {
+		return err
+	}
+	defer cfgTmp.Close()
+
+	cfgHeader, err := tar.FileInfoHeader(vio.Info(cfgTmp), "")
+	if err != nil {
+		return err
+	}
+	cfgHeader.Name = "default.vcfg"
+	err = tw.WriteHeader(cfgHeader)
 	if err != nil {
 		return err
 	}
 
-	if !vprjIncluded {
-		// write icon as default.png and config as default.vcfg
-		cfgTmp, err := vcfgSansInfo(v, "")
-		if err != nil {
-			return err
-		}
-		defer cfgTmp.Close()
+	_, err = io.Copy(tw, cfgTmp)
+	if err != nil {
+		return err
+	}
+	cfgTmp.Close()
+	// write info field as readme.vcfg
+	cfgTmp, err = vcfgInfo(v)
+	if err != nil {
+		return err
+	}
 
-		cfgHeader, err := tar.FileInfoHeader(vio.Info(cfgTmp), "")
-		if err != nil {
-			return err
-		}
-		cfgHeader.Name = "default.vcfg"
-		err = tw.WriteHeader(cfgHeader)
-		if err != nil {
-			return err
-		}
+	cfgHeader, err = tar.FileInfoHeader(vio.Info(cfgTmp), "")
+	if err != nil {
+		return err
+	}
+	cfgHeader.Name = "readme.vcfg"
+	err = tw.WriteHeader(cfgHeader)
+	if err != nil {
+		return err
+	}
 
-		_, err = io.Copy(tw, cfgTmp)
-		if err != nil {
-			return err
-		}
-		cfgTmp.Close()
-		// write info field as readme.vcfg
-		cfgTmp, err = vcfgInfo(v)
-		if err != nil {
-			return err
-		}
-
-		cfgHeader, err = tar.FileInfoHeader(vio.Info(cfgTmp), "")
-		if err != nil {
-			return err
-		}
-		cfgHeader.Name = "readme.vcfg"
-		err = tw.WriteHeader(cfgHeader)
+	_, err = io.Copy(tw, cfgTmp)
+	if err != nil {
+		return err
+	}
+	cfgTmp.Close()
+	if ico.Size() != 0 {
+		_, err = iconFile.Seek(0, 0)
 		if err != nil {
 			return err
 		}
 
-		_, err = io.Copy(tw, cfgTmp)
-		if err != nil {
-			return err
-		}
-		cfgTmp.Close()
-		if ico.Size() != 0 {
-			_, err = iconFile.Seek(0, 0)
-			if err != nil {
-				return err
-			}
-
-			icoTmp := vio.CustomFile(vio.CustomFileArgs{
-				ModTime:    ico.ModTime(),
-				Name:       iconName,
-				ReadCloser: iconFile,
-				Size:       ico.Size(),
-			})
-			defer icoTmp.Close()
-
-			icoHeader, err := tar.FileInfoHeader(vio.Info(icoTmp), "")
-			if err != nil {
-				return err
-			}
-
-			err = tw.WriteHeader(icoHeader)
-			if err != nil {
-				return err
-			}
-
-			_, err = io.Copy(tw, icoTmp)
-			if err != nil {
-				return err
-			}
-		}
-
-		for i := range vprj.Targets {
-			if vprj.Targets[i].Name == "default" {
-				vprj.Targets[i].VCFGs = append(vprj.Targets[i].VCFGs, "readme.vcfg")
-			}
-		}
-
-		b, err := vprj.Marshal()
-		if err != nil {
-			return err
-		}
-
-		vprjTmp := vio.CustomFile(vio.CustomFileArgs{
-			ModTime:    time.Now(),
-			Name:       FileName,
-			ReadCloser: ioutil.NopCloser(bytes.NewReader(b)),
-			Size:       len(b),
+		icoTmp := vio.CustomFile(vio.CustomFileArgs{
+			ModTime:    ico.ModTime(),
+			Name:       iconName,
+			ReadCloser: iconFile,
+			Size:       ico.Size(),
 		})
-		defer vprjTmp.Close()
+		defer icoTmp.Close()
 
-		vprjHeader, err := tar.FileInfoHeader(vio.Info(vprjTmp), "")
+		icoHeader, err := tar.FileInfoHeader(vio.Info(icoTmp), "")
 		if err != nil {
 			return err
 		}
 
-		err = tw.WriteHeader(vprjHeader)
+		err = tw.WriteHeader(icoHeader)
 		if err != nil {
 			return err
 		}
 
-		_, err = io.Copy(tw, vprjTmp)
+		_, err = io.Copy(tw, icoTmp)
 		if err != nil {
 			return err
 		}
-	} else {
-		for _, x := range vprj.Targets[0].VCFGs {
-			for _, s := range files {
-				if s == FileName {
+	}
 
-					for i := range vprj.Targets {
-						if vprj.Targets[i].Name == strings.TrimSuffix(x, path.Ext(x)) {
-							vprj.Targets[i].VCFGs = append(vprj.Targets[i].VCFGs, "readme.vcfg")
-						}
+	for i := range vprj.Targets {
+		if vprj.Targets[i].Name == "default" {
+			vprj.Targets[i].VCFGs = append(vprj.Targets[i].VCFGs, "readme.vcfg")
+		}
+	}
+
+	b, err := vprj.Marshal()
+	if err != nil {
+		return err
+	}
+
+	vprjTmp := vio.CustomFile(vio.CustomFileArgs{
+		ModTime:    time.Now(),
+		Name:       FileName,
+		ReadCloser: ioutil.NopCloser(bytes.NewReader(b)),
+		Size:       len(b),
+	})
+	defer vprjTmp.Close()
+
+	vprjHeader, err := tar.FileInfoHeader(vio.Info(vprjTmp), "")
+	if err != nil {
+		return err
+	}
+
+	err = tw.WriteHeader(vprjHeader)
+	if err != nil {
+		return err
+	}
+
+	_, err = io.Copy(tw, vprjTmp)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func fromVorteilProject(v *vcfg.VCFG, vprj ProjectData, files []string, tw *tar.Writer) error {
+	for _, x := range vprj.Targets[0].VCFGs {
+		for _, s := range files {
+			if s == FileName {
+
+				for i := range vprj.Targets {
+					if vprj.Targets[i].Name == strings.TrimSuffix(x, path.Ext(x)) {
+						vprj.Targets[i].VCFGs = append(vprj.Targets[i].VCFGs, "readme.vcfg")
 					}
-
-					b, err := vprj.Marshal()
-					if err != nil {
-						return err
-					}
-
-					vprjTmp := vio.CustomFile(vio.CustomFileArgs{
-						ModTime:    time.Now(),
-						Name:       FileName,
-						ReadCloser: ioutil.NopCloser(bytes.NewReader(b)),
-						Size:       len(b),
-					})
-					defer vprjTmp.Close()
-
-					vprjHeader, err := tar.FileInfoHeader(vio.Info(vprjTmp), "")
-					if err != nil {
-						return err
-					}
-
-					err = tw.WriteHeader(vprjHeader)
-					if err != nil {
-						return err
-					}
-
-					_, err = io.Copy(tw, vprjTmp)
-					if err != nil {
-						return err
-					}
-				}
-				if s == x {
-					continue
 				}
 
-				// Write vcfg without info field
-				xTmp, err := vcfgSansInfo(v, x)
+				b, err := vprj.Marshal()
 				if err != nil {
 					return err
 				}
 
-				xTmpHeader, err := tar.FileInfoHeader(vio.Info(xTmp), "")
+				vprjTmp := vio.CustomFile(vio.CustomFileArgs{
+					ModTime:    time.Now(),
+					Name:       FileName,
+					ReadCloser: ioutil.NopCloser(bytes.NewReader(b)),
+					Size:       len(b),
+				})
+				defer vprjTmp.Close()
+
+				vprjHeader, err := tar.FileInfoHeader(vio.Info(vprjTmp), "")
 				if err != nil {
 					return err
 				}
 
-				err = tw.WriteHeader(xTmpHeader)
+				err = tw.WriteHeader(vprjHeader)
 				if err != nil {
 					return err
 				}
 
-				_, err = io.Copy(tw, xTmp)
+				_, err = io.Copy(tw, vprjTmp)
 				if err != nil {
 					return err
 				}
-
-				xTmp.Close()
-
-				// Write another vcfg file as readme.vcfg
-				xTmp, err = vcfgInfo(v)
-				if err != nil {
-					return err
-				}
-
-				xTmpHeader, err = tar.FileInfoHeader(vio.Info(xTmp), "")
-				if err != nil {
-					return err
-				}
-
-				err = tw.WriteHeader(xTmpHeader)
-				if err != nil {
-					return err
-				}
-
-				_, err = io.Copy(tw, xTmp)
-				if err != nil {
-					return err
-				}
-
-				xTmp.Close()
-
 			}
+			if s == x {
+				continue
+			}
+
+			// Write vcfg without info field
+			xTmp, err := vcfgSansInfo(v, x)
+			if err != nil {
+				return err
+			}
+
+			xTmpHeader, err := tar.FileInfoHeader(vio.Info(xTmp), "")
+			if err != nil {
+				return err
+			}
+
+			err = tw.WriteHeader(xTmpHeader)
+			if err != nil {
+				return err
+			}
+
+			_, err = io.Copy(tw, xTmp)
+			if err != nil {
+				return err
+			}
+
+			xTmp.Close()
+
+			// Write another vcfg file as readme.vcfg
+			xTmp, err = vcfgInfo(v)
+			if err != nil {
+				return err
+			}
+
+			xTmpHeader, err = tar.FileInfoHeader(vio.Info(xTmp), "")
+			if err != nil {
+				return err
+			}
+
+			err = tw.WriteHeader(xTmpHeader)
+			if err != nil {
+				return err
+			}
+
+			_, err = io.Copy(tw, xTmp)
+			if err != nil {
+				return err
+			}
+
+			xTmp.Close()
+
 		}
 	}
 

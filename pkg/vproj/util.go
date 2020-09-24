@@ -294,31 +294,40 @@ func defaultPNGAndVCFG(v *vcfg.VCFG, vprj ProjectData, tw *tar.Writer, ico vio.F
 	return nil
 }
 
+func handleVprjTargetFile(vprj ProjectData, tw *tar.Writer, x string) error {
+
+	for i := range vprj.Targets {
+		if vprj.Targets[i].Name == strings.TrimSuffix(x, path.Ext(x)) {
+			vprj.Targets[i].VCFGs = append(vprj.Targets[i].VCFGs, "readme.vcfg")
+		}
+	}
+
+	b, err := vprj.Marshal()
+	if err != nil {
+		return err
+	}
+
+	vprjTmp := vio.CustomFile(vio.CustomFileArgs{
+		ModTime:    time.Now(),
+		Name:       FileName,
+		ReadCloser: ioutil.NopCloser(bytes.NewReader(b)),
+		Size:       len(b),
+	})
+	defer vprjTmp.Close()
+
+	err = writeFileToTar(tw, vprjTmp)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func tarFromVorteilProject(v *vcfg.VCFG, vprj ProjectData, files []string, tw *tar.Writer) error {
 	for _, x := range vprj.Targets[0].VCFGs {
 		for _, s := range files {
 			if s == FileName {
-
-				for i := range vprj.Targets {
-					if vprj.Targets[i].Name == strings.TrimSuffix(x, path.Ext(x)) {
-						vprj.Targets[i].VCFGs = append(vprj.Targets[i].VCFGs, "readme.vcfg")
-					}
-				}
-
-				b, err := vprj.Marshal()
-				if err != nil {
-					return err
-				}
-
-				vprjTmp := vio.CustomFile(vio.CustomFileArgs{
-					ModTime:    time.Now(),
-					Name:       FileName,
-					ReadCloser: ioutil.NopCloser(bytes.NewReader(b)),
-					Size:       len(b),
-				})
-				defer vprjTmp.Close()
-
-				err = writeFileToTar(tw, vprjTmp)
+				err := handleVprjTargetFile(vprj, tw, x)
 				if err != nil {
 					return err
 				}

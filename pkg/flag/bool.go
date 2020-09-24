@@ -48,6 +48,14 @@ type NBoolFlag struct {
 	Validate func(f NBoolFlag) error
 }
 
+func NewNBoolFlag(key, usage string, total *int, hidden bool, validate func(NBoolFlag) error) NBoolFlag {
+	return NBoolFlag{
+		FlagPart: NewFlagPart(key, usage, hidden),
+		Total:    total,
+		Validate: validate,
+	}
+}
+
 func (f *NBoolFlag) AddTo(flagSet *pflag.FlagSet) {
 
 	if f.Value == nil {

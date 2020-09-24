@@ -8,6 +8,13 @@ type UintFlag struct {
 	Validate func(f UintFlag) error
 }
 
+func NewUintFlag(key, usage string, hidden bool, validate func(UintFlag) error) UintFlag {
+	return UintFlag{
+		FlagPart: NewFlagPart(key, usage, hidden),
+		Validate: validate,
+	}
+}
+
 func (f *UintFlag) AddTo(flagSet *pflag.FlagSet) {
 	if f.short == "" {
 		flagSet.UintVar(&f.Value, f.Key, f.Value, f.usage)

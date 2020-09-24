@@ -49,8 +49,10 @@ type virtualizerTuple struct {
 	Data []byte
 }
 
+// VState a type to call for the virtualizers. (ready, alive, broken, deleted, changing)
 type VState string
 
+// Different states for the virtualizer
 const (
 	_        VState = "state"
 	Ready           = "ready"

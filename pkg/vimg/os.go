@@ -474,8 +474,16 @@ func (b *Builder) processLinuxArgs() error {
 		args = append(args, "ro")
 	}
 
+	// if the fs is not set here we assume it is ext2
+	fs := b.vcfg.System.Filesystem
+	if fs == "" {
+		fs = "ext2"
+	}
+
+	args = append(args, fmt.Sprintf("rootfstype=%s", fs))
+
 	if _, ok := m["loglevel"]; !ok {
-		args = append(args, "loglevel=2")
+		args = append(args, "loglevel=4")
 	}
 
 	if _, ok := m["intel_idle.max_cstate"]; !ok {

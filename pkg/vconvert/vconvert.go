@@ -313,7 +313,7 @@ func (cc *ContainerConverter) untarLayers(targetDir string) error {
 			return err
 		}
 
-		// supressing containerd logs
+		// suppressing containerd logs
 		clog.L.Logger.SetLevel(logrus.ErrorLevel)
 
 		r, err := compression.DecompressStream(fn)

@@ -25,6 +25,7 @@ import (
 	dhcp "github.com/krolaw/dhcp4"
 	conn "github.com/krolaw/dhcp4/conn"
 	"github.com/milosgajdos/tenus"
+	"github.com/sirupsen/logrus"
 	log "github.com/sirupsen/logrus"
 	"github.com/songgao/water"
 	"github.com/vorteil/vorteil/pkg/elog"
@@ -37,24 +38,33 @@ import (
 	"github.com/vorteil/vorteil/pkg/virtualizers/util"
 )
 
+const (
+	vorteilBridge = "vorteil-bridge"
+)
+
+// FetchBridgeDev attempts to retrieve the bridge device
 func FetchBridgeDev() error {
 	// Check if bridge device exists
-	_, err := tenus.BridgeFromName("vorteil-bridge")
+	_, err := tenus.BridgeFromName(vorteilBridge)
 	if err != nil {
 		return errors.New("try running 'vorteil firecracker-setup' before using firecracker")
 	}
 	return err
 }
-func SetupBridgeAndDHCPServer() error {
 
+// SetupBridgeAndDHCPServer creates the bridge which provides DHCP addresses todo
+// firecracker instances.
+func SetupBridgeAndDHCPServer(log elog.View) error {
+
+	log.Printf("creating bridge %s", vorteilBridge)
 	// Create bridge device
-	bridger, err := tenus.NewBridgeWithName("vorteil-bridge")
+	bridger, err := tenus.NewBridgeWithName(vorteilBridge)
 	if err != nil {
 		if !strings.Contains(err.Error(), "Interface name vorteil-bridge already assigned on the host") {
 			return err
 		}
 		// get bridge device
-		bridger, err = tenus.BridgeFromName("vorteil-bridge")
+		bridger, err = tenus.BridgeFromName(vorteilBridge)
 		if err != nil {
 			return err
 		}
@@ -76,9 +86,12 @@ func SetupBridgeAndDHCPServer() error {
 			return err
 		}
 	}
+
+	log.Printf("starting dhcp server")
+
 	// create dhcp server on an interface
 	server := dhcpHandler.NewHandler()
-	pc, err := conn.NewUDP4BoundListener("vorteil-bridge", ":67")
+	pc, err := conn.NewUDP4BoundListener(vorteilBridge, ":67")
 	if err != nil {
 		return err
 	}
@@ -88,21 +101,26 @@ func SetupBridgeAndDHCPServer() error {
 	go func() {
 		http.ListenAndServe(":7476", nil)
 	}()
+	fmt.Printf("Listening on '7476' for creating and deleting TAP devices\n")
+	fmt.Printf("Listening on 'vorteil-bridge' for DHCP requests")
 	// Start dhcp server to listen
 	dhcp.Serve(pc, server)
 
 	return nil
 }
 
+// CreateDevices is a struct used to tell the process to create TAP devices via a rest request
 type CreateDevices struct {
 	Id     string `json:"id"`
 	Routes int    `json:"count"`
 }
 
+// Devices is a struct used to tell the process to deleted TAP devices via a delete request
 type Devices struct {
 	Devices []string `json:"devices"`
 }
 
+// OrganiseTapDevices handles http requests to create and delete tap interfaces for firecracker
 func OrganiseTapDevices(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodPost:
@@ -115,7 +133,7 @@ func OrganiseTapDevices(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// get bridge device
-		bridgeDev, err := tenus.BridgeFromName("vorteil-bridge")
+		bridgeDev, err := tenus.BridgeFromName(vorteilBridge)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 		}
@@ -499,9 +517,6 @@ func (o *operation) finished(err error) {
 		o.Status <- fmt.Sprintf("Failed: %v", err)
 		o.Error <- err
 	}
-	if err != nil {
-		o.logger.Errorf("Error: %v", err)
-	}
 
 	close(o.Logs)
 	close(o.Status)
@@ -521,17 +536,20 @@ func (v *Virtualizer) Serial() *logger.Logger {
 
 // Stop stops the vm and changes it back to ready
 func (v *Virtualizer) Stop() error {
-	v.logger.Debugf("Stopping VM")
-	if v.state != virtualizers.Ready {
-		v.state = virtualizers.Changing
+	// Error might've happened before in the prepare so machine would be nil
+	if v.machine != nil {
+		v.logger.Debugf("Stopping VM")
+		if v.state != virtualizers.Ready {
+			v.state = virtualizers.Changing
 
-		err := v.machine.Shutdown(v.vmmCtx)
-		if err != nil {
-			return err
+			err := v.machine.Shutdown(v.vmmCtx)
+			if err != nil {
+				return err
+			}
+
+		} else {
+			return errors.New("vm is already stopped")
 		}
-
-	} else {
-		return errors.New("vm is already stopped")
 	}
 	return nil
 }
@@ -558,46 +576,49 @@ func (v *Virtualizer) Download() (vio.File, error) {
 
 // Close shuts down the virtual machine and cleans up the disk and folders
 func (v *Virtualizer) Close(force bool) error {
-	v.logger.Debugf("Deleting VM")
+	// Error might've happened before in the prepare so machine would be nil
+	if v.machine != nil {
+		v.logger.Debugf("Deleting VM")
 
-	if !force {
-		// if state not ready stop it so it is
-		if !(v.state == virtualizers.Ready) {
-			// stop
-			err := v.Stop()
-			if err != nil {
-				return err
+		if !force {
+			// if state not ready stop it so it is
+			if !(v.state == virtualizers.Ready) {
+				// stop
+				err := v.Stop()
+				if err != nil {
+					return err
+				}
 			}
 		}
+
+		// stopVMM
+		err := v.machine.StopVMM()
+		if err != nil {
+			return err
+		}
+
+		client := &http.Client{}
+		cdm, err := json.Marshal(v.tapDevice)
+		if err != nil {
+			return err
+		}
+
+		req, err := http.NewRequest("DELETE", "http://localhost:7476/", bytes.NewBuffer(cdm))
+		if err != nil {
+			return err
+		}
+
+		resp, err := client.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+
+		v.state = virtualizers.Deleted
+
+		// remove virtualizer from active vms
+		virtualizers.ActiveVMs.Delete(v.name)
 	}
-
-	// stopVMM
-	err := v.machine.StopVMM()
-	if err != nil {
-		return err
-	}
-
-	client := &http.Client{}
-	cdm, err := json.Marshal(v.tapDevice)
-	if err != nil {
-		return err
-	}
-
-	req, err := http.NewRequest("DELETE", "http://localhost:7476/", bytes.NewBuffer(cdm))
-	if err != nil {
-		return err
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	v.state = virtualizers.Deleted
-
-	// remove virtualizer from active vms
-	virtualizers.ActiveVMs.Delete(v.name)
 
 	return nil
 }
@@ -677,8 +698,16 @@ func (v *Virtualizer) Prepare(args *virtualizers.PrepareArgs) *virtualizers.Virt
 // Cant use logger interface as it duplicates
 func (v *Virtualizer) Write(d []byte) (n int, err error) {
 	n = len(d)
-	fmt.Print(string(d))
+	v.logger.Infof(string(d))
 	return
+}
+
+type firecrackerFormatter struct {
+	logrus.TextFormatter
+}
+
+func (f *firecrackerFormatter) Format(entry *logrus.Entry) ([]byte, error) {
+	return []byte(entry.Message), nil
 }
 
 // prepare sets the fields and arguments to spawn the virtual machine
@@ -702,10 +731,10 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	diskpath := filepath.ToSlash(args.ImagePath)
 
 	logger := log.New()
-	logger.SetFormatter(&log.TextFormatter{
+	logger.SetFormatter(&firecrackerFormatter{log.TextFormatter{
 		DisableColors: false,
 		ForceColors:   true,
-	})
+	}})
 	logger.Out = o
 
 	ctx := context.Background()

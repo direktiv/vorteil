@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/vorteil/vorteil/pkg/elog"
 	"github.com/vorteil/vorteil/pkg/vcfg"
 	"github.com/vorteil/vorteil/pkg/vio"
 	"github.com/vorteil/vorteil/pkg/virtualizers"
@@ -21,7 +22,7 @@ const DownloadPath = "https://storage.googleapis.com/vorteil-dl/firecracker-vmli
 func FetchBridgeDev() error {
 	return errors.New("bridge devices for firecracker only supported on linux")
 }
-func SetupBridgeAndDHCPServer() error {
+func SetupBridgeAndDHCPServer(log elog.View) error {
 	return errors.New("firecracker init not supported on this operating system")
 }
 
@@ -102,7 +103,7 @@ func (v *Virtualizer) Download() (vio.File, error) {
 	return nil, nil
 }
 
-// Close shuts down the virutal machien and cleans up the disk and folders
+// Close shuts down the virtual machine and cleans up the disk and folders
 func (v *Virtualizer) Close(force bool) error {
 	return nil
 }

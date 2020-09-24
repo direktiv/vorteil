@@ -15,6 +15,14 @@ type NStringFlag struct {
 	Validate func(f NStringFlag) error
 }
 
+func NewNStringFlag(key, usage string, total *int, hidden bool, validate func(NStringFlag) error) NStringFlag {
+	return NStringFlag{
+		FlagPart: NewFlagPart(key, usage, hidden),
+		Total:    total,
+		Validate: validate,
+	}
+}
+
 func (f *NStringFlag) AddTo(flagSet *pflag.FlagSet) {
 	if f.Value == nil {
 		f.Value = make([]string, *f.Total, *f.Total)
@@ -81,6 +89,14 @@ type NStringSliceFlag struct {
 	void     []string
 	Value    [][]string
 	Validate func(f NStringSliceFlag) error
+}
+
+func NewNStringSliceFlag(key, usage string, total *int, hidden bool, validate func(NStringSliceFlag) error) NStringSliceFlag {
+	return NStringSliceFlag{
+		FlagPart: NewFlagPart(key, usage, hidden),
+		Total:    total,
+		Validate: validate,
+	}
 }
 
 func (f *NStringSliceFlag) AddTo(flagSet *pflag.FlagSet) {
@@ -151,6 +167,13 @@ type StringFlag struct {
 	Validate func(Value StringFlag) error
 }
 
+func NewStringFlag(key, usage string, hidden bool, validate func(StringFlag) error) StringFlag {
+	return StringFlag{
+		FlagPart: NewFlagPart(key, usage, hidden),
+		Validate: validate,
+	}
+}
+
 func (f *StringFlag) AddTo(flagSet *pflag.FlagSet) {
 	if f.short == "" {
 		flagSet.StringVar(&f.Value, f.Key, f.Value, f.usage)
@@ -182,6 +205,13 @@ type StringSliceFlag struct {
 	FlagPart
 	Value    []string
 	Validate func(f StringSliceFlag) error
+}
+
+func NewStringSliceFlag(key, usage string, hidden bool, validate func(StringSliceFlag) error) StringSliceFlag {
+	return StringSliceFlag{
+		FlagPart: NewFlagPart(key, usage, hidden),
+		Validate: validate,
+	}
 }
 
 func (f *StringSliceFlag) AddTo(flagSet *pflag.FlagSet) {

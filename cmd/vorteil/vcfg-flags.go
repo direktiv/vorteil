@@ -271,30 +271,26 @@ func initRequiredNetworks(f flag.NStringSliceFlag, i int) {
 	}
 }
 
-// --network.http
-var networkHTTPFlag = flag.NewNStringSliceFlag("network[<<N>>].http", "expose http port", &maxNetworkFlags, hideFlags, networkHTTPFlagValidator)
-var networkHTTPFlagValidator = func(f flag.NStringSliceFlag) error {
+var networkFlagValidator = func(f flag.NStringSliceFlag, fn func(nic *vcfg.NetworkInterface, s interface{})) error {
 	for i := 0; i < *f.Total; i++ {
 		initRequiredNetworks(f, i)
 		s := f.Value[i]
 		nic := &overrideVCFG.Networks[i]
-		nic.HTTP = s
+		fn(nic, s)
 	}
 	return nil
-
 }
 
 // --network.http
+var networkHTTPFlag = flag.NewNStringSliceFlag("network[<<N>>].http", "expose http port", &maxNetworkFlags, hideFlags, networkHTTPFlagValidator)
+var networkHTTPFlagValidator = func(f flag.NStringSliceFlag) error {
+	return networkFlagValidator(f, func(nic *vcfg.NetworkInterface, s interface{}) { nic.HTTP = s.([]string) })
+}
+
+// --network.https
 var networkHTTPSFlag = flag.NewNStringSliceFlag("network[<<N>>].https", "expose https port", &maxNetworkFlags, hideFlags, networkHTTPSFlagValidator)
 var networkHTTPSFlagValidator = func(f flag.NStringSliceFlag) error {
-	for i := 0; i < *f.Total; i++ {
-		initRequiredNetworks(f, i)
-		s := f.Value[i]
-		nic := &overrideVCFG.Networks[i]
-		nic.HTTPS = s
-	}
-	return nil
-
+	return networkFlagValidator(f, func(nic *vcfg.NetworkInterface, s interface{}) { nic.HTTPS = s.([]string) })
 }
 
 // --network.ip
@@ -355,25 +351,13 @@ var networkMaskFlagValidator = func(f flag.NStringFlag) error {
 // --network.tcp
 var networkTCPFlag = flag.NewNStringSliceFlag("network[<<N>>].tcp", "expose tcp port", &maxNetworkFlags, hideFlags, networkTCPFlagValidator)
 var networkTCPFlagValidator = func(f flag.NStringSliceFlag) error {
-	for i := 0; i < *f.Total; i++ {
-		initRequiredNetworks(f, i)
-		s := f.Value[i]
-		nic := &overrideVCFG.Networks[i]
-		nic.TCP = s
-	}
-	return nil
+	return networkFlagValidator(f, func(nic *vcfg.NetworkInterface, s interface{}) { nic.TCP = s.([]string) })
 }
 
 // --network.udp
 var networkUDPFlag = flag.NewNStringSliceFlag("network[<<N>>].udp", "expose udp port", &maxNetworkFlags, hideFlags, networkUDPFlagValidator)
 var networkUDPFlagValidator = func(f flag.NStringSliceFlag) error {
-	for i := 0; i < *f.Total; i++ {
-		initRequiredNetworks(f, i)
-		s := f.Value[i]
-		nic := &overrideVCFG.Networks[i]
-		nic.UDP = s
-	}
-	return nil
+	return networkFlagValidator(f, func(nic *vcfg.NetworkInterface, s interface{}) { nic.UDP = s.([]string) })
 }
 
 // --system.kernel-args

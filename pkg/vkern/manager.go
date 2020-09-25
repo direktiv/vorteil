@@ -60,6 +60,28 @@ func (bundle *ManagedBundle) Location() string {
 	return bundle.location
 }
 
+// Get ..
+func (mgr *CompoundManager) Get(ctx context.Context, version CalVer) (*ManagedBundle, error) {
+	var tuple *Tuple
+
+	// Get BestMatch
+	list, err := mgr.List(ctx)
+	if err == nil {
+		tuple, err = list.BestMatch(version)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	b, err := mgr.mgrs[tuple.Idx].Get(ctx, tuple.Version)
+	if err != nil {
+		return nil, err
+	}
+
+	return b, nil
+}
+
 // Tuple ..
 type Tuple struct {
 	Idx      int

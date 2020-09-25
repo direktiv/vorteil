@@ -27,8 +27,11 @@ import (
 	"github.com/vorteil/vorteil/pkg/vdisk"
 )
 
-// ProvisionerType : Constant string value used to represent the provisioner type azure
-const ProvisionerType = "microsoft-azure"
+const (
+	// ProvisionerType : Constant string value used to represent the provisioner type azure
+	ProvisionerType = "microsoft-azure"
+	blobSize        = 4194304
+)
 
 // Provisioner satisfies the provisioners.Provisioner interface
 type Provisioner struct {
@@ -204,86 +207,38 @@ func prepTempFile(args *provisioners.ProvisionArgs) (*os.File, int64, error) {
 	if err != nil {
 		return nil, 0, err
 	}
-	// defer os.Remove(f.Name())
-	// defer f.Close()
 
-	_, err = io.Copy(f, args.Image)
+	n, err := io.Copy(f, args.Image)
 	if err != nil {
 		return nil, 0, err
 	}
 
-	stat, err := os.Stat(f.Name())
-	if err != nil {
-		return nil, 0, err
-	}
-
-	return f, stat.Size(), nil
+	return f, n, nil
 
 }
 
-// Provision will provision the configured vorteil project to your configured gcp provisioner
-func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
+func uploadBlob(f *os.File, args *provisioners.ProvisionArgs, blob *storage.Blob) error {
 
-	blob, err := p.getBlobRef(args.Name)
-	if err != nil {
-		return err
-	}
-
-	// if args.Force {
-	// 	_, err = blob.DeleteIfExists(&storage.DeleteBlobOptions{})
-	// 	if err != nil {
-	// 		return err
-	// 	}
-	// }
-
-	imagesClient, err := p.getImagesClient()
-	if err != nil {
-		return err
-	}
-
-	// forced := args.Force
-	// result, err := imagesClient.Get(args.Context, p.cfg.ResourceGroup, args.Name, "")
-	// if err == nil || result.ID != nil {
-	// 	// image already exists
-	// 	if !forced {
-	// 		return fmt.Errorf("Image already exists; aborting. To replace conflicting image, include the 'force' directive.")
-	// 	}
-	//
-	// 	args.Logger.Infof("Deleting existing image.")
-	// 	delFuture, err := imagesClient.Delete(args.Context, p.cfg.ResourceGroup, args.Name)
-	// 	if err != nil {
-	// 		return err
-	// 	}
-	//
-	// 	err = delFuture.WaitForCompletionRef(args.Context, imagesClient.Client)
-	// 	if err != nil {
-	// 		return err
-	// 	}
-	// }
-
-	var length int64
-	var f *os.File
 	var ps int64
 
-	f, length, err = prepTempFile(args)
-	if err != nil {
-		return err
-	}
-
-	blob.Properties.ContentType = "text/plain"
-	blob.Properties.ContentLength = length
-
-	err = blob.PutPageBlob(nil)
-	if err != nil {
-		return err
+	if args.Force {
+		_, err := blob.DeleteIfExists(&storage.DeleteBlobOptions{})
+		if err != nil {
+			return err
+		}
 	}
 
 	progress := args.Logger.NewProgress(fmt.Sprintf("Uploading %s:", args.Name), "KiB", int64(args.Image.Size()))
 	pr := progress.ProxyReader(f)
 	defer pr.Close()
 
+	err := blob.PutPageBlob(nil)
+	if err != nil {
+		return err
+	}
+
 	reader := bufio.NewReader(pr)
-	buf := make([]byte, 4194304)
+	buf := make([]byte, blobSize)
 
 	f.Seek(0, 0)
 
@@ -305,7 +260,7 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 		}
 
 		// the last request might be smaller so we cut it off
-		if n < 4194304 {
+		if n < blobSize {
 			buf = buf[:n]
 		}
 
@@ -317,9 +272,87 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 
 	}
 	progress.Finish(true)
+	return nil
+
+}
+
+// Provision will provision the configured vorteil project to your configured gcp provisioner
+func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
+
+	var (
+		length int64
+		f      *os.File
+	)
+
+	blob, err := p.getBlobRef(args.Name)
+	if err != nil {
+		return err
+	}
+
+	f, length, err = prepTempFile(args)
+	if err != nil {
+		return err
+	}
+	defer os.Remove(f.Name())
+
+	blob.Properties.ContentType = "text/plain"
+	blob.Properties.ContentLength = length
+
+	err = uploadBlob(f, args, blob)
+	if err != nil {
+		return err
+	}
+
+	err = p.createImage(length, args, blob)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (p *Provisioner) deleteImageIfRequired(imagesClient compute.ImagesClient, args *provisioners.ProvisionArgs) error {
+
+	result, err := imagesClient.Get(args.Context, p.cfg.ResourceGroup, args.Name, "")
+	if err == nil || result.ID != nil {
+		// image already exists
+		if !args.Force {
+			return fmt.Errorf("Image already exists; aborting. To replace conflicting image, include the 'force' directive")
+		}
+
+		ciprogree := args.Logger.NewProgress("Deleting existing image", "", 0)
+		defer ciprogree.Finish(false)
+
+		delFuture, err := imagesClient.Delete(args.Context, p.cfg.ResourceGroup, args.Name)
+		if err != nil {
+			return err
+		}
+
+		err = delFuture.WaitForCompletionRef(args.Context, imagesClient.Client)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (p *Provisioner) createImage(length int64, args *provisioners.ProvisionArgs, blob *storage.Blob) error {
+
+	imagesClient, err := p.getImagesClient()
+	if err != nil {
+		return err
+	}
+
+	err = p.deleteImageIfRequired(imagesClient, args)
+	if err != nil {
+		return err
+	}
+
+	ciprogree := args.Logger.NewProgress("Creating Image from blob", "", 0)
+	defer ciprogree.Finish(false)
 
 	diskSize := bytesToGB(length)
-
 	img := new(compute.Image)
 	img.ImageProperties = new(compute.ImageProperties)
 	img.Location = &p.cfg.Location
@@ -335,21 +368,18 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 	img.StorageProfile.OsDisk.BlobURI = &u
 	img.HyperVGeneration = compute.HyperVGenerationTypesV1
 
-	args.Logger.Printf("Sent request to create image from storage object.")
 	future, err := imagesClient.CreateOrUpdate(args.Context, p.cfg.ResourceGroup, args.Name, *img)
 	if err != nil {
 		return err
 	}
 
-	args.Logger.Printf("Waiting for completion.")
 	err = future.WaitForCompletionRef(args.Context, imagesClient.Client)
 	if err != nil {
 		return err
 	}
 
-	args.Logger.Printf("Done!")
-
 	return nil
+
 }
 
 // Marshal returns json provisioner as bytes

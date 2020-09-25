@@ -306,31 +306,39 @@ func handleVprjTargetFile(vprj ProjectData, tw *tar.Writer) error {
 func tarFromVorteilProject(v *vcfg.VCFG, vprj ProjectData, files []string, tw *tar.Writer) error {
 	for _, x := range vprj.Targets[0].VCFGs {
 		for _, s := range files {
-			if s == FileName {
-
-				for i := range vprj.Targets {
-					if vprj.Targets[i].Name == strings.TrimSuffix(x, path.Ext(x)) {
-						vprj.Targets[i].VCFGs = append(vprj.Targets[i].VCFGs, "readme.vcfg")
-					}
-				}
-
-				err := handleVprjTargetFile(vprj, tw)
-				if err != nil {
-					return err
-				}
-			}
-			if s == x {
-				continue
-			}
-
-			// HandleSplitVCFGs ...
-			err := handleSplitVCFGs(v, tw)
+			err := handleVprjFile(v, vprj, tw, s, x)
 			if err != nil {
 				return err
 			}
-
 		}
 	}
 
 	return nil
+}
+
+func handleVprjFile(v *vcfg.VCFG, vprj ProjectData, tw *tar.Writer, s, x string) error {
+
+	if s == FileName {
+
+		for i := range vprj.Targets {
+			if vprj.Targets[i].Name == strings.TrimSuffix(x, path.Ext(x)) {
+				vprj.Targets[i].VCFGs = append(vprj.Targets[i].VCFGs, "readme.vcfg")
+			}
+		}
+
+		err := handleVprjTargetFile(vprj, tw)
+		if err != nil {
+			return err
+		}
+	}
+	if s == x {
+		return nil
+	}
+
+	// HandleSplitVCFGs ...
+	err := handleSplitVCFGs(v, tw)
+	if err != nil {
+		return err
+	}
+
 }

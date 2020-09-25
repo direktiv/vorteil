@@ -230,7 +230,7 @@ func (o *operation) fetchLength(file *os.File, client *http.Client, url string, 
 	}
 	if resp.StatusCode == 404 {
 		os.Remove(file.Name())
-		return 0, fmt.Errorf("Kernel '%s' VMLinux does not exist", kernel)
+		return 0, fmt.Errorf("'%s' VMLinux, does not exist", kernel)
 	}
 	length, err := strconv.Atoi(resp.Header.Get("content-length"))
 	if err != nil {
@@ -263,7 +263,7 @@ func (o *operation) fetchVMLinux(kernel string) (string, error) {
 	_, err := os.Stat(filepath.Join(o.firecrackerPath, kernel))
 	if err != nil {
 		// file doesn't exist must download from bucket
-		o.updateStatus(fmt.Sprintf("VMLinux for kernel doesn't exist downloading..."))
+		o.updateStatus(fmt.Sprintf("'%s' does not exist, downloading...", kernel))
 		// Download vmlinux from google
 		url := DownloadPath + kernel
 		client := http.DefaultClient

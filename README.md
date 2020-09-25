@@ -83,9 +83,14 @@ vorteil run /tmp/hellolocal
 
 ```
 
+### Deploying an Image
+
+To deploy an image to
+
+
 ### Modify an Existing Package
 
-```console
+```sh
 wget -o cockroachdb.vorteil https://apps.vorteil.io/file/vorteil/cockroachdb
 vorteil unpack cockroachdb.vorteil cockroachdb
 ls cockroachdb

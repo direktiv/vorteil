@@ -214,19 +214,15 @@ func init() {
 }
 
 var provisionersCmd = &cobra.Command{
-	Use: "provisioners",
-}
-
-var provisionersDescribeCmd = &cobra.Command{
-	Use: "describe",
-	Run: func(cmd *cobra.Command, args []string) {
-		// Do Stuff Here
-		fmt.Println("TODO")
-	},
+	Use:     "provisioners",
+	Short:   "Helper commands for working with Vorteil provisioners",
+	Long:    ``,
+	Example: ``,
 }
 
 var provisionersNewCmd = &cobra.Command{
-	Use: "new",
+	Use:   "new",
+	Short: "Add a new provisioner.",
 }
 
 var (
@@ -251,8 +247,9 @@ var (
 )
 
 var provisionersNewAmazonEC2Cmd = &cobra.Command{
-	Use:  "amazon-ec2",
-	Args: cobra.ExactArgs(1),
+	Use:   "amazon-ec2",
+	Short: "Add a new AWS (Amazon Web Services) Provisioner.",
+	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 
 		f, err := os.OpenFile(args[0], os.O_RDWR|os.O_CREATE, 0644)
@@ -297,8 +294,9 @@ func init() {
 }
 
 var provisionersNewAzureCmd = &cobra.Command{
-	Use:  "azure",
-	Args: cobra.ExactArgs(1),
+	Use:   "azure",
+	Short: "Add a new Microsoft Azure Provisioner.",
+	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 
 		f, err := os.OpenFile(args[0], os.O_RDWR|os.O_CREATE, 0644)

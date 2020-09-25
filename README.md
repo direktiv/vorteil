@@ -8,7 +8,7 @@
 </p>
 <hr/>
 
-[![Build Status](https://travis-ci.org/vorteil/vorteil.svg?branch=master)](https://travis-ci.org/vorteil/vorteil) <a href="https://codeclimate.com/github/vorteil/vorteil/maintainability"><img src="https://api.codeclimate.com/v1/badges/bb819f04d7550b91f24d/maintainability" /></a> [![Go Report Card](https://goreportcard.com/badge/github.com/vorteil/vorteil)](https://goreportcard.com/report/github.com/vorteil/vorteil) [![](https://godoc.org/github.com/vorteil/vorteil?status.svg)](http://godoc.org/github.com/vorteil/vorteil) [![Discord](https://img.shields.io/badge/chat-on%20discord-6A7EC2)](https://discord.gg/VjF6wn4) <!-- [![Github All Releases](https://img.shields.io/github/downloads/vorteil/vorteil/total.svg)]() -->
+[![Build Status](https://travis-ci.org/vorteil/vorteil.svg?branch=master)](https://travis-ci.org/vorteil/vorteil) <a href="https://codeclimate.com/github/vorteil/vorteil/maintainability"><img src="https://api.codeclimate.com/v1/badges/bb819f04d7550b91f24d/maintainability" /></a> [![Go Report Card](https://goreportcard.com/badge/github.com/vorteil/vorteil)](https://goreportcard.com/report/github.com/vorteil/vorteil) [![](https://godoc.org/github.com/vorteil/vorteil?status.svg)](http://godoc.org/github.com/vorteil/vorteil) [![Discord](https://img.shields.io/badge/chat-on%20discord-6A7EC2)](https://discord.gg/VjF6wn4)
 
 Vorteil is an operating system for running cloud applications on micro virtual machines. It takes only the files you need and runs them on a custom Linux kernel without any unnecessary background services: there's no ssh, no shell, and no login; just a toml file that Vorteil's init process (vinitd) uses to configure the system and launch your apps.
 
@@ -58,7 +58,7 @@ If you're using Windows, it's recommended that you enable developer mode as well
 
 ### Hello World
 
-```console
+```sh
 vorteil run https://apps.vorteil.io/file/vorteil/helloworld
 ```
 
@@ -70,7 +70,7 @@ Our Hello World app is a simple web server that should be reachable via NAT on p
 
 An easy way to build Vorteil micro virtual machines is to build them from container images. Vorteil can convert all OCI compliant images from remote repositories or local docker and containerd runtimes. The following command would convert the _hello-world_ application from docker hub.
 
-```console
+```sh
 
 # converts hello-world from docker hub into /tmp/hello
 vorteil projects convert-container hello-world /tmp/hello
@@ -85,7 +85,7 @@ vorteil run /tmp/hellolocal
 
 ### Modify an Existing Package
 
-```
+```console
 wget -o cockroachdb.vorteil https://apps.vorteil.io/file/vorteil/cockroachdb
 vorteil unpack cockroachdb.vorteil cockroachdb
 ls cockroachdb
@@ -97,33 +97,33 @@ There are two types of special files in the project directory: `.vorteilproject`
 
 Make whatever changes you need to make, then repackage them.
 
-```
+```sh
 vorteil pack cockroachdb -o cockroachdb-modified.vorteil
 ```
 
 This `vorteil pack` command packs up your project directory into a package file again.
 
-```
+```sh
 vorteil run cockroachdb-modified.vorteil
 ```
 
 Try out your modified package by using the `vorteil run` command on it.
 
-## Need Help?
-
-TODO: link to our support portal and/or chat rooms?
-
 ## Building From Source
 
 These tools are 100% written in Go, which means compiling them is the same as compiling most simple Go programs.
 
-```
+```sh
 go build github.com/vorteil/vorteil/cmd/vorteil
 ```
 
+### Code of Conduct
+
+We have adopted the [Contributor Covenant](https://github.com/vorteil/.github/blob/master/CODE_OF_CONDUCT.md) code of conduct.
+
 ### Contributing
 
-TODO: flesh this out
+Any feedback and contributions are welcome. Read our [contributing guidelines](https://github.com/vorteil/.github/blob/master/CONTRIBUTING.md) for details.
 
 ## License
 
@@ -132,7 +132,7 @@ Distributed under the Apache 2.0 License. See `LICENSE` for more information.
 ## See Also
 
 * The [Vorteil.io](https://vorteil.io/) website.
-* The Vorteil [documentation](https://support.vorteil.io/).
+* The Vorteil [documentation](https://docs.vorteil.io/).
 * The free Vorteil [apps repository](http://apps.vorteil.io/).
 * The Vorteil [blog](https://blog.vorteil.io/).
 * The [Godoc](https://godoc.org/github.com/vorteil/vorteil) library documentation.

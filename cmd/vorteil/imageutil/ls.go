@@ -2,7 +2,6 @@ package imageutil
 
 import (
 	"fmt"
-	"log"
 	"path/filepath"
 	"strings"
 	"time"
@@ -25,7 +24,7 @@ func lsSetNumbers(cmd *cobra.Command) error {
 	return nil
 }
 
-func printVPartition(iio *vdecompiler.IO, fpath string, long bool) error {
+func printVPartition(log elog.View, iio *vdecompiler.IO, fpath string, long bool) error {
 	if fpath != "/" && fpath != "" && fpath != "." {
 		return fmt.Errorf("bad FILE_PATH for vorteil partition: %s", fpath)
 	}
@@ -74,14 +73,14 @@ func readLSBoolFlags(cmd *cobra.Command) (bool, bool, bool, bool, error) {
 	return all, almostAll, long, recursive, returnErr
 }
 
-func readLS(fpath string, img string, long bool, flagOS bool) (*vdecompiler.IO, int, error) {
+func readLS(log elog.View, fpath string, img string, long bool, flagOS bool) (*vdecompiler.IO, int, error) {
 	iio, err := vdecompiler.Open(img)
 	if err != nil {
 		return nil, 0, err
 	}
 
 	if flagOS {
-		err = printVPartition(iio, fpath, long)
+		err = printVPartition(log, iio, fpath, long)
 		if err != nil {
 			return nil, 0, err
 		}
@@ -94,15 +93,23 @@ func readLS(fpath string, img string, long bool, flagOS bool) (*vdecompiler.IO, 
 	return iio, ino, nil
 }
 
-// LS lists directory contents.
-func LS(log elog.View, cmd *cobra.Command, args []string, flagOS bool) error {
-
+func parseLSFlags(cmd *cobra.Command) (bool, bool, bool, bool, error) {
 	err := lsSetNumbers(cmd)
 	if err != nil {
-		return err
+		return false, false, false, false, err
 	}
 
 	all, almostAll, long, recursive, err := readLSBoolFlags(cmd)
+	if err != nil {
+		return false, false, false, false, err
+	}
+	return all, almostAll, long, recursive, err
+}
+
+// LS lists directory contents.
+func LS(log elog.View, cmd *cobra.Command, args []string, flagOS bool) error {
+
+	all, almostAll, long, recursive, err := parseLSFlags(cmd)
 	if err != nil {
 		return err
 	}
@@ -114,12 +121,12 @@ func LS(log elog.View, cmd *cobra.Command, args []string, flagOS bool) error {
 	}
 	img := args[0]
 
-	iio, ino, err := readLS(fpath, img, long, flagOS)
+	iio, ino, err := readLS(log, fpath, img, long, flagOS)
 	if err != nil {
 		return err
 	}
 	defer iio.Close()
-	err = readInodesLS(&inodeReader{log: log, iio: iio, ino: ino, long: long, recursive: recursive, all: all, almostAll: almostAll, fpath: fpath})
+	err = readInodesLS(&lsReader{log: log, iio: iio, ino: ino, long: long, recursive: recursive, all: all, almostAll: almostAll, fpath: fpath})
 	if err != nil {
 		return err
 	}
@@ -127,7 +134,7 @@ func LS(log elog.View, cmd *cobra.Command, args []string, flagOS bool) error {
 	return nil
 }
 
-type inodeReader struct {
+type lsReader struct {
 	log       elog.View
 	iio       *vdecompiler.IO
 	ino       int
@@ -138,14 +145,14 @@ type inodeReader struct {
 	fpath     string
 }
 
-func readInodesLS(read *inodeReader) error {
+func readInodesLS(read *lsReader) error {
 	var reiterating bool
-
 	var fpaths []string
 	var inos []int
 	var inodes []*vdecompiler.Inode
 	var table [][]string
 	var entries []*vdecompiler.DirectoryEntry
+
 inoEntry:
 	inode, err := read.iio.ResolveInode(read.ino)
 	if err != nil {
@@ -220,7 +227,6 @@ inodeEntry:
 				inodes = append(inodes, child)
 			}
 		} else {
-
 			if read.recursive {
 				read.log.Printf("  %s", entry.Name)
 				if !(entry.Name == "." || entry.Name == "..") {
@@ -230,9 +236,7 @@ inodeEntry:
 				read.log.Printf("%s", entry.Name)
 			}
 		}
-
 	}
-
 	if read.long {
 		PlainTable(table)
 	}

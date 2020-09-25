@@ -45,7 +45,7 @@ func buildFirecracker(ctx context.Context, w io.WriteSeeker, cfg *vcfg.VCFG, arg
 		return "", err
 	}
 
-	err = args.Format.Build(ctx, w, vimgBuilder, cfg)
+	err = args.Format.Build(ctx, log, w, vimgBuilder, cfg)
 	if err != nil {
 		return "", err
 	}

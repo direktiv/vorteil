@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/vorteil/vorteil/pkg/elog"
 	"github.com/vorteil/vorteil/pkg/vcfg"
 	"github.com/vorteil/vorteil/pkg/vimg"
 )
@@ -173,7 +174,10 @@ func (x *Format) DefaultMTU() uint {
 }
 
 // Build creates the disk for the correct format ...
-func (x *Format) Build(ctx context.Context, w io.WriteSeeker, b *vimg.Builder, cfg *vcfg.VCFG) error {
+func (x *Format) Build(ctx context.Context, log elog.View, w io.WriteSeeker, b *vimg.Builder, cfg *vcfg.VCFG) error {
+
+	p := log.NewProgress(fmt.Sprintf("Initializing %s image file", x), "", 0)
+	defer p.Finish(false)
 
 	w, err := buildFuncs[*x](w, b, cfg)
 	if err != nil {
@@ -183,6 +187,8 @@ func (x *Format) Build(ctx context.Context, w io.WriteSeeker, b *vimg.Builder, c
 	if ok {
 		defer closer.Close()
 	}
+
+	p.Finish(true)
 
 	err = b.Build(ctx, w)
 	if err != nil {

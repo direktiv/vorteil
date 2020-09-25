@@ -68,6 +68,9 @@ func (b *Builder) validateRootArgs() error {
 
 func (b *Builder) calculateMinimumRootSize(ctx context.Context) error {
 
+	progress := b.log.NewProgress("Planning file-system", "", 0)
+	defer progress.Finish(false)
+
 	if b.vcfg.VM.Inodes == 0 {
 		b.fs.SetMinimumInodesPer64MiB(1024)
 	} else {
@@ -92,5 +95,7 @@ func (b *Builder) calculateMinimumRootSize(ctx context.Context) error {
 	}
 
 	b.minSize += b.fs.MinimumSize()
+	progress.Finish(true)
+
 	return nil
 }

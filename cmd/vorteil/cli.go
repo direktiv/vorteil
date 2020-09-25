@@ -9,6 +9,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+	"github.com/vorteil/vorteil/cmd/vorteil/imageutil"
 
 	"github.com/vorteil/vorteil/pkg/elog"
 )
@@ -26,10 +27,11 @@ var (
 	flagOutput           string
 	flagPlatform         string
 	flagGUI              bool
-	flagOS               bool
-	flagRecord           string
-	flagShell            bool
-	flagTouched          bool
+	// imageutil package uses this flag
+	flagOS      bool
+	flagRecord  string
+	flagShell   bool
+	flagTouched bool
 )
 
 const (
@@ -72,7 +74,7 @@ func commandInit() {
 		}
 
 		log = logger
-
+		imageutil.AttachLogger(log)
 		return nil
 	}
 
@@ -114,17 +116,18 @@ func addImagesCmd() {
 	imagesCmd.AddCommand(buildCmd)
 	imagesCmd.AddCommand(decompileCmd)
 	imagesCmd.AddCommand(provisionCmd)
-	imagesCmd.AddCommand(catCmd)
-	imagesCmd.AddCommand(cpCmd)
-	imagesCmd.AddCommand(duCmd)
-	imagesCmd.AddCommand(formatCmd)
-	imagesCmd.AddCommand(fsCmd)
-	imagesCmd.AddCommand(fsimgCmd)
-	imagesCmd.AddCommand(gptCmd)
-	imagesCmd.AddCommand(lsCmd)
-	imagesCmd.AddCommand(md5Cmd)
-	imagesCmd.AddCommand(statCmd)
-	imagesCmd.AddCommand(treeCmd)
+
+	imagesCmd.AddCommand(imageutil.CatCMD)
+	imagesCmd.AddCommand(imageutil.CpCMD)
+	imagesCmd.AddCommand(imageutil.DuCMD)
+	imagesCmd.AddCommand(imageutil.FormatCMD)
+	imagesCmd.AddCommand(imageutil.FsCMD)
+	imagesCmd.AddCommand(imageutil.FsImgCMD)
+	imagesCmd.AddCommand(imageutil.GptCMD)
+	imagesCmd.AddCommand(imageutil.LsCMD)
+	imagesCmd.AddCommand(imageutil.Md5CMD)
+	imagesCmd.AddCommand(imageutil.StatCMD)
+	imagesCmd.AddCommand(imageutil.TreeCMD)
 
 }
 func commandShortcut(cmd *cobra.Command) *cobra.Command {

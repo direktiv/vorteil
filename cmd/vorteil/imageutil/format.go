@@ -1,25 +1,33 @@
 package imageutil
 
 import (
-	"github.com/vorteil/vorteil/pkg/elog"
+	"os"
+
+	"github.com/spf13/cobra"
 	"github.com/vorteil/vorteil/pkg/vdecompiler"
 )
 
-// Format gathers Image file format information.
-func Format(log elog.View, args []string) error {
-	img := args[0]
+// FormatCMD returns what the disk format is
+var FormatCMD = &cobra.Command{
+	Use:   "format IMAGE",
+	Short: "Image file format information.",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		img := args[0]
 
-	iio, err := vdecompiler.Open(img)
-	if err != nil {
-		return err
-	}
-	defer iio.Close()
+		iio, err := vdecompiler.Open(img)
+		if err != nil {
+			log.Errorf("%v", err)
+			os.Exit(1)
+		}
+		defer iio.Close()
 
-	format, err := iio.ImageFormat()
-	if err != nil {
-		return err
-	}
+		format, err := iio.ImageFormat()
+		if err != nil {
+			log.Errorf("%v", err)
+			os.Exit(1)
+		}
 
-	log.Printf("Image file format: %s", format)
-	return nil
+		log.Printf("Image file format: %s", format)
+	},
 }

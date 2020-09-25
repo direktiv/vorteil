@@ -343,51 +343,59 @@ func addModifyFlags(f *pflag.FlagSet) {
 	vcfgFlags.AddTo(f)
 }
 
-func modifyPackageBuilder(b vpkg.Builder) error {
+// mergeFlagVCFGFiles : Merge values from from VCFG files stored in 'flagVCFG', and then merge vcfg flag values with overrideVCFG
+func mergeVCFGFlagValues(b *vpkg.Builder) error {
+	var err error
+	var f vio.File
+	var cfg *vcfg.VCFG
 
-	// vcfg flags
-	err := vcfgFlags.Validate()
+	// Iterate over vcfg paths stored in flagVCFG, read vcfg files and merge into b
+	for _, path := range flagVCFG {
+		f, err = vio.Open(path)
+		if err != nil {
+			return err
+		}
+
+		cfg, err = vcfg.LoadFile(f)
+		if err != nil {
+			return err
+		}
+
+		err = (*b).MergeVCFG(cfg)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Merge overrideVCFG object containing flag values into b
+	err = (*b).MergeVCFG(&overrideVCFG)
+	return err
+}
+
+func modifyPackageBuilder(b vpkg.Builder) error {
+	var err error
+	var f vio.File
+
+	err = vcfgFlags.Validate()
 	if err != nil {
 		return err
 	}
 
-	// modify
 	if flagIcon != "" {
-		f, err := vio.LazyOpen(flagIcon)
+		f, err = vio.LazyOpen(flagIcon)
 		if err != nil {
 			return err
 		}
 		b.SetIcon(f)
 	}
 
-	for _, path := range flagVCFG {
-		f, err := vio.Open(path)
-		if err != nil {
-			return err
-		}
-
-		cfg, err := vcfg.LoadFile(f)
-		if err != nil {
-			return err
-		}
-
-		err = b.MergeVCFG(cfg)
-		if err != nil {
-			return err
-		}
-	}
-
-	err = b.MergeVCFG(&overrideVCFG)
+	err = mergeVCFGFlagValues(&b)
 	if err != nil {
 		return err
 	}
 
 	err = handleFileInjections(b)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return err
 }
 
 // NumbersMode determines which numbers format a PrintableSize should render to.

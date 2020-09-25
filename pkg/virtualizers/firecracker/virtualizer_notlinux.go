@@ -108,11 +108,6 @@ func (v *Virtualizer) Close(force bool) error {
 	return nil
 }
 
-// ConvertToVM is a wrapper function that provides us abilities to use the old APIs
-func (v *Virtualizer) ConvertToVM() interface{} {
-	return nil
-}
-
 // Prepare prepares the virtualizer with the appropriate fields to run the virtualizer
 func (v *Virtualizer) Prepare(args *virtualizers.PrepareArgs) *virtualizers.VirtualizeOperation {
 	return nil

@@ -454,15 +454,12 @@ func (mgr *RemoteManager) get(version CalVer) error {
 	signatureURL := fmt.Sprintf("%s/kernels/%s", mgr.url, signatureName)
 
 	kernelFile := filepath.Join(mgr.dir, kernelName)
-	err := os.Remove(kernelFile)
-	if err != nil && !os.IsNotExist(err) {
-		return err
-	}
 	signatureFile := filepath.Join(mgr.dir, signatureName)
-	err = os.Remove(signatureFile)
-	if err != nil && !os.IsNotExist(err) {
+	err := removeFiles(kernelFile, signatureFile)
+	if err != nil {
 		return err
 	}
+
 	defer os.Remove(signatureFile)
 
 	var success bool
@@ -526,6 +523,34 @@ func (mgr *RemoteManager) get(version CalVer) error {
 		return firstError
 	}
 
+	err = validateKernelSignature(kernelFile, signatureFile)
+	if err != nil {
+		// update to cached
+		mgr.lock.Lock()
+		tuple, err := mgr.cache.BestMatch(version)
+		if err == nil {
+			tuple.Location = strings.TrimSuffix(tuple.Location, " (cached)") + " (cached)"
+			tuple.ModTime = time.Now()
+			success = true
+		}
+		mgr.lock.Unlock()
+	}
+
+	return err
+}
+
+func removeFiles(files ...string) error {
+	for _, fPath := range files {
+		err := os.Remove(fPath)
+		if err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("could not remove %s , error: %v", fPath, err)
+		}
+	}
+
+	return nil
+}
+
+func validateKernelSignature(kernelFile string, signatureFile string) error {
 	krrData := mustGetAsset("vorteil.gpg")
 	krr := bytes.NewReader(krrData)
 
@@ -547,32 +572,14 @@ func (mgr *RemoteManager) get(version CalVer) error {
 	}
 
 	_, err = openpgp.CheckArmoredDetachedSignature(kr, ker, sig)
-	if err != nil {
-		return err
-	}
-
-	err = ker.Close()
-	if err != nil {
-		return err
-	}
-
-	err = sig.Close()
-	if err != nil {
-		return err
-	}
-
-	// update to cached
-
-	mgr.lock.Lock()
-	tuple, err := mgr.cache.BestMatch(version)
 	if err == nil {
-		tuple.Location = strings.TrimSuffix(tuple.Location, " (cached)") + " (cached)"
-		tuple.ModTime = time.Now()
-		success = true
+		err = ker.Close()
+		if err == nil {
+			err = sig.Close()
+		}
 	}
-	mgr.lock.Unlock()
 
-	return nil
+	return err
 }
 
 // Get ..

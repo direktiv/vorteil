@@ -67,7 +67,7 @@ func LoadProject(path string) (*Project, error) {
 		return nil, err
 	}
 
-	data, err := ioutil.ReadFile(path)
+	data, err := ioutil.ReadFile(filepath.Join(path, FileName))
 	if err != nil {
 		if os.IsNotExist(err) {
 			err = errors.New("no project in directory")
@@ -81,7 +81,6 @@ func LoadProject(path string) (*Project, error) {
 	}
 
 	return p, nil
-
 }
 
 func (p *Project) loadProjectPath(path string) error {

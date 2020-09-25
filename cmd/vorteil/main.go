@@ -154,6 +154,7 @@ func getBuilderFile(argName, src string) (vpkg.Builder, error) {
 		if !os.IsNotExist(err) {
 			return nil, err
 		}
+		return nil, fmt.Errorf("failed to resolve %s '%s'", argName, src)
 	}
 
 	pkgr, err := vpkg.Load(f)
@@ -166,9 +167,8 @@ func getBuilderFile(argName, src string) (vpkg.Builder, error) {
 	if err != nil {
 		pkgr.Close()
 		f.Close()
-		return nil, err
 	}
-	return pkgb, nil
+	return pkgb, err
 }
 
 func getBuilderDir(argName, src string) (vpkg.Builder, error) {
@@ -179,6 +179,7 @@ func getBuilderDir(argName, src string) (vpkg.Builder, error) {
 		if !os.IsNotExist(err) {
 			return nil, err
 		}
+		return nil, fmt.Errorf("failed to resolve %s '%s'", argName, src)
 	}
 
 	ptgt, err = proj.Target(target)
@@ -187,14 +188,12 @@ func getBuilderDir(argName, src string) (vpkg.Builder, error) {
 	}
 
 	pkgb, err := ptgt.NewBuilder()
-	if err != nil {
-		return nil, err
-	}
-
-	return pkgb, nil
+	return pkgb, err
 }
 
 func getPackageBuilder(argName, src string) (vpkg.Builder, error) {
+	var err error
+	var pkgB vpkg.Builder
 	sType, err := getSourceType(src)
 	if err != nil {
 		return nil, err
@@ -202,16 +201,18 @@ func getPackageBuilder(argName, src string) (vpkg.Builder, error) {
 
 	switch sType {
 	case sourceURL:
-		return getBuilderURL(argName, src)
+		pkgB, err = getBuilderURL(argName, src)
 	case sourceFile:
-		return getBuilderFile(argName, src)
+		pkgB, err = getBuilderFile(argName, src)
 	case sourceDir:
-		return getBuilderDir(argName, src)
+		pkgB, err = getBuilderDir(argName, src)
 	case sourceINVALID:
 		fallthrough
 	default:
-		return nil, fmt.Errorf("failed to resolve %s '%s'", argName, src)
+		err = fmt.Errorf("failed to resolve %s '%s'", argName, src)
 	}
+
+	return pkgB, err
 
 	// TODO: check for vrepo strings
 

@@ -139,10 +139,39 @@ func (isoOp *importSharedObjectsOperation) initLDPATHS() error {
 	return nil
 }
 
+func (isoOp *importSharedObjectsOperation) copyDefaultLibs() error {
+	classesImported := make([]elf.Class, 0)
+
+	if isoOp.imported32bit {
+		classesImported = append(classesImported, elf.ELFCLASS32)
+	}
+	if isoOp.imported64bit {
+		classesImported = append(classesImported, elf.ELFCLASS64)
+	}
+
+	isoOp.logger.Infof("including Default Libs")
+	for i := range classesImported {
+		for j := range defaultLibs {
+			elfLibPath, found, err := isoOp.findLib(defaultLibs[j], classesImported[i])
+			if err == nil && found {
+				isoOp.sharedObjects[defaultLibs[j]] = elfLibPath
+				err := isoOp.addSharedObjects(elfLibPath)
+				if err != nil {
+					return err
+				}
+			} else if err == nil {
+				isoOp.sharedObjects[defaultLibs[j]] = elfLibPath
+			} else {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
 func (isoOp *importSharedObjectsOperation) Start() error {
 	var err error
 	var projectPaths []string
-	classesImported := make([]elf.Class, 0)
 
 	isoProgress := isoOp.logger.NewProgress("Importing Shared Objects ", "", 0)
 	defer isoProgress.Finish(true)
@@ -150,7 +179,7 @@ func (isoOp *importSharedObjectsOperation) Start() error {
 	// Get all a path to all files in project dir
 	projectPaths, err = isoOp.getProjectFiles()
 	if err != nil {
-		goto ERROR
+		return err
 	}
 
 	// Find Import Libraries of project files and add them to map
@@ -159,42 +188,19 @@ func (isoOp *importSharedObjectsOperation) Start() error {
 	}
 
 	// Find Import Libraries of default files and add them to map
-	if isoOp.imported32bit {
-		classesImported = append(classesImported, elf.ELFCLASS32)
-	}
-	if isoOp.imported64bit {
-		classesImported = append(classesImported, elf.ELFCLASS64)
-	}
 	if !isoOp.excludeDefaultLibs {
-		isoOp.logger.Infof("including Default Libs")
-		for i := range classesImported {
-			for j := range defaultLibs {
-				elfLibPath, found, err := isoOp.findLib(defaultLibs[j], classesImported[i])
-				if err == nil && found {
-					isoOp.sharedObjects[defaultLibs[j]] = elfLibPath
-					err := isoOp.addSharedObjects(elfLibPath)
-					if err != nil {
-						goto ERROR
-					}
-				} else if err == nil {
-					isoOp.sharedObjects[defaultLibs[j]] = elfLibPath
-				} else {
-					goto ERROR
-				}
-			}
+		err = isoOp.copyDefaultLibs()
+		if err != nil {
+			return err
 		}
 	}
 
 	err = isoOp.copySharedObjects()
-	if err != nil {
-		goto ERROR
+	if err == nil {
+		isoOp.logger.Printf("Completed.")
 	}
 
-	isoOp.logger.Printf("Completed.")
-	return nil
-ERROR:
-	isoOp.logger.Errorf("Import shared Objects failed, error: %v", err)
-	return nil
+	return err
 }
 
 // copySharedObjects: loops over stored sharedObjects in operations map and copies those

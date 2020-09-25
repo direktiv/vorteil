@@ -12,6 +12,7 @@ import (
 
 	"github.com/imdario/mergo"
 	"github.com/sisatech/toml"
+	"github.com/vorteil/vorteil-go/pkg/vcfg"
 	"github.com/vorteil/vorteil/pkg/vio"
 )
 
@@ -278,93 +279,106 @@ func (vcfg *VCFG) negate() {
 	// ports
 	nics := vcfg.Networks
 	for _, nic := range nics {
-		protocols := map[string]*[]string{"udp": &nic.UDP, "tcp": &nic.TCP, "http": &nic.HTTP, "https": &nic.HTTPS}
-		for protocol, portList := range protocols {
-			list := *portList
-			sort.Strings(list)
-			var i int
-			for {
-				if i >= len(list) {
-					break
-				}
-
-				if list[i] == "" {
-					list = append(list[:i], list[i+1:]...)
-					continue
-				}
-
-				if strings.HasPrefix(list[i], "!") {
-					k := strings.TrimPrefix(list[i], "!")
-					list = append(list[:i], list[i+1:]...)
-
-					// cut matching items from the current protocol
-					var found = true
-					for found {
-						found = false
-						x := sort.SearchStrings(list, k)
-						if x < len(list) && list[x] == k {
-							found = true
-							list = append(list[:x], list[x+1:]...)
-						}
-					}
-
-					// cut matching items from similar protocols
-					if protocol == "tcp" {
-
-						tcpList := nic.HTTP
-						found = true
-						for found {
-							found = false
-							x := sort.SearchStrings(tcpList, k)
-							if x < len(tcpList) && tcpList[x] == k {
-								found = true
-								tcpList = append(tcpList[:x], tcpList[x+1:]...)
-							}
-						}
-						nic.HTTP = tcpList
-
-						tcpList = nic.HTTPS
-						found = true
-						for found {
-							found = false
-							x := sort.SearchStrings(tcpList, k)
-							if x < len(tcpList) && tcpList[x] == k {
-								found = true
-								tcpList = append(tcpList[:x], tcpList[x+1:]...)
-							}
-						}
-						nic.HTTPS = tcpList
-
-					}
-
-					continue
-				}
-
-				x := sort.SearchStrings(list, list[i])
-				if x < i {
-					list = append(list[:i], list[i+1:]...)
-					continue
-				}
-
-				i++
-			}
-			*portList = list
-		}
-
-		if nic.IP == "" || nic.IP == "!" || nic.IP == "disabled" {
-			nic.IP = ""
-			nic.Mask = ""
-			nic.Gateway = ""
-			nic.UDP = nil
-			nic.TCP = nil
-			nic.HTTP = nil
-			nic.HTTPS = nil
-		} else if nic.IP == "dhcp" {
-			nic.Mask = ""
-			nic.Gateway = ""
-		}
+		vcfg.negateNic(nic)
 	}
 
+}
+
+func (vcfg *VCFG) negateNic(nic *vcfg.NetworkInterface) {
+
+	vcfg.negateNicProtocols()
+
+	if nic.IP == "" || nic.IP == "!" || nic.IP == "disabled" {
+		nic.IP = ""
+		nic.Mask = ""
+		nic.Gateway = ""
+		nic.UDP = nil
+		nic.TCP = nil
+		nic.HTTP = nil
+		nic.HTTPS = nil
+	} else if nic.IP == "dhcp" {
+		nic.Mask = ""
+		nic.Gateway = ""
+	}
+
+}
+
+func (vcfg *VCFG) negateNicProtocols(nic *Network) {
+	protocols := map[string]*[]string{"udp": &nic.UDP, "tcp": &nic.TCP, "http": &nic.HTTP, "https": &nic.HTTPS}
+	for protocol, portList := range protocols {
+
+		vcfg.negateNicProtocol()
+		list := *portList
+		sort.Strings(list)
+
+		for i := 0; i < len(list); i++ {
+			if list[i] == "" {
+				list = append(list[:i], list[i+1:]...)
+				continue
+			}
+
+			if strings.HasPrefix(list[i], "!") {
+				k := strings.TrimPrefix(list[i], "!")
+				list = append(list[:i], list[i+1:]...)
+
+				// cut matching items from the current protocol
+				var found = true
+				for found {
+					found = false
+					x := sort.SearchStrings(list, k)
+					if x < len(list) && list[x] == k {
+						found = true
+						list = append(list[:x], list[x+1:]...)
+					}
+				}
+
+				// cut matching items from similar protocols
+				vcfg.negateNicTCPConflicts(protocol)
+
+				continue
+			}
+
+			x := sort.SearchStrings(list, list[i])
+			if x < i {
+				list = append(list[:i], list[i+1:]...)
+				continue
+			}
+
+		}
+		*portList = list
+	}
+}
+
+func (vcfg *VCFG) detectProtocolConflict(list)
+
+func (vcfg *VCFG) negativeNicTCPConflicts(protocol string) {
+	if protocol == "tcp" {
+
+		tcpList := nic.HTTP
+		found = true
+		for found {
+			found = false
+			x := sort.SearchStrings(tcpList, k)
+			if x < len(tcpList) && tcpList[x] == k {
+				found = true
+				tcpList = append(tcpList[:x], tcpList[x+1:]...)
+			}
+		}
+		nic.HTTP = tcpList
+
+		tcpList = nic.HTTPS
+		found = true
+		for found {
+			found = false
+			x := sort.SearchStrings(tcpList, k)
+			if x < len(tcpList) && tcpList[x] == k {
+				found = true
+				tcpList = append(tcpList[:x], tcpList[x+1:]...)
+			}
+		}
+		nic.HTTPS = tcpList
+
+	}
 }
 
 func mergeStringArray(x ...[]string) []string {

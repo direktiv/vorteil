@@ -384,11 +384,8 @@ func copyInodeToRegularFile(iio *vdecompiler.IO, inode *vdecompiler.Inode, dpath
 	var f *os.File
 	var rdr io.Reader
 
-	_, err = os.Stat(dpath)
-	if !os.IsNotExist(err) {
-		if err == nil {
-			err = fmt.Errorf("file already exists: %s", dpath)
-		}
+	err = utilFileNotExists(dpath)
+	if err != nil {
 		return err
 	}
 
@@ -405,6 +402,17 @@ func copyInodeToRegularFile(iio *vdecompiler.IO, inode *vdecompiler.Inode, dpath
 
 	_, err = io.CopyN(f, rdr, int64(inode.Fullsize()))
 	return err
+}
+
+func utilFileNotExists(fpath string) error {
+	_, err := os.Stat(fpath)
+	if !os.IsNotExist(err) {
+		if err == nil {
+			err = fmt.Errorf("file already exists: %s", fpath)
+		}
+		return err
+	}
+	return nil
 }
 
 func decompile(srcPath, outPath string) {
@@ -437,6 +445,7 @@ func decompile(srcPath, outPath string) {
 
 	var recurse func(int, string, string) error
 	recurse = func(ino int, rpath string, dpath string) error {
+		var entries []*vdecompiler.DirectoryEntry
 
 		inode, err := iio.ResolveInode(ino)
 		if err != nil {
@@ -445,48 +454,37 @@ func decompile(srcPath, outPath string) {
 
 		if flagTouched && inode.LastAccessTime == 0 && !inode.IsDirectory() && rpath != "/" {
 			log.Printf("skipping untouched object: %s", rpath)
-			return nil
+			goto DONE
 		}
 
 		counter++
 
 		log.Printf("copying %s", rpath)
 
-		var inodeIsFile bool
-
 		if inode.IsRegularFile() {
-			inodeIsFile = true
-			return copyInodeToRegularFile(iio, inode, dpath)
+			err = copyInodeToRegularFile(iio, inode, dpath)
+			goto DONE
 		}
 
 		if inode.IsSymlink() {
-			inodeIsFile = true
 			symlinkCallbacks = append(symlinkCallbacks, createSymlinkCallback(iio, inode, dpath))
+			goto DONE
 		}
 
 		if !inode.IsDirectory() {
 			log.Warnf("skipping abnormal file: %s", rpath)
-			inodeIsFile = true
+			goto DONE
 		}
 
-		if inodeIsFile {
-			return nil
-		}
-
-		fi, err = os.Stat(dpath)
-		if !os.IsNotExist(err) {
+		// INODE IS DIR
+		err = utilFileNotExists(dpath)
+		if err == nil {
+			err = os.MkdirAll(dpath, 0777)
 			if err == nil {
-				return fmt.Errorf("file already exists: %s", dpath)
+				entries, err = iio.Readdir(inode)
 			}
-			return err
 		}
 
-		err = os.MkdirAll(dpath, 0777)
-		if err != nil {
-			return err
-		}
-
-		entries, err := iio.Readdir(inode)
 		if err != nil {
 			return err
 		}
@@ -501,7 +499,8 @@ func decompile(srcPath, outPath string) {
 			}
 		}
 
-		return nil
+	DONE:
+		return err
 	}
 
 	ino, err := iio.ResolvePathToInodeNo(fpath)

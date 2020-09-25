@@ -461,21 +461,47 @@ func Merge(a, b *VCFG) (*VCFG, error) {
 		a.Sysctl = mergeStringMap(a.Sysctl, b.Sysctl)
 	}
 
+	// programs, logging, and networks
+	err := mergeProgramsLoggingNetworks(a, b)
+	if err != nil {
+		return nil, err
+	}
+
+	// system, info, and vm
+	err = mergeSystemInfoVM(a, b)
+	if err != nil {
+		return nil, err
+	}
+
+	// nfs, and routes
+	err = mergeNFSRoutes(a, b)
+	if err != nil {
+		return nil, err
+	}
+
+	return a, nil
+}
+
+func mergeProgramsLoggingNetworks(a, b *vcfg.VCFG) error {
 	// Programs
 	if err := a.mergePrograms(b); err != nil {
-		return nil, err
+		return err
 	}
 
 	// Logging
 	if err := a.mergeLogging(b); err != nil {
-		return nil, err
+		return err
 	}
 
 	// Networks
 	if err := a.mergeNetworks(b); err != nil {
-		return nil, err
+		return err
 	}
 
+	return
+}
+
+func mergeSystemInfoVM(a, b *vcfg.VCFG) error {
 	// System.DNS
 	dns := mergeStringArrayExcludingDuplicateValues(a.System.DNS, b.System.DNS)
 
@@ -485,7 +511,7 @@ func Merge(a, b *VCFG) (*VCFG, error) {
 	// System
 	err = mergo.Merge(&a.System, &b.System, mergo.WithOverride)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	a.System.DNS = dns
@@ -494,26 +520,30 @@ func Merge(a, b *VCFG) (*VCFG, error) {
 	// Info
 	err = mergo.Merge(&a.Info, &b.Info)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	// VM
 	err = mergo.Merge(&a.VM, &b.VM, mergo.WithOverride)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
+	return nil
+}
+
+func mergeNFSRoutes(a, b *vcfg.VCFG) error {
 	// NFS
 	if err := a.mergeNFS(b); err != nil {
-		return nil, err
+		return err
 	}
 
 	// Routes
 	if err := a.mergeRoutes(b); err != nil {
-		return nil, err
+		return err
 	}
 
-	return a, nil
+	return nil
 }
 
 func (vcfg *VCFG) mergePrograms(b *VCFG) error {

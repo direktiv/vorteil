@@ -5,6 +5,7 @@
 package azure
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/base64"
@@ -76,6 +77,7 @@ func (p *Provisioner) DiskFormat() vdisk.Format {
 	return vdisk.VHDFormat
 }
 
+// Initialize initializes n Azure provisioner
 func (p *Provisioner) Initialize(data []byte) error {
 
 	cfg := new(Config)
@@ -93,6 +95,13 @@ func (p *Provisioner) Initialize(data []byte) error {
 	return nil
 }
 
+func fetchVal(keyMap map[string]interface{}, name string) string {
+
+	str, _ := keyMap[name].(string)
+	return str
+
+}
+
 func (p *Provisioner) init() error {
 
 	var err error
@@ -108,46 +117,12 @@ func (p *Provisioner) init() error {
 		return err
 	}
 
-	x, ok := keyMap["subscriptionId"]
-	if !ok {
-		return fmt.Errorf("'subscriptionId' field not found in credentials")
-	}
+	p.clientID = fetchVal(keyMap, "clientId")
+	p.tenantID = fetchVal(keyMap, "tenantId")
+	p.clientSecret = fetchVal(keyMap, "clientSecret")
+	p.resourceManagerEndpointURL = fetchVal(keyMap, "resourceManagerEndpointUrl")
+	p.subscriptionID = fetchVal(keyMap, "subscriptionId")
 
-	subID, ok := x.(string)
-	if !ok {
-		return fmt.Errorf("unable to interpret 'project_id' field as string")
-	}
-
-	x, ok = keyMap["clientId"]
-	if ok {
-		str, ok := x.(string)
-		if ok {
-			p.clientID = str
-		}
-	}
-	x, ok = keyMap["tenantId"]
-	if ok {
-		str, ok := x.(string)
-		if ok {
-			p.tenantID = str
-		}
-	}
-	x, ok = keyMap["clientSecret"]
-	if ok {
-		str, ok := x.(string)
-		if ok {
-			p.clientSecret = str
-		}
-	}
-	x, ok = keyMap["resourceManagerEndpointUrl"]
-	if ok {
-		str, ok := x.(string)
-		if ok {
-			p.resourceManagerEndpointURL = str
-		}
-	}
-
-	p.subscriptionID = subID
 	return nil
 
 }
@@ -157,20 +132,18 @@ func (p *Provisioner) SizeAlign() vcfg.Bytes {
 	return vcfg.Bytes(0)
 }
 
-// Provision will provision the configured vorteil project to your configured gcp provisioner
-func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
+func (p *Provisioner) getBlobRef(name string) (*storage.Blob, error) {
 
 	creds, err := azblob.NewSharedKeyCredential(p.cfg.StorageAccountName, p.cfg.StorageAccountKey)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	pi := azblob.NewPipeline(creds, azblob.PipelineOptions{})
 
-	url, err := url.Parse(
-		fmt.Sprintf("https://%s.blob.core.windows.net/%s",
-			p.cfg.StorageAccountName, p.cfg.Container))
+	url, err := url.Parse(fmt.Sprintf("https://%s.blob.core.windows.net/%s",
+		p.cfg.StorageAccountName, p.cfg.Container))
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	containerURL := azblob.NewContainerURL(*url, pi)
@@ -180,27 +153,23 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 
 	storageClient, err := storage.NewBasicClient(p.cfg.StorageAccountName, p.cfg.StorageAccountKey)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	x := storageClient.GetBlobService()
 	container := x.GetContainerReference(p.cfg.Container)
 
-	remoteDiskName := fmt.Sprintf("%s.vhd", strings.TrimSuffix(args.Name, ".vhd"))
-	blob := container.GetBlobReference(remoteDiskName)
+	remoteDiskName := fmt.Sprintf("%s.vhd", strings.TrimSuffix(name, ".vhd"))
+	return container.GetBlobReference(remoteDiskName), nil
 
-	if args.Force {
-		_, err = blob.DeleteIfExists(&storage.DeleteBlobOptions{})
-		if err != nil {
-			return err
-		}
+}
 
-	}
+func (p *Provisioner) getImagesClient() (compute.ImagesClient, error) {
 
 	imagesClient := compute.NewImagesClient(p.subscriptionID)
 	settings, err := auth.GetSettingsFromEnvironment()
 	if err != nil {
-		return err
+		return imagesClient, err
 	}
 
 	settings.Values[auth.SubscriptionID] = p.subscriptionID
@@ -211,53 +180,95 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 	settings.Values[auth.TenantID] = p.tenantID
 
 	imagesClient.Authorizer, err = settings.GetAuthorizer()
-	if err != nil {
-		return err
+
+	return imagesClient, err
+
+}
+
+func bytesToGB(l int64) int32 {
+
+	g := int64(1024 * 1024 * 1024)
+	gigs := int64(l) / g
+
+	if l%g != 0 {
+		gigs++
 	}
 
-	forced := args.Force
-	result, err := imagesClient.Get(args.Context, p.cfg.ResourceGroup, args.Name, "")
-	if err == nil || result.ID != nil {
-		// image already exists
-		if !forced {
-			return fmt.Errorf("Image already exists; aborting. To replace conflicting image, include the 'force' directive.")
-		}
+	return int32(gigs)
 
-		args.Logger.Infof("Deleting existing image.")
-		delFuture, err := imagesClient.Delete(args.Context, p.cfg.ResourceGroup, args.Name)
-		if err != nil {
-			return err
-		}
+}
 
-		err = delFuture.WaitForCompletionRef(args.Context, imagesClient.Client)
-		if err != nil {
-			return err
-		}
-	}
+func prepTempFile(args *provisioners.ProvisionArgs) (*os.File, int64, error) {
 
 	f, err := ioutil.TempFile(os.TempDir(), "")
 	if err != nil {
-		return err
+		return nil, 0, err
 	}
-	defer os.Remove(f.Name())
-	defer f.Close()
+	// defer os.Remove(f.Name())
+	// defer f.Close()
 
 	_, err = io.Copy(f, args.Image)
 	if err != nil {
-		return err
-	}
-
-	err = f.Close()
-	if err != nil {
-		return err
+		return nil, 0, err
 	}
 
 	stat, err := os.Stat(f.Name())
 	if err != nil {
+		return nil, 0, err
+	}
+
+	return f, stat.Size(), nil
+
+}
+
+// Provision will provision the configured vorteil project to your configured gcp provisioner
+func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
+
+	blob, err := p.getBlobRef(args.Name)
+	if err != nil {
 		return err
 	}
 
-	length := stat.Size()
+	// if args.Force {
+	// 	_, err = blob.DeleteIfExists(&storage.DeleteBlobOptions{})
+	// 	if err != nil {
+	// 		return err
+	// 	}
+	// }
+
+	imagesClient, err := p.getImagesClient()
+	if err != nil {
+		return err
+	}
+
+	// forced := args.Force
+	// result, err := imagesClient.Get(args.Context, p.cfg.ResourceGroup, args.Name, "")
+	// if err == nil || result.ID != nil {
+	// 	// image already exists
+	// 	if !forced {
+	// 		return fmt.Errorf("Image already exists; aborting. To replace conflicting image, include the 'force' directive.")
+	// 	}
+	//
+	// 	args.Logger.Infof("Deleting existing image.")
+	// 	delFuture, err := imagesClient.Delete(args.Context, p.cfg.ResourceGroup, args.Name)
+	// 	if err != nil {
+	// 		return err
+	// 	}
+	//
+	// 	err = delFuture.WaitForCompletionRef(args.Context, imagesClient.Client)
+	// 	if err != nil {
+	// 		return err
+	// 	}
+	// }
+
+	var length int64
+	var f *os.File
+	var ps int64
+
+	f, length, err = prepTempFile(args)
+	if err != nil {
+		return err
+	}
 
 	blob.Properties.ContentType = "text/plain"
 	blob.Properties.ContentLength = length
@@ -267,59 +278,47 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 		return err
 	}
 
-	rBytes, err := ioutil.ReadFile(f.Name())
-	if err != nil {
-		return err
-	}
+	progress := args.Logger.NewProgress(fmt.Sprintf("Uploading %s:", args.Name), "KiB", int64(args.Image.Size()))
+	pr := progress.ProxyReader(f)
+	defer pr.Close()
 
-	i := 0
-	for i = 0; i < (int(length) - 4194304); i += 4194304 {
-		data := make([]byte, 4194304)
-		copy(data[:], rBytes[i:i+4194304])
-		br := storage.BlobRange{
-			Start: uint64(i),
-			End:   uint64(i + 4194304 - 1),
-		}
+	reader := bufio.NewReader(pr)
+	buf := make([]byte, 4194304)
 
-		var uploadSegment bool
-		for _, d := range data {
-			if d != byte(0) {
-				uploadSegment = true
-				break
-			}
-		}
+	f.Seek(0, 0)
 
-		if uploadSegment {
-			err = blob.WriteRange(br, bytes.NewReader(data), nil)
-			if err != nil {
+	for {
+		ps, _ = f.Seek(0, 1)
+		n, err := reader.Read(buf)
+
+		if err != nil {
+			if err != io.EOF {
+				progress.Finish(false)
 				return err
 			}
+			break
 		}
-		args.Logger.Infof("Uploading: %.1f%s\n", (float64(i)+float64(len(data)))/float64(length)*100, "%")
-	}
 
-	rem := length - int64(i)
-	data := make([]byte, rem)
-	copy(data[:], rBytes[i:length])
-	br := storage.BlobRange{
-		Start: uint64(i),
-		End:   uint64(length) - 1,
-	}
+		br := storage.BlobRange{
+			Start: uint64(ps),
+			End:   uint64(int(ps) + (n - 1)),
+		}
 
-	err = blob.WriteRange(br, bytes.NewReader(data), nil)
-	if err != nil {
-		return err
-	}
+		// the last request might be smaller so we cut it off
+		if n < 4194304 {
+			buf = buf[:n]
+		}
 
-	args.Logger.Infof("Uploading: 100%")
+		err = blob.WriteRange(br, bytes.NewReader(buf), nil)
+		if err != nil {
+			progress.Finish(false)
+			return err
+		}
 
-	g := int32(1024 * 1024 * 1024)
-	gigs := int32(length) / g
-	gigsmod := int32(length) % g
-	if gigsmod != 0 {
-		gigs++
 	}
-	diskSize := gigs
+	progress.Finish(true)
+
+	diskSize := bytesToGB(length)
 
 	img := new(compute.Image)
 	img.ImageProperties = new(compute.ImageProperties)
@@ -336,13 +335,13 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 	img.StorageProfile.OsDisk.BlobURI = &u
 	img.HyperVGeneration = compute.HyperVGenerationTypesV1
 
-	args.Logger.Infof("Sent request to create image from storage object.")
+	args.Logger.Printf("Sent request to create image from storage object.")
 	future, err := imagesClient.CreateOrUpdate(args.Context, p.cfg.ResourceGroup, args.Name, *img)
 	if err != nil {
 		return err
 	}
 
-	args.Logger.Infof("Waiting for completion.")
+	args.Logger.Printf("Waiting for completion.")
 	err = future.WaitForCompletionRef(args.Context, imagesClient.Client)
 	if err != nil {
 		return err

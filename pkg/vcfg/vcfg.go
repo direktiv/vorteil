@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/imdario/mergo"
 	"github.com/sisatech/toml"
 	"github.com/vorteil/vorteil/pkg/vio"
 )
@@ -280,75 +279,7 @@ func (vcfg *VCFG) negate() {
 	for _, nic := range nics {
 		protocols := map[string]*[]string{"udp": &nic.UDP, "tcp": &nic.TCP, "http": &nic.HTTP, "https": &nic.HTTPS}
 		for protocol, portList := range protocols {
-			list := *portList
-			sort.Strings(list)
-			var i int
-			for {
-				if i >= len(list) {
-					break
-				}
-
-				if list[i] == "" {
-					list = append(list[:i], list[i+1:]...)
-					continue
-				}
-
-				if strings.HasPrefix(list[i], "!") {
-					k := strings.TrimPrefix(list[i], "!")
-					list = append(list[:i], list[i+1:]...)
-
-					// cut matching items from the current protocol
-					var found = true
-					for found {
-						found = false
-						x := sort.SearchStrings(list, k)
-						if x < len(list) && list[x] == k {
-							found = true
-							list = append(list[:x], list[x+1:]...)
-						}
-					}
-
-					// cut matching items from similar protocols
-					if protocol == "tcp" {
-
-						tcpList := nic.HTTP
-						found = true
-						for found {
-							found = false
-							x := sort.SearchStrings(tcpList, k)
-							if x < len(tcpList) && tcpList[x] == k {
-								found = true
-								tcpList = append(tcpList[:x], tcpList[x+1:]...)
-							}
-						}
-						nic.HTTP = tcpList
-
-						tcpList = nic.HTTPS
-						found = true
-						for found {
-							found = false
-							x := sort.SearchStrings(tcpList, k)
-							if x < len(tcpList) && tcpList[x] == k {
-								found = true
-								tcpList = append(tcpList[:x], tcpList[x+1:]...)
-							}
-						}
-						nic.HTTPS = tcpList
-
-					}
-
-					continue
-				}
-
-				x := sort.SearchStrings(list, list[i])
-				if x < i {
-					list = append(list[:i], list[i+1:]...)
-					continue
-				}
-
-				i++
-			}
-			*portList = list
+			negateProtocol(&nic, protocol, portList)
 		}
 
 		if nic.IP == "" || nic.IP == "!" || nic.IP == "disabled" {
@@ -364,6 +295,78 @@ func (vcfg *VCFG) negate() {
 			nic.Gateway = ""
 		}
 	}
+}
+
+func negateProtocol(nic *NetworkInterface, protocol string, portList *[]string) {
+	list := *portList
+	sort.Strings(list)
+	var i int
+	for {
+		if i >= len(list) {
+			break
+		}
+
+		cullStringIfEmpty(list, i)
+
+		if strings.HasPrefix(list[i], "!") {
+			k := strings.TrimPrefix(list[i], "!")
+			list = append(list[:i], list[i+1:]...)
+
+			// cut matching items from the current protocol
+			var found = true
+			for found {
+				found = cullMatchingItem(list, k)
+			}
+
+			// cut matching items from similar protocols
+			cutFromSimilarProtocols(protocol, nic, &found, k)
+			continue
+		}
+
+		x := sort.SearchStrings(list, list[i])
+		if x < i {
+			list = append(list[:i], list[i+1:]...)
+			continue
+		}
+
+		i++
+	}
+	*portList = list
+}
+
+func cullStringIfEmpty(list []string, i int) {
+	if list[i] == "" {
+		list = append(list[:i], list[i+1:]...)
+	}
+}
+
+func cullMatchingItem(list []string, k string) (found bool) {
+	x := sort.SearchStrings(list, k)
+	if x < len(list) && list[x] == k {
+		found = true
+		list = append(list[:x], list[x+1:]...)
+	}
+	return
+}
+
+func cutFromSimilarProtocols(protocol string, nic *NetworkInterface, found *bool, k string) {
+	if protocol != "tcp" {
+		return
+	}
+
+	tcpList := nic.HTTP
+	*found = true
+	for *found {
+		*found = cullMatchingItem(tcpList, k)
+	}
+	nic.HTTP = tcpList
+
+	tcpList = nic.HTTPS
+	*found = true
+	for *found {
+		*found = cullMatchingItem(tcpList, k)
+	}
+	nic.HTTPS = tcpList
 
 }
 
@@ -433,231 +436,4 @@ func sanitize(all []string) []string {
 	}
 
 	return out
-}
-
-// Merge ..
-func Merge(a, b *VCFG) (*VCFG, error) {
-
-	var err error
-
-	// Sysctl
-	if a.Sysctl == nil {
-		a.Sysctl = b.Sysctl
-	} else if b.Sysctl != nil {
-		a.Sysctl = mergeStringMap(a.Sysctl, b.Sysctl)
-	}
-
-	// Programs
-	if err := a.mergePrograms(b); err != nil {
-		return nil, err
-	}
-
-	// Logging
-	if err := a.mergeLogging(b); err != nil {
-		return nil, err
-	}
-
-	// Networks
-	if err := a.mergeNetworks(b); err != nil {
-		return nil, err
-	}
-
-	// System.DNS
-	dns := mergeStringArrayExcludingDuplicateValues(a.System.DNS, b.System.DNS)
-
-	// System.NTP
-	ntp := mergeStringArrayExcludingDuplicateValues(a.System.NTP, b.System.NTP)
-
-	// System
-	err = mergo.Merge(&a.System, &b.System, mergo.WithOverride)
-	if err != nil {
-		return nil, err
-	}
-
-	a.System.DNS = dns
-	a.System.NTP = ntp
-
-	// Info
-	err = mergo.Merge(&a.Info, &b.Info)
-	if err != nil {
-		return nil, err
-	}
-
-	// VM
-	err = mergo.Merge(&a.VM, &b.VM, mergo.WithOverride)
-	if err != nil {
-		return nil, err
-	}
-
-	// NFS
-	if err := a.mergeNFS(b); err != nil {
-		return nil, err
-	}
-
-	// Routes
-	if err := a.mergeRoutes(b); err != nil {
-		return nil, err
-	}
-
-	return a, nil
-}
-
-func (vcfg *VCFG) mergePrograms(b *VCFG) error {
-	if vcfg.Programs == nil {
-		vcfg.Programs = b.Programs
-	} else if b.Programs != nil {
-
-		for k, p := range vcfg.Programs {
-			if len(b.Programs) > k {
-
-				// merge b.Programs[k] over p
-				envs := mergeStringArray(p.Env, b.Programs[k].Env)
-				bstp := mergeStringArray(p.Bootstrap, b.Programs[k].Bootstrap)
-				logfiles := mergeStringArrayExcludingDuplicateValues(p.LogFiles, b.Programs[k].LogFiles)
-
-				err := mergo.Merge(&p, &b.Programs[k], mergo.WithOverride)
-				if err != nil {
-					return err
-				}
-
-				p.Env = envs
-				p.Bootstrap = bstp
-				p.LogFiles = logfiles
-
-				vcfg.Programs[k] = p
-
-			}
-		}
-
-		if len(b.Programs) > len(vcfg.Programs) {
-			vcfg.Programs = append(vcfg.Programs, b.Programs[len(vcfg.Programs):]...)
-		}
-	}
-
-	return nil
-}
-
-func (vcfg *VCFG) mergeNetworks(b *VCFG) error {
-	if vcfg.Networks == nil {
-		vcfg.Networks = b.Networks
-	} else if b.Networks != nil {
-
-		for k, n := range vcfg.Networks {
-
-			if len(b.Networks) > k {
-
-				// merge b.Networks[k] over p
-				http := mergeStringArrayExcludingDuplicateValues(n.HTTP, b.Networks[k].HTTP)
-				https := mergeStringArrayExcludingDuplicateValues(n.HTTPS, b.Networks[k].HTTPS)
-				udp := mergeStringArrayExcludingDuplicateValues(n.UDP, b.Networks[k].UDP)
-				tcp := mergeStringArrayExcludingDuplicateValues(n.TCP, b.Networks[k].TCP)
-
-				err := mergo.Merge(&n, &b.Networks[k], mergo.WithOverride)
-				if err != nil {
-					return err
-				}
-
-				n.HTTP = http
-				n.HTTPS = https
-				n.UDP = udp
-				n.TCP = tcp
-
-				vcfg.Networks[k] = n
-			}
-
-			if len(b.Networks) > len(vcfg.Networks) {
-				vcfg.Networks = append(vcfg.Networks, b.Networks[len(vcfg.Networks):]...)
-			}
-		}
-
-	}
-
-	return nil
-}
-
-func (vcfg *VCFG) mergeRoutes(b *VCFG) error {
-	if vcfg.Routing == nil {
-		vcfg.Routing = b.Routing
-	} else if b.Routing != nil {
-
-		for k, r := range vcfg.Routing {
-			if len(b.Routing) > k {
-				err := mergo.Merge(&r, &b.Routing[k], mergo.WithOverride)
-				if err != nil {
-					return err
-				}
-
-				vcfg.Routing[k] = r
-			}
-		}
-
-		if len(b.Routing) > len(vcfg.Routing) {
-			vcfg.Routing = append(vcfg.Routing, b.Routing[len(vcfg.Routing):]...)
-		}
-	}
-
-	return nil
-}
-
-func (vcfg *VCFG) mergeNFS(b *VCFG) error {
-	if vcfg.NFS == nil {
-		vcfg.NFS = b.NFS
-	} else if b.NFS != nil {
-
-		for k, n := range vcfg.NFS {
-			if len(b.NFS) > k {
-				err := mergo.Merge(&n, &b.NFS[k], mergo.WithOverride)
-				if err != nil {
-					return err
-				}
-
-				vcfg.NFS[k] = n
-			}
-		}
-
-		if len(b.NFS) > len(vcfg.NFS) {
-			vcfg.NFS = append(vcfg.NFS, b.NFS[len(vcfg.NFS):]...)
-		}
-
-	}
-
-	return nil
-}
-
-func (vcfg *VCFG) mergeLogging(b *VCFG) error {
-	if vcfg.Logging == nil {
-		vcfg.Logging = b.Logging
-	} else if b.Logging != nil {
-
-		for k, p := range vcfg.Logging {
-			if len(b.Logging) > k {
-				cfgs := mergeStringArray(p.Config, b.Logging[k].Config)
-
-				err := mergo.Merge(&p, &b.Logging[k], mergo.WithOverride)
-				if err != nil {
-					return err
-				}
-
-				p.Config = cfgs
-				vcfg.Logging[k] = p
-			}
-		}
-
-		if len(b.Logging) > len(vcfg.Logging) {
-			vcfg.Logging = append(vcfg.Logging, b.Logging[len(vcfg.Logging):]...)
-		}
-
-		for k, r := range vcfg.Logging {
-			err := mergo.Merge(&r, &b.Logging[k], mergo.WithOverride)
-			if err != nil {
-				return err
-			}
-		}
-
-		if len(b.Logging) > len(vcfg.Logging) {
-			vcfg.Logging = append(vcfg.Logging, b.Logging[len(vcfg.Logging):]...)
-		}
-	}
-
-	return nil
 }

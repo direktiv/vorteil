@@ -9,7 +9,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
-	"github.com/vorteil/vorteil/cmd/vorteil/imageutil"
+	"github.com/vorteil/vorteil/pkg/imageutil"
 
 	"github.com/vorteil/vorteil/pkg/elog"
 )

@@ -97,9 +97,6 @@ func NewBuilder(ctx context.Context, args *BuilderArgs) (*Builder, error) {
 	b.defaultMTU = 1500
 	b.log = args.Logger
 
-	progress := b.log.NewProgress("Scanning inputs", "", 0)
-	defer progress.Finish(false)
-
 	err = b.validateArgs(ctx)
 	if err != nil {
 		return nil, err
@@ -109,8 +106,6 @@ func NewBuilder(ctx context.Context, args *BuilderArgs) (*Builder, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	progress.Finish(true)
 
 	return b, nil
 }

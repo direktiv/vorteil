@@ -122,9 +122,16 @@ func (mgr *CLIRemoteManager) flushCache() error {
 }
 
 func (mgr *CLIRemoteManager) update(ctx context.Context) error {
+
 	if !time.Now().After(mgr.nextUpdate) {
 		return nil
 	}
+
+	return mgr.forceUpdate(ctx)
+
+}
+
+func (mgr *CLIRemoteManager) forceUpdate(ctx context.Context) error {
 
 	err := ctx.Err()
 	if err != nil {
@@ -317,7 +324,24 @@ func (mgr *CLIRemoteManager) Get(ctx context.Context, version CalVer) (*ManagedB
 
 	tuple, err := list.BestMatch(version)
 	if err != nil {
-		return nil, err
+		if !strings.Contains(err.Error(), "no match for kernel") {
+			return nil, err
+		}
+
+		e := mgr.forceUpdate(ctx)
+		if e != nil {
+			return nil, e
+		}
+
+		list, e = mgr.List(ctx)
+		if e != nil {
+			return nil, e
+		}
+
+		tuple, e = list.BestMatch(version)
+		if e != nil {
+			return nil, e
+		}
 	}
 
 	if !strings.HasSuffix(tuple.Location, " (cached)") {

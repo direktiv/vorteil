@@ -98,7 +98,7 @@ func build(ctx context.Context, w io.WriteSeeker, cfg *vcfg.VCFG, args *BuildArg
 		return err
 	}
 
-	err = args.Format.Build(ctx, w, vimgBuilder, cfg)
+	err = args.Format.Build(ctx, log, w, vimgBuilder, cfg)
 	if err != nil {
 		return err
 	}

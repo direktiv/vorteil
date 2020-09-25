@@ -79,7 +79,7 @@ func walkFilesystem(pkg vpkg.Reader, files []string, tw *tar.Writer, vprjInclude
 		}
 
 		var mw io.Writer
-		header, err := handleFile(mw, f, path, link, vprjIncluded, vprj, tw)
+		header, err := handleFile(&handleFileArgs{mw: mw, f: f, path: path, link: link, vprjIncluded: vprjIncluded, vprj: vprj, tw: tw})
 		if err != nil {
 			return err
 		}
@@ -102,9 +102,19 @@ func handleSymlink(f vio.File) (string, error) {
 	return link, nil
 }
 
-func handleFile(mw io.Writer, f vio.File, path, link string, vprjIncluded bool, vprj ProjectData, tw *tar.Writer) (*tar.Header, error) {
+type handleFileArgs struct {
+	mw           io.Writer
+	f            vio.File
+	path         string
+	link         string
+	vprjIncluded bool
+	vprj         ProjectData
+	tw           *tar.Writer
+}
 
-	header, err := tar.FileInfoHeader(vio.Info(f), link)
+func handleFile(args *handleFileArgs) (*tar.Header, error) {
+
+	header, err := tar.FileInfoHeader(vio.Info(args.f), args.link)
 	if err != nil {
 		return nil, err
 	}
@@ -112,8 +122,8 @@ func handleFile(mw io.Writer, f vio.File, path, link string, vprjIncluded bool, 
 	var tf *os.File
 	var x bool
 
-	header.Name = strings.TrimPrefix(path, "./")
-	if header.Name == FileName && !vprjIncluded {
+	header.Name = strings.TrimPrefix(args.path, "./")
+	if header.Name == FileName && !args.vprjIncluded {
 
 		tf, err = ioutil.TempFile(os.TempDir(), UnpackTempPattern)
 		if err != nil {
@@ -123,27 +133,27 @@ func handleFile(mw io.Writer, f vio.File, path, link string, vprjIncluded bool, 
 		defer tf.Close()
 		x = true
 
-		mw = io.MultiWriter(tf, tw)
-		vprjIncluded = true
+		args.mw = io.MultiWriter(tf, args.tw)
+		args.vprjIncluded = true
 
 	} else {
-		mw = tw
+		args.mw = args.tw
 	}
 
-	err = tw.WriteHeader(header)
+	err = args.tw.WriteHeader(header)
 	if err != nil {
 		return nil, err
 	}
 
-	if !f.IsDir() {
-		_, err = io.Copy(mw, f)
+	if !args.f.IsDir() {
+		_, err = io.Copy(args.mw, args.f)
 		if err != nil {
 			return nil, err
 		}
 	}
 
 	if x {
-		err = readAndUnmarshalVprj(tf.Name(), &vprj)
+		err = readAndUnmarshalVprj(tf.Name(), &args.vprj)
 		if err != nil {
 			return nil, err
 		}

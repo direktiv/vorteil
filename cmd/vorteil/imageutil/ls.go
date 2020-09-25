@@ -120,13 +120,14 @@ func LS(log elog.View, cmd *cobra.Command, args []string, flagOS bool) error {
 		fpath = "/"
 	}
 	img := args[0]
-
 	iio, ino, err := readLS(log, fpath, img, long, flagOS)
 	if err != nil {
 		return err
 	}
 	defer iio.Close()
-	err = readInodesLS(&lsReader{log: log, iio: iio, ino: ino, long: long, recursive: recursive, all: all, almostAll: almostAll, fpath: fpath})
+	lsReader := lsReader{log: log, iio: iio, ino: ino, long: long, recursive: recursive, all: all, almostAll: almostAll, fpath: fpath}
+
+	err = readInodesLS(&lsReader)
 	if err != nil {
 		return err
 	}

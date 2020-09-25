@@ -109,47 +109,72 @@ type vorteildConf struct {
 
 var ksrc vkern.Manager
 
-func initKernels() error {
+type vorteilConfig struct {
+	kernels string
+	watch   string
+	sources []string
+}
+
+// loadVorteilConfig : Load vorteil config from ~/.vorteild path.
+//	If this path fails to load, load defaults instead.
+//	Return vorteilConfig Objects with loaded config values
+func loadVorteilConfig() (vorteilConfig, error) {
+	var vCfg vorteilConfig
 
 	home, err := homedir.Dir()
 	if err != nil {
-		return err
+		return vCfg, err
 	}
+
 	vorteild := filepath.Join(home, ".vorteild")
 	conf := filepath.Join(vorteild, "conf.toml")
-	var kernels, watch string
-	var sources []string
 
 	confData, err := ioutil.ReadFile(conf)
 	if err != nil {
-		kernels = filepath.Join(vorteild, "kernels")
-		watch = filepath.Join(kernels, "watch")
-		sources = []string{"https://downloads.vorteil.io/kernels"}
+		vCfg.kernels = filepath.Join(vorteild, "kernels")
+		vCfg.watch = filepath.Join(vCfg.kernels, "watch")
+		vCfg.sources = []string{"https://downloads.vorteil.io/kernels"}
 	} else {
 		vconf := new(vorteildConf)
 		err = toml.Unmarshal(confData, vconf)
 		if err != nil {
-			return err
+			return vCfg, err
 		}
-		kernels = vconf.KernelSources.Directory
-		watch = vconf.KernelSources.DropPath
-		sources = vconf.KernelSources.RemoteRepositories
+		vCfg.kernels = vconf.KernelSources.Directory
+		vCfg.watch = vconf.KernelSources.DropPath
+		vCfg.sources = vconf.KernelSources.RemoteRepositories
 	}
 
-	err = os.MkdirAll(kernels, 0777)
+	return vCfg, nil
+}
+
+// mkDirAllSlice - Utils : Create the directories in the 'dirs' slice with permissions of 'perm'
+func mkDirAllSlice(perm os.FileMode, dirs ...string) error {
+	for _, dir := range dirs {
+		err := os.MkdirAll(dir, perm)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func initKernels() error {
+	vCfg, err := loadVorteilConfig()
 	if err != nil {
 		return err
 	}
 
-	err = os.MkdirAll(watch, 0777)
+	err = mkDirAllSlice(0777, vCfg.kernels, vCfg.watch)
 	if err != nil {
 		return err
 	}
 
 	ksrc, err = vkern.CLI(vkern.CLIArgs{
-		Directory:          kernels,
-		DropPath:           watch,
-		RemoteRepositories: sources,
+		Directory:          vCfg.kernels,
+		DropPath:           vCfg.watch,
+		RemoteRepositories: vCfg.sources,
 	}, log)
 	if err != nil {
 		return err

@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-	"github.com/vorteil/vorteil/cmd/vorteil/imageutil"
+	"github.com/vorteil/vorteil/pkg/imageutil"
 	"github.com/vorteil/vorteil/pkg/vdisk"
 	"github.com/vorteil/vorteil/pkg/vpkg"
 )

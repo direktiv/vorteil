@@ -161,12 +161,14 @@ func NewLocalManager(path string) (*LocalManager, error) {
 
 // Get ..
 func (mgr *LocalManager) Get(ctx context.Context, version CalVer) (*ManagedBundle, error) {
+	var tuple *Tuple
+
+	// Get BestMatch
 	list, err := mgr.List(ctx)
-	if err != nil {
-		return nil, err
+	if err == nil {
+		tuple, err = list.BestMatch(version)
 	}
 
-	tuple, err := list.BestMatch(version)
 	if err != nil {
 		return nil, err
 	}
@@ -181,12 +183,12 @@ func (mgr *LocalManager) Get(ctx context.Context, version CalVer) (*ManagedBundl
 	b.bundle, err = NewBundle(f)
 	if err != nil {
 		f.Close()
-		return nil, err
+	} else {
+		b.closer = f
+		b.location = path
 	}
-	b.closer = f
-	b.location = path
 
-	return b, nil
+	return b, err
 
 }
 
@@ -584,17 +586,20 @@ func validateKernelSignature(kernelFile string, signatureFile string) error {
 
 // Get ..
 func (mgr *RemoteManager) Get(ctx context.Context, version CalVer) (*ManagedBundle, error) {
+	var tuple *Tuple
+
+	// Get BestMatch
 	list, err := mgr.List(ctx)
-	if err != nil {
-		return nil, err
+	if err == nil {
+		tuple, err = list.BestMatch(version)
 	}
 
-	tuple, err := list.BestMatch(version)
 	if err != nil {
 		return nil, err
 	}
 
 	if !strings.HasSuffix(tuple.Location, " (cached)") {
+		var chErr error
 		// cache it
 		ch := make(chan error, 1)
 		go func() {
@@ -605,13 +610,12 @@ func (mgr *RemoteManager) Get(ctx context.Context, version CalVer) (*ManagedBund
 			close(ch)
 		}()
 		select {
-		case err = <-ch:
-			if err != nil {
-				return nil, err
-			}
+		case chErr = <-ch:
 		case <-ctx.Done():
-			return nil, ctx.Err()
+			chErr = ctx.Err()
 		}
+
+		return nil, chErr
 	}
 
 	path := filepath.Join(mgr.dir, filenameFromVersion(tuple.Version))
@@ -625,11 +629,12 @@ func (mgr *RemoteManager) Get(ctx context.Context, version CalVer) (*ManagedBund
 	b.bundle, err = NewBundle(f)
 	if err != nil {
 		f.Close()
-		return nil, err
+	} else {
+		b.closer = f
+		b.location = path
 	}
-	b.closer = f
-	b.location = path
-	return b, nil
+
+	return b, err
 }
 
 // List ..
@@ -674,13 +679,14 @@ func NewCompoundManager(mgrs ...Manager) (*CompoundManager, error) {
 
 // Get ..
 func (mgr *CompoundManager) Get(ctx context.Context, version CalVer) (*ManagedBundle, error) {
+	var tuple *Tuple
 
+	// Get BestMatch
 	list, err := mgr.List(ctx)
-	if err != nil {
-		return nil, err
+	if err == nil {
+		tuple, err = list.BestMatch(version)
 	}
 
-	tuple, err := list.BestMatch(version)
 	if err != nil {
 		return nil, err
 	}

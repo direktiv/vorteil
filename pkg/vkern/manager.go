@@ -471,11 +471,10 @@ func (mgr *RemoteManager) get(version CalVer) error {
 
 	var success bool
 	defer func() {
-		if success {
-			return
+		if !success {
+			os.Remove(kernelFile)
+			os.Remove(signatureFile)
 		}
-		os.Remove(kernelFile)
-		os.Remove(signatureFile)
 	}()
 
 	ch, err := grab.GetBatch(2, mgr.dir, kernelURL, signatureURL)

@@ -145,70 +145,59 @@ func init() {
 	f.BoolVar(&flagShell, "shell", false, "add a busybox shell environment to the image")
 }
 
-var decompileCmd = &cobra.Command{
-	Use:   "decompile IMAGE OUTPUT",
-	Short: "Create a usable project directory from a Vorteil disk vdecompiler.",
-	Args:  cobra.ExactArgs(2),
-	Run: func(cmd *cobra.Command, args []string) {
-		srcPath := args[0]
-		outPath := args[1]
-		decompile(srcPath, outPath)
-	},
+func generateImageCommand(use string, short string, args cobra.PositionalArgs, run func(cmd *cobra.Command, args []string)) *cobra.Command {
+	return &cobra.Command{
+		Use:   use,
+		Short: short,
+		Args:  args,
+		Run:   run,
+	}
 }
+
+var decompileCmd = generateImageCommand("decompile IMAGE OUTPUT", "Create a usable project directory from a Vorteil disk vdecompiler.", cobra.ExactArgs(2), func(cmd *cobra.Command, args []string) {
+	srcPath := args[0]
+	outPath := args[1]
+	decompile(srcPath, outPath)
+})
 
 func init() {
 	f := decompileCmd.Flags()
 	f.BoolVarP(&flagTouched, "touched", "t", false, "Only extract files that have been 'touched'.")
 }
 
-var catCmd = &cobra.Command{
-	Use:   "cat IMAGE FILEPATH...",
-	Short: "Concatenate files and print on the standard output.",
-	Args:  cobra.MinimumNArgs(2),
-	Run: func(cmd *cobra.Command, args []string) {
-		err := imageutil.Cat(args, flagOS)
-		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
-		}
-	},
-}
+var catCmd = generateImageCommand("cat IMAGE FILEPATH...", "Concatenate files and print on the standard output.", cobra.MinimumNArgs(2), func(cmd *cobra.Command, args []string) {
+	err := imageutil.Cat(args, flagOS)
+	if err != nil {
+		log.Errorf("%v", err)
+		os.Exit(1)
+	}
+})
 
 func init() {
 	f := catCmd.Flags()
 	f.BoolVarP(&flagOS, "vpartition", "p", false, "Read files from the Vorteil OS partition instead of the file-system partition.")
 }
 
-var cpCmd = &cobra.Command{
-	Use:   "cp IMAGE SRC_FILEPATH DEST_FILEPATH",
-	Short: "Copy files and directories from an image to your system.",
-	Args:  cobra.ExactArgs(3),
-	Run: func(cmd *cobra.Command, args []string) {
-		err := imageutil.CP(log, args, flagOS)
-		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
-		}
-	},
-}
+var cpCmd = generateImageCommand("cp IMAGE SRC_FILEPATH DEST_FILEPATH", "Copy files and directories from an image to your system.", cobra.ExactArgs(3), func(cmd *cobra.Command, args []string) {
+	err := imageutil.CP(log, args, flagOS)
+	if err != nil {
+		log.Errorf("%v", err)
+		os.Exit(1)
+	}
+})
 
 func init() {
 	f := cpCmd.Flags()
 	f.BoolVarP(&flagOS, "vpartition", "p", false, "Read files from the Vorteil OS partition instead of the file-system partition.")
 }
 
-var duCmd = &cobra.Command{
-	Use:   "du IMAGE [FILEPATH]",
-	Short: "Calculate file space usage.",
-	Args:  cobra.RangeArgs(1, 2),
-	Run: func(cmd *cobra.Command, args []string) {
-		err := imageutil.DU(log, cmd, args)
-		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
-		}
-	},
-}
+var duCmd = generateImageCommand("du IMAGE [FILEPATH]", "Calculate file space usage.", cobra.RangeArgs(1, 2), func(cmd *cobra.Command, args []string) {
+	err := imageutil.DU(log, cmd, args)
+	if err != nil {
+		log.Errorf("%v", err)
+		os.Exit(1)
+	}
+})
 
 func init() {
 	f := duCmd.Flags()
@@ -218,80 +207,55 @@ func init() {
 	f.StringP("numbers", "n", "short", "Number printing format")
 }
 
-var formatCmd = &cobra.Command{
-	Use:   "format IMAGE",
-	Short: "Image file format information.",
-	Args:  cobra.ExactArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
-		err := imageutil.Format(log, args)
-		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
-		}
-	},
-}
+var formatCmd = generateImageCommand("format IMAGE", "Image file format information.", cobra.ExactArgs(1), func(cmd *cobra.Command, args []string) {
+	err := imageutil.Format(log, args)
+	if err != nil {
+		log.Errorf("%v", err)
+		os.Exit(1)
+	}
+})
 
-var fsCmd = &cobra.Command{
-	Use:   "fs IMAGE",
-	Short: "Summarize the information in the main file-system's metadata.",
-	Args:  cobra.ExactArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
-		err := imageutil.FS(log, cmd, args)
-		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
-		}
-	},
-}
+var fsCmd = generateImageCommand("fs IMAGE", "Summarize the information in the main file-system's metadata.", cobra.ExactArgs(1), func(cmd *cobra.Command, args []string) {
+	err := imageutil.FS(log, cmd, args)
+	if err != nil {
+		log.Errorf("%v", err)
+		os.Exit(1)
+	}
+})
 
 func init() {
 	f := fsCmd.Flags()
 	f.StringP("numbers", "n", "short", "Number printing format")
 }
 
-var fsimgCmd = &cobra.Command{
-	Use:   "fsimg IMAGE DEST",
-	Short: "Copy the image's file-system partition.",
-	Args:  cobra.ExactArgs(2),
-	Run: func(cmd *cobra.Command, args []string) {
-		err := imageutil.FSImg(cmd, args)
-		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
-		}
-	},
-}
+var fsimgCmd = generateImageCommand("fsimg IMAGE DEST", "Copy the image's file-system partition.", cobra.ExactArgs(2), func(cmd *cobra.Command, args []string) {
+	err := imageutil.FSImg(cmd, args)
+	if err != nil {
+		log.Errorf("%v", err)
+		os.Exit(1)
+	}
+})
 
-var gptCmd = &cobra.Command{
-	Use:   "gpt IMAGE",
-	Short: "Summarize the information in the GUID Partition Table.",
-	Args:  cobra.ExactArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
-		err := imageutil.GPT(log, cmd, args)
-		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
-		}
-	},
-}
+var gptCmd = generateImageCommand("gpt IMAGE", "Summarize the information in the GUID Partition Table.", cobra.ExactArgs(1), func(cmd *cobra.Command, args []string) {
+	err := imageutil.GPT(log, cmd, args)
+	if err != nil {
+		log.Errorf("%v", err)
+		os.Exit(1)
+	}
+})
 
 func init() {
 	f := gptCmd.Flags()
 	f.StringP("numbers", "n", "short", "Number printing format")
 }
 
-var lsCmd = &cobra.Command{
-	Use:   "ls IMAGE [FILEPATH]",
-	Short: "List directory contents.",
-	Args:  cobra.RangeArgs(1, 2),
-	Run: func(cmd *cobra.Command, args []string) {
-		err := imageutil.LS(log, cmd, args, flagOS)
-		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
-		}
-	},
-}
+var lsCmd = generateImageCommand("ls IMAGE [FILEPATH]", "List directory contents.", cobra.RangeArgs(1, 2), func(cmd *cobra.Command, args []string) {
+	err := imageutil.LS(log, cmd, args, flagOS)
+	if err != nil {
+		log.Errorf("%v", err)
+		os.Exit(1)
+	}
+})
 
 func init() {
 	f := lsCmd.Flags()
@@ -303,18 +267,13 @@ func init() {
 	f.StringP("numbers", "n", "short", "Number printing format")
 }
 
-var md5Cmd = &cobra.Command{
-	Use:   "md5 IMAGE FILEPATH",
-	Short: "Compute MD5 checksum for a file on an vdecompiler.",
-	Args:  cobra.ExactArgs(2),
-	Run: func(cmd *cobra.Command, args []string) {
-		err := imageutil.MD5(log, args, flagOS)
-		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
-		}
-	},
-}
+var md5Cmd = generateImageCommand("md5 IMAGE FILEPATH", "Compute MD5 checksum for a file on an vdecompiler.", cobra.ExactArgs(2), func(cmd *cobra.Command, args []string) {
+	err := imageutil.MD5(log, args, flagOS)
+	if err != nil {
+		log.Errorf("%v", err)
+		os.Exit(1)
+	}
+})
 
 func init() {
 	f := md5Cmd.Flags()
@@ -322,18 +281,13 @@ func init() {
 	f.StringP("numbers", "n", "short", "Number printing format")
 }
 
-var statCmd = &cobra.Command{
-	Use:   "stat IMAGE [FILEPATH]",
-	Short: "Print detailed metadata relating to the file at FILE_PATH.",
-	Args:  cobra.RangeArgs(1, 2),
-	Run: func(cmd *cobra.Command, args []string) {
-		err := imageutil.Stat(log, cmd, args, flagOS)
-		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
-		}
-	},
-}
+var statCmd = generateImageCommand("stat IMAGE [FILEPATH]", "Print detailed metadata relating to the file at FILE_PATH.", cobra.RangeArgs(1, 2), func(cmd *cobra.Command, args []string) {
+	err := imageutil.Stat(log, cmd, args, flagOS)
+	if err != nil {
+		log.Errorf("%v", err)
+		os.Exit(1)
+	}
+})
 
 func init() {
 	f := statCmd.Flags()
@@ -341,18 +295,13 @@ func init() {
 	f.StringP("numbers", "n", "short", "Number printing format")
 }
 
-var treeCmd = &cobra.Command{
-	Use:   "tree IMAGE [FILEPATH]",
-	Short: "List contents of directories in a tree-like format.",
-	Args:  cobra.RangeArgs(1, 2),
-	Run: func(cmd *cobra.Command, args []string) {
-		err := imageutil.Tree(log, args, flagOS)
-		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
-		}
-	},
-}
+var treeCmd = generateImageCommand("tree IMAGE [FILEPATH]", "List contents of directories in a tree-like format.", cobra.RangeArgs(1, 2), func(cmd *cobra.Command, args []string) {
+	err := imageutil.Tree(log, args, flagOS)
+	if err != nil {
+		log.Errorf("%v", err)
+		os.Exit(1)
+	}
+})
 
 func init() {
 	f := treeCmd.Flags()

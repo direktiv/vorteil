@@ -104,7 +104,6 @@ func commandInit() {
 	projectsCmd.AddCommand(convertContainerCmd)
 	projectsCmd.AddCommand(importSharedObjectsCmd)
 
-	provisionersCmd.AddCommand(provisionersDescribeCmd)
 	provisionersCmd.AddCommand(provisionersNewCmd)
 
 	provisionersNewCmd.AddCommand(provisionersNewAmazonEC2Cmd)

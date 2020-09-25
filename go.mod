@@ -33,6 +33,7 @@ require (
 	github.com/docker/go-events v0.0.0-20190806004212-e31b211e4f1c // indirect
 	github.com/fatih/color v1.9.0
 	github.com/firecracker-microvm/firecracker-go-sdk v0.21.0
+	github.com/gobuffalo/packr/v2 v2.8.0
 	github.com/gobwas/glob v0.2.3
 	github.com/gogo/googleapis v1.4.0 // indirect
 	github.com/google/go-containerregistry v0.1.2

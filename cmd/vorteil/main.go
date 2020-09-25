@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -11,15 +10,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/mitchellh/go-homedir"
-	"github.com/sisatech/toml"
 	"github.com/spf13/pflag"
 	"github.com/vorteil/vorteil/pkg/vcfg"
 	"github.com/vorteil/vorteil/pkg/vdecompiler"
 	"github.com/vorteil/vorteil/pkg/vdisk"
-	"github.com/vorteil/vorteil/pkg/vimg"
 	"github.com/vorteil/vorteil/pkg/vio"
-	"github.com/vorteil/vorteil/pkg/vkern"
 	"github.com/vorteil/vorteil/pkg/vpkg"
 	"github.com/vorteil/vorteil/pkg/vproj"
 )
@@ -97,142 +92,84 @@ func parseImageFormat(s string) (vdisk.Format, error) {
 	return format, nil
 }
 
-type vorteildConf struct {
-	KernelSources struct {
-		Directory          string   `toml:"directory"`
-		DropPath           string   `toml:"drop-path"`
-		RemoteRepositories []string `toml:"remote-repositories"`
-	} `toml:"kernel-sources"`
-}
+type sourceType string
 
-var ksrc vkern.Manager
+const (
+	sourceURL     sourceType = "URL"
+	sourceFile               = "File"
+	sourceDir                = "Dir"
+	sourceINVALID            = "INVALID"
+)
 
-func initKernels() error {
+func getSourceType(src string) (sourceType, error) {
+	var err error
+	var fi os.FileInfo
 
-	home, err := homedir.Dir()
-	if err != nil {
-		return err
-	}
-	vorteild := filepath.Join(home, ".vorteild")
-	conf := filepath.Join(vorteild, "conf.toml")
-	var kernels, watch string
-	var sources []string
-
-	confData, err := ioutil.ReadFile(conf)
-	if err != nil {
-		kernels = filepath.Join(vorteild, "kernels")
-		watch = filepath.Join(kernels, "watch")
-		sources = []string{"https://downloads.vorteil.io/kernels"}
-	} else {
-		vconf := new(vorteildConf)
-		err = toml.Unmarshal(confData, vconf)
-		if err != nil {
-			return err
-		}
-		kernels = vconf.KernelSources.Directory
-		watch = vconf.KernelSources.DropPath
-		sources = vconf.KernelSources.RemoteRepositories
-	}
-
-	err = os.MkdirAll(kernels, 0777)
-	if err != nil {
-		return err
-	}
-
-	err = os.MkdirAll(watch, 0777)
-	if err != nil {
-		return err
-	}
-
-	ksrc, err = vkern.CLI(vkern.CLIArgs{
-		Directory:          kernels,
-		DropPath:           watch,
-		RemoteRepositories: sources,
-	}, log)
-	if err != nil {
-		return err
-	}
-
-	vkern.Global = ksrc
-	vimg.GetKernel = ksrc.Get
-	vimg.GetLatestKernel = func(ctx context.Context) (vkern.CalVer, error) {
-		s, err := ksrc.Latest()
-		if err != nil {
-			return vkern.CalVer(""), err
-		}
-		k, err := vkern.Parse(s)
-		if err != nil {
-			return vkern.CalVer(""), err
-		}
-		return k, nil
-	}
-
-	return nil
-
-}
-
-func getPackageBuilder(argName, src string) (vpkg.Builder, error) {
-	var isURL bool
-
-	var pkgr vpkg.Reader
-	var pkgb vpkg.Builder
-
-	// check if src is a url
+	// Check if Source is a URL
 	if _, err := url.ParseRequestURI(src); err == nil {
 		if u, uErr := url.Parse(src); uErr == nil && u.Scheme != "" && u.Host != "" && u.Path != "" {
-			isURL = true
+			return sourceURL, nil
 		}
 	}
 
-	// If src is a url, stream build package from remote src
-	if isURL {
-		resp, err := http.Get(src)
-		if err != nil {
-			resp.Body.Close()
-			return nil, err
-		}
-
-		pkgr, err = vpkg.Load(resp.Body)
-		if err != nil {
-			resp.Body.Close()
-			return nil, err
-		}
-
-		pkgb, err = vpkg.NewBuilderFromReader(pkgr)
-		if err != nil {
-			resp.Body.Close()
-			pkgr.Close()
-			return nil, err
-		}
-		return pkgb, nil
-	}
-
-	// check for a package file
-	fi, err := os.Stat(src)
+	// Check if Source is a file or dir
+	fi, err = os.Stat(src)
 	if !os.IsNotExist(err) && (fi != nil && !fi.IsDir()) {
-		f, err := os.Open(src)
-		if err != nil {
-			if !os.IsNotExist(err) {
-				return nil, err
-			}
-		} else {
-			pkgr, err = vpkg.Load(f)
-			if err != nil {
-				f.Close()
-				return nil, err
-			}
-
-			pkgb, err = vpkg.NewBuilderFromReader(pkgr)
-			if err != nil {
-				pkgr.Close()
-				f.Close()
-				return nil, err
-			}
-			return pkgb, nil
-		}
+		return sourceFile, nil
+	} else if !os.IsNotExist(err) && (fi != nil && fi.IsDir()) {
+		return sourceDir, nil
 	}
 
-	// check for a project directory
+	// Source is unknown and thus is invalid
+	return sourceINVALID, err
+}
+
+func getBuilderURL(argName, src string) (vpkg.Builder, error) {
+	resp, err := http.Get(src)
+	if err != nil {
+		resp.Body.Close()
+		return nil, err
+	}
+
+	pkgr, err := vpkg.Load(resp.Body)
+	if err != nil {
+		resp.Body.Close()
+		return nil, err
+	}
+
+	pkgb, err := vpkg.NewBuilderFromReader(pkgr)
+	if err != nil {
+		resp.Body.Close()
+		pkgr.Close()
+		return nil, err
+	}
+	return pkgb, nil
+}
+
+func getBuilderFile(argName, src string) (vpkg.Builder, error) {
+	f, err := os.Open(src)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return nil, err
+		}
+		return nil, fmt.Errorf("failed to resolve %s '%s'", argName, src)
+	}
+
+	pkgr, err := vpkg.Load(f)
+	if err != nil {
+		f.Close()
+		return nil, err
+	}
+
+	pkgb, err := vpkg.NewBuilderFromReader(pkgr)
+	if err != nil {
+		pkgr.Close()
+		f.Close()
+	}
+	return pkgb, err
+}
+
+func getBuilderDir(argName, src string) (vpkg.Builder, error) {
 	var ptgt *vproj.Target
 	path, target := vproj.Split(src)
 	proj, err := vproj.LoadProject(path)
@@ -240,24 +177,43 @@ func getPackageBuilder(argName, src string) (vpkg.Builder, error) {
 		if !os.IsNotExist(err) {
 			return nil, err
 		}
-	} else {
-		ptgt, err = proj.Target(target)
-		if err != nil {
-			return nil, err
-		}
-
-		pkgb, err = ptgt.NewBuilder()
-		if err != nil {
-			return nil, err
-		}
-
-		return pkgb, nil
+		return nil, fmt.Errorf("failed to resolve %s '%s'", argName, src)
 	}
 
-	// TODO: check for urls
+	ptgt, err = proj.Target(target)
+	if err != nil {
+		return nil, err
+	}
+
+	pkgb, err := ptgt.NewBuilder()
+	return pkgb, err
+}
+
+func getPackageBuilder(argName, src string) (vpkg.Builder, error) {
+	var err error
+	var pkgB vpkg.Builder
+	sType, err := getSourceType(src)
+	if err != nil {
+		return nil, err
+	}
+
+	switch sType {
+	case sourceURL:
+		pkgB, err = getBuilderURL(argName, src)
+	case sourceFile:
+		pkgB, err = getBuilderFile(argName, src)
+	case sourceDir:
+		pkgB, err = getBuilderDir(argName, src)
+	case sourceINVALID:
+		fallthrough
+	default:
+		err = fmt.Errorf("failed to resolve %s '%s'", argName, src)
+	}
+
+	return pkgB, err
+
 	// TODO: check for vrepo strings
 
-	return nil, fmt.Errorf("failed to resolve %s '%s'", argName, src)
 }
 
 var (
@@ -278,50 +234,113 @@ func addModifyFlags(f *pflag.FlagSet) {
 	vcfgFlags.AddTo(f)
 }
 
-func modifyPackageBuilder(b vpkg.Builder) error {
+// mergeFlagVCFGFiles : Merge values from from VCFG files stored in 'flagVCFG', and then merge vcfg flag values with overrideVCFG
+func mergeVCFGFlagValues(b *vpkg.Builder) error {
+	var err error
+	var f vio.File
+	var cfg *vcfg.VCFG
 
-	// vcfg flags
-	err := vcfgFlags.Validate()
+	// Iterate over vcfg paths stored in flagVCFG, read vcfg files and merge into b
+	for _, path := range flagVCFG {
+		f, err = vio.Open(path)
+		if err != nil {
+			return err
+		}
+
+		cfg, err = vcfg.LoadFile(f)
+		if err != nil {
+			return err
+		}
+
+		err = (*b).MergeVCFG(cfg)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Merge overrideVCFG object containing flag values into b
+	err = (*b).MergeVCFG(&overrideVCFG)
+	return err
+}
+
+func modifyPackageBuilder(b vpkg.Builder) error {
+	var err error
+	var f vio.File
+
+	err = vcfgFlags.Validate()
 	if err != nil {
 		return err
 	}
 
-	// modify
 	if flagIcon != "" {
-		f, err := vio.LazyOpen(flagIcon)
+		f, err = vio.LazyOpen(flagIcon)
 		if err != nil {
 			return err
 		}
 		b.SetIcon(f)
 	}
 
-	for _, path := range flagVCFG {
-		f, err := vio.Open(path)
-		if err != nil {
-			return err
-		}
-
-		cfg, err := vcfg.LoadFile(f)
-		if err != nil {
-			return err
-		}
-
-		err = b.MergeVCFG(cfg)
-		if err != nil {
-			return err
-		}
-	}
-
-	err = b.MergeVCFG(&overrideVCFG)
+	err = mergeVCFGFlagValues(&b)
 	if err != nil {
 		return err
 	}
 
 	err = handleFileInjections(b)
+	return err
+}
+
+func createSymlinkCallback(iio *vdecompiler.IO, inode *vdecompiler.Inode, dpath string) func() error {
+	return func() error {
+		rdr, err := iio.InodeReader(inode)
+		if err != nil {
+			return err
+		}
+		data, err := ioutil.ReadAll(rdr)
+		if err != nil {
+			return err
+		}
+
+		err = os.Symlink(string(string(data)), dpath)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+}
+
+func copyInodeToRegularFile(iio *vdecompiler.IO, inode *vdecompiler.Inode, dpath string) error {
+	var err error
+	var f *os.File
+	var rdr io.Reader
+
+	err = utilFileNotExists(dpath)
 	if err != nil {
 		return err
 	}
 
+	f, err = os.Create(dpath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	rdr, err = iio.InodeReader(inode)
+	if err != nil {
+		return err
+	}
+
+	_, err = io.CopyN(f, rdr, int64(inode.Fullsize()))
+	return err
+}
+
+func utilFileNotExists(fpath string) error {
+	_, err := os.Stat(fpath)
+	if !os.IsNotExist(err) {
+		if err == nil {
+			err = fmt.Errorf("file already exists: %s", fpath)
+		}
+		return err
+	}
 	return nil
 }
 
@@ -355,6 +374,7 @@ func decompile(srcPath, outPath string) {
 
 	var recurse func(int, string, string) error
 	recurse = func(ino int, rpath string, dpath string) error {
+		var entries []*vdecompiler.DirectoryEntry
 
 		inode, err := iio.ResolveInode(ino)
 		if err != nil {
@@ -363,7 +383,7 @@ func decompile(srcPath, outPath string) {
 
 		if flagTouched && inode.LastAccessTime == 0 && !inode.IsDirectory() && rpath != "/" {
 			log.Printf("skipping untouched object: %s", rpath)
-			return nil
+			goto DONE
 		}
 
 		counter++
@@ -371,72 +391,29 @@ func decompile(srcPath, outPath string) {
 		log.Printf("copying %s", rpath)
 
 		if inode.IsRegularFile() {
-			fi, err = os.Stat(dpath)
-			if !os.IsNotExist(err) {
-				if err == nil {
-					return fmt.Errorf("file already exists: %s", dpath)
-				}
-				return err
-			}
-
-			f, err := os.Create(dpath)
-			if err != nil {
-				return err
-			}
-			defer f.Close()
-
-			rdr, err := iio.InodeReader(inode)
-			if err != nil {
-				return err
-			}
-
-			_, err = io.CopyN(f, rdr, int64(inode.Fullsize()))
-			if err != nil {
-				return err
-			}
-			return nil
+			err = copyInodeToRegularFile(iio, inode, dpath)
+			goto DONE
 		}
 
 		if inode.IsSymlink() {
-
-			symlinkCallbacks = append(symlinkCallbacks, func() error {
-				rdr, err := iio.InodeReader(inode)
-				if err != nil {
-					return err
-				}
-				data, err := ioutil.ReadAll(rdr)
-				if err != nil {
-					return err
-				}
-
-				err = os.Symlink(string(string(data)), dpath)
-				if err != nil {
-					return err
-				}
-				return nil
-			})
-			return nil
+			symlinkCallbacks = append(symlinkCallbacks, createSymlinkCallback(iio, inode, dpath))
+			goto DONE
 		}
 
 		if !inode.IsDirectory() {
 			log.Warnf("skipping abnormal file: %s", rpath)
-			return nil
+			goto DONE
 		}
 
-		fi, err = os.Stat(dpath)
-		if !os.IsNotExist(err) {
+		// INODE IS DIR
+		err = utilFileNotExists(dpath)
+		if err == nil {
+			err = os.MkdirAll(dpath, 0777)
 			if err == nil {
-				return fmt.Errorf("file already exists: %s", dpath)
+				entries, err = iio.Readdir(inode)
 			}
-			return err
 		}
 
-		err = os.MkdirAll(dpath, 0777)
-		if err != nil {
-			return err
-		}
-
-		entries, err := iio.Readdir(inode)
 		if err != nil {
 			return err
 		}
@@ -451,7 +428,8 @@ func decompile(srcPath, outPath string) {
 			}
 		}
 
-		return nil
+	DONE:
+		return err
 	}
 
 	ino, err := iio.ResolvePathToInodeNo(fpath)

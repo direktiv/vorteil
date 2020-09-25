@@ -1,15 +1,13 @@
 package vio
 
 import (
-	"archive/tar"
-	"bytes"
-	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -32,6 +30,8 @@ type ArchiveFunc func(path string, f File) error
 // that (e.g. "./a").
 type WalkFunc func(path string, f File) error
 
+// WalkNodeFunc is the type of function called for each node
+// visited by FileTree.WalkNode.
 type WalkNodeFunc func(path string, n *TreeNode) error
 
 // ErrSkip can be passed as the result from a WalkFunc to
@@ -95,192 +95,6 @@ type FileTree interface {
 	NodeCount() int
 }
 
-var errCorruptArchive = errors.New("corrupt archive data")
-
-// LoadArchive reads a stream of data created by the
-// FileTree.Archive function and loads it as a new FileTree.
-// This can be used for storing FileTrees or transferring
-// them over the network.
-//
-// LoadArchive loads the FileTree using lazy loading, and
-// does not need to cache the entire contents of r within
-// memory.
-func LoadArchive(r io.Reader) (FileTree, error) {
-
-	hdr := new(archiveHeader)
-	err := binary.Read(r, binary.LittleEndian, hdr)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read vtree archive header: %w", err)
-	}
-
-	if hdr.Magic != magicNumber {
-		err = errors.New("not a vtree archive")
-		return nil, err
-	}
-
-	l := hdr.MetaLen
-	dif := 512 - l%512
-
-	buf := new(bytes.Buffer)
-	_, err = io.CopyN(buf, r, int64(l))
-	if err != nil {
-		return nil, err
-	}
-
-	_, err = io.CopyN(ioutil.Discard, r, int64(dif))
-	if err != nil {
-		return nil, err
-	}
-
-	data := buf.Bytes()
-	tr := tar.NewReader(r)
-	m := make(map[string]interface{})
-	err = json.Unmarshal(data, &m)
-	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal vtree manifest: %w -- archive corrupt or version incompatible", err)
-	}
-
-	var reconstructNode func(parent *TreeNode, x map[string]interface{}) (*TreeNode, error)
-	reconstructNode = func(parent *TreeNode, x map[string]interface{}) (*TreeNode, error) {
-		v, ok := x["fi"]
-		if !ok {
-			return nil, errCorruptArchive
-		}
-
-		data, err = json.Marshal(v)
-		if err != nil {
-			return nil, err
-		}
-
-		fi := new(fi)
-		err = json.Unmarshal(data, fi)
-		if err != nil {
-			return nil, err
-		}
-
-		if fi.Size < 0 {
-			return nil, fmt.Errorf("object '%s' had non zero size", filepath.Join(parent.path(), fi.Name))
-		}
-
-		openFn := func(parentPath string) func() (io.Reader, error) {
-			return func() (io.Reader, error) {
-				path := parentPath + "/" + fi.Name
-
-				for {
-					h, err := tr.Next()
-					if err != nil {
-						return nil, err
-					}
-
-					if h.Name == path {
-						if h.Linkname != "" {
-							return strings.NewReader(h.Linkname), nil
-						}
-						return tr, nil
-					}
-				}
-			}
-		}
-
-		closeFn := func() error {
-			return nil
-		}
-
-		parentPath := "."
-		if parent != nil {
-			parentPath = parent.path()
-		}
-
-		var rc io.ReadCloser
-		if fi.IsSymlink && fi.Symlink != "" {
-			rc = ioutil.NopCloser(strings.NewReader(fi.Symlink))
-		} else {
-			rc = LazyReadCloser(openFn(parentPath), closeFn)
-		}
-
-		f := CustomFile(CustomFileArgs{
-			Name:               fi.Name,
-			Size:               fi.Size,
-			ModTime:            fi.ModTime,
-			IsDir:              fi.IsDir,
-			IsSymlink:          fi.IsSymlink,
-			IsSymlinkNotCached: fi.Symlink == "",
-			Symlink:            fi.Symlink,
-			ReadCloser:         rc,
-		})
-
-		n := &TreeNode{
-			File:   f,
-			Parent: parent,
-		}
-
-		// load children
-		v, ok = x["children"]
-		if !ok {
-			return nil, errCorruptArchive
-		}
-
-		if v != nil {
-			slice, ok := v.([]interface{})
-			if !ok {
-				err = errCorruptArchive
-				return nil, err
-			}
-
-			for _, elem := range slice {
-				data, err = json.Marshal(elem)
-				if err != nil {
-					return nil, err
-				}
-
-				y := make(map[string]interface{})
-				err = json.Unmarshal(data, &y)
-				if err != nil {
-					return nil, err
-				}
-
-				z, err := reconstructNode(n, y)
-				if err != nil {
-					return nil, err
-				}
-
-				n.Children = append(n.Children, z)
-			}
-		}
-
-		return n, nil
-
-	}
-
-	root, err := reconstructNode(nil, m)
-	if err != nil {
-		return nil, fmt.Errorf("failed to reconstruct vtree node: %w -- archive corrupt or version incompatible", err)
-	}
-
-	t := &tree{
-		root: root,
-	}
-
-	if closer, ok := r.(io.Closer); ok {
-		t.closeFunc = func() error {
-			defer closer.Close()
-			_, err := io.Copy(ioutil.Discard, r)
-			if err != nil {
-				return err
-			}
-
-			err = closer.Close()
-			if err != nil {
-				return err
-			}
-
-			return nil
-		}
-	}
-
-	return t, nil
-}
-
 type tree struct {
 	root       *TreeNode
 	lock       sync.Mutex
@@ -291,12 +105,24 @@ type tree struct {
 	nodeCount  int
 }
 
+// TreeNode is the structure that all nodes in a FileTree are built on.
 type TreeNode struct {
 	File               File
 	Parent             *TreeNode
 	Children           []*TreeNode
 	NodeSequenceNumber int64
 	Links              int
+}
+
+func (n *TreeNode) Path() string {
+
+	if n.Parent == nil || n.Parent == n {
+		return "/"
+	}
+
+	s := n.Parent.Path()
+	return path.Join(s, n.File.Name())
+
 }
 
 type fi struct {
@@ -308,6 +134,7 @@ type fi struct {
 	ModTime   time.Time
 }
 
+// MarshalJSON implements json.Marshaler.
 func (n *TreeNode) MarshalJSON() ([]byte, error) {
 
 	if n.File.Size() < 0 {
@@ -335,31 +162,30 @@ func (n *TreeNode) MarshalJSON() ([]byte, error) {
 
 func (n *TreeNode) path() string {
 
-	if n.Parent == nil {
-		return n.File.Name()
+	if n.Path() == "/" {
+		return "."
 	}
 
-	if n.Parent == n {
-		return n.File.Name()
+	return "." + n.Path()
+
+}
+
+func splitPath(path string) (next, rest string) {
+
+	strs := strings.SplitN(path, "/", 2)
+	next = strs[0]
+	if len(strs) == 2 {
+		rest = strs[1]
 	}
 
-	p := filepath.Join(n.Parent.path(), n.File.Name())
-	p = "./" + p
-	p = filepath.ToSlash(p)
-
-	return p
+	return next, rest
 
 }
 
 func (n *TreeNode) mapIn(path string, f File) error {
 
 	var err error
-	var next, rest string
-	strs := strings.SplitN(path, "/", 2)
-	next = strs[0]
-	if len(strs) == 2 {
-		rest = strs[1]
-	}
+	next, rest := splitPath(path)
 
 	newNode := &TreeNode{
 		Parent:   n,
@@ -370,66 +196,52 @@ func (n *TreeNode) mapIn(path string, f File) error {
 		newNode.File = f
 	} else {
 		newNode.File = CustomFile(CustomFileArgs{
-			Name:       next,
-			IsDir:      true,
-			ModTime:    f.ModTime(), // really?
-			Size:       0,
-			ReadCloser: ioutil.NopCloser(strings.NewReader("")),
+			Name:    next,
+			IsDir:   true,
+			ModTime: f.ModTime(),
 		})
-	}
-
-	l := len(n.Children)
-
-	k := sort.Search(l, func(i int) bool {
-		return next <= n.Children[i].File.Name()
-	})
-
-	if k == l {
-		// append new node
-		if rest != "" {
-			err = newNode.mapIn(rest, f)
-			if err != nil {
-				return err
-			}
-		}
-		n.Children = append(n.Children, newNode)
-		return nil
-	}
-
-	child := n.Children[k]
-	if next == child.File.Name() {
-		if child.File.IsDir() && newNode.File.IsDir() {
-			// merge
-			if rest != "" {
-				err = child.mapIn(rest, f)
-				if err != nil {
-					return err
-				}
-			}
-		} else {
-			// replace
-			err = child.walk(func(path string, f File) error {
-				return f.Close()
-			})
-			if err != nil {
-				return err
-			}
-
-			n.Children[k] = newNode
-		}
-
-		return nil
-	}
-
-	// insert
-	if rest != "" {
 		err = newNode.mapIn(rest, f)
 		if err != nil {
 			return err
 		}
 	}
-	n.Children = append(n.Children[:k],
-		append([]*TreeNode{newNode}, n.Children[k:]...)...)
+
+	before, selected, after := n.sliceChildren(next)
+
+	if selected != nil {
+		if selected.File.IsDir() && newNode.File.IsDir() {
+			// merge
+			if rest != "" {
+				err = selected.mapIn(rest, f)
+			}
+			return err
+		}
+
+		// replace
+		err := selected.close()
+		if err != nil {
+			return err
+		}
+	}
+
+	// insert
+	n.Children = append(before, append([]*TreeNode{newNode}, after...)...)
+	return nil
+
+}
+
+func (n *TreeNode) mergeTree(children []*TreeNode) error {
+
+	for _, child := range children {
+
+		err := n.mapInSubTree(child.File.Name(), &tree{
+			root: child,
+		})
+		if err != nil {
+			return err
+		}
+
+	}
 
 	return nil
 
@@ -438,140 +250,98 @@ func (n *TreeNode) mapIn(path string, f File) error {
 func (n *TreeNode) mapInSubTree(path string, sub FileTree) error {
 
 	var err error
-	var next, rest string
-	strs := strings.SplitN(path, "/", 2)
-	next = strs[0]
-	if len(strs) == 2 {
-		next = strs[1]
-	}
+	next, rest := splitPath(path)
 
 	var newNode *TreeNode
+
 	if rest == "" {
 		newNode = sub.(*tree).root
 	} else {
-		data := ioutil.NopCloser(strings.NewReader(""))
-		var mt time.Time
-		mt, err = time.ParseInLocation(time.RFC3339, "1970-01-01T00:00:00Z", time.UTC)
-		if err != nil {
-			return err
-		}
-
 		newNode = &TreeNode{
-			File: CustomFile(CustomFileArgs{
-				Name:  next,
-				IsDir: true,
-				// ModTime:    time.Unix(0, 0),
-				ModTime:    mt,
-				Size:       0,
-				ReadCloser: data,
-			}),
 			Parent:   n,
 			Children: []*TreeNode{},
+			File: CustomFile(CustomFileArgs{
+				Name:    next,
+				IsDir:   true,
+				ModTime: sub.(*tree).root.File.ModTime(),
+			}),
 		}
-	}
-
-	l := len(n.Children)
-
-	k := sort.Search(l, func(i int) bool {
-		return next <= n.Children[i].File.Name()
-	})
-
-	if k == l {
-		// append new node
-		if rest != "" {
-			err = newNode.mapInSubTree(rest, sub)
-			if err != nil {
-				return err
-			}
-		}
-		n.Children = append(n.Children, newNode)
-		return nil
-	}
-
-	child := n.Children[k]
-	if next == child.File.Name() {
-		if child.File.IsDir() && newNode.File.IsDir() {
-			for _, nc := range newNode.Children {
-				i := sort.Search(len(child.Children), func(i int) bool {
-					return child.Children[i].File.Name() <= nc.File.Name()
-				})
-				if i >= len(child.Children) {
-					child.Children = append(child.Children, nc)
-				} else {
-					if child.Children[i].File.Name() == nc.File.Name() {
-						panic("unexpected tree merge error")
-					} else {
-						child.Children = append(child.Children[:i], append([]*TreeNode{nc}, child.Children[i:]...)...)
-					}
-				}
-			}
-			return nil
-			// merge
-			// don't need to to anything here
-		}
-		// replace
-		err = child.walk(func(path string, f File) error {
-			return f.Close()
-		})
-		if err != nil {
-			return err
-		}
-
-		n.Children[k] = newNode
-		return nil
-	}
-
-	// insert
-	if rest != "" {
 		err = newNode.mapInSubTree(rest, sub)
 		if err != nil {
 			return err
 		}
 	}
-	n.Children = append(n.Children[:k],
-		append([]*TreeNode{newNode}, n.Children[k:]...)...)
+
+	before, selected, after := n.sliceChildren(next)
+
+	if selected != nil {
+		// merge
+		if selected.File.IsDir() && newNode.File.IsDir() {
+			return n.mergeTree(newNode.Children)
+		}
+
+		// replace
+		err := selected.close()
+		if err != nil {
+			return err
+		}
+	}
+
+	// insert
+	n.Children = append(before, append([]*TreeNode{newNode}, after...)...)
+	return nil
+
+}
+
+func (n *TreeNode) close() error {
+
+	err := n.walk(func(path string, f File) error {
+		return f.Close()
+	})
+	if err != nil {
+		return err
+	}
 
 	return nil
+
+}
+
+func (n *TreeNode) sliceChildren(next string) (before []*TreeNode, selected *TreeNode, after []*TreeNode) {
+
+	l := len(n.Children)
+	k := sort.Search(l, func(i int) bool {
+		return next <= n.Children[i].File.Name()
+	})
+
+	if k == l || next != n.Children[k].File.Name() {
+		return n.Children[:k], nil, n.Children[k:]
+	}
+
+	return n.Children[:k], n.Children[k], n.Children[k+1:]
 
 }
 
 func (n *TreeNode) unmap(path string) error {
 
 	var err error
-	var next, rest string
-	strs := strings.SplitN(path, "/", 2)
-	next = strs[0]
-	if len(strs) == 2 {
-		next = strs[1]
-	}
 
-	l := len(n.Children)
-
-	k := sort.Search(l, func(i int) bool {
-		return next < n.Children[i].File.Name()
-	})
-
-	if k == l {
+	next, rest := splitPath(path)
+	before, selected, after := n.sliceChildren(next)
+	if selected == nil {
 		return ErrNodeNotFound
 	}
 
-	child := n.Children[k]
-	if next == child.File.Name() {
-		if rest != "" {
-			return child.unmap(rest)
-		}
-		err = child.walk(func(path string, f File) error {
-			return f.Close()
-		})
-		if err != nil {
-			return err
-		}
-
-		n.Children = append(n.Children[:k], n.Children[k+1:]...)
-		return nil
+	if rest != "" {
+		return selected.unmap(rest)
 	}
 
-	return ErrNodeNotFound
+	err = selected.close()
+	if err != nil {
+		return err
+	}
+
+	n.Children = append(before, after...)
+	return nil
 
 }
 
@@ -654,45 +424,52 @@ func NewFileTree() FileTree {
 	}
 }
 
-// FileTreeFromDirectory ..
-func FileTreeFromDirectory(dir string) (FileTree, error) {
-	tree := NewFileTree()
-	err := filepath.Walk(dir, func(path string, fi os.FileInfo, err error) error {
+type loadFromDirectory struct {
+	dir  string
+	tree FileTree
+}
 
-		path = filepath.ToSlash(path)
-		abs := path
-		path = strings.TrimPrefix(path, dir)
-		path = strings.TrimPrefix(path, "/")
-		if path == "" {
-			return nil
-		}
+func (v *loadFromDirectory) walker(path string, fi os.FileInfo, err error) error {
 
-		f, err := LazyOpen(abs)
-		if err != nil {
-			return err
-		}
-
-		err = tree.Map(path, f)
-		if err != nil {
-			return err
-		}
-
+	path = filepath.ToSlash(path)
+	abs := path
+	path = strings.TrimPrefix(path, v.dir)
+	path = strings.TrimPrefix(path, "/")
+	if path == "" {
 		return nil
-	})
+	}
+
+	f, err := LazyOpen(abs)
+	if err != nil {
+		return err
+	}
+
+	err = v.tree.Map(path, f)
+	if err != nil {
+		return err
+	}
+
+	return nil
+
+}
+
+// FileTreeFromDirectory creates a new FileTree based on a directory. The
+// files in the tree will be loaded in lazily, so the function should be safe
+// for use on very large directory trees.
+func FileTreeFromDirectory(dir string) (FileTree, error) {
+
+	v := &loadFromDirectory{
+		tree: NewFileTree(),
+		dir:  dir,
+	}
+
+	err := filepath.Walk(dir, v.walker)
 	if err != nil {
 		return nil, err
 	}
-	return tree, nil
-}
 
-const (
-	magicNumber = 0x45455254454C4946 // FILETREE
-)
+	return v.tree, nil
 
-type archiveHeader struct {
-	Magic   uint64
-	MetaLen int64
-	Pad     [496]byte
 }
 
 func (t *tree) Close() error {
@@ -703,10 +480,15 @@ func (t *tree) Close() error {
 		return errors.New("already closed")
 	}
 	t.closed = true
-	t.Walk(func(path string, f File) error {
-		f.Close()
-		return nil
+	if t.closeFunc != nil {
+		defer t.closeFunc()
+	}
+	err := t.Walk(func(path string, f File) error {
+		return f.Close()
 	})
+	if err != nil {
+		return err
+	}
 	if t.closeFunc != nil {
 		return t.closeFunc()
 	}
@@ -747,122 +529,20 @@ func (t *tree) NodeCount() int {
 	return t.nodeCount
 }
 
-func (t *tree) Archive(w io.Writer, fn ArchiveFunc) error {
-
-	var err error
-
-	data, err := t.root.MarshalJSON()
-	if err != nil {
-		return err
-	}
-
-	l := len(data)
-
-	hdr := archiveHeader{
-		Magic:   magicNumber,
-		MetaLen: int64(l),
-	}
-
-	err = binary.Write(w, binary.LittleEndian, hdr)
-	if err != nil {
-		return err
-	}
-
-	_, err = io.Copy(w, bytes.NewReader(data))
-	if err != nil {
-		return err
-	}
-
-	dif := 512 - l%512
-	_, err = io.Copy(w, bytes.NewReader(bytes.Repeat([]byte{0}, dif)))
-	if err != nil {
-		return err
-	}
-
-	tarw := tar.NewWriter(w)
-	defer tarw.Close()
-
-	err = t.Walk(func(path string, f File) error {
-
-		var err error
-
-		if fn != nil {
-			err = fn(path, f)
-			if err != nil {
-				return err
-			}
-		}
-
-		var link string
-		if f.IsSymlink() {
-			var data []byte
-			data, err = ioutil.ReadAll(f)
-			if err != nil {
-				return err
-			}
-			link = string(data)
-		}
-
-		hdr, err := tar.FileInfoHeader(Info(f), link)
-		if err != nil {
-			return err
-		}
-
-		hdr.Name = path
-
-		err = tarw.WriteHeader(hdr)
-		if err != nil {
-			return err
-		}
-
-		if !f.IsSymlink() && !f.IsDir() {
-
-			var n int64
-			n, err = io.Copy(tarw, f)
-			if err != nil {
-				return err
-			}
-
-			if n != hdr.Size {
-				return err
-			}
-
-			err = f.Close()
-			if err != nil {
-				return err
-			}
-		}
-
-		return nil
-
-	})
-	if err != nil {
-		return err
-	}
-
-	err = tarw.Close()
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
 func (t *tree) Map(path string, f File) error {
 
 	if f.Size() < 0 {
 		return errors.New("cannot map object with negative size")
 	}
 
-	t.lock.Lock()
-	defer t.lock.Unlock()
-	if t.closed {
-		return errors.New("cannot map onto closed tree")
-	}
-
 	path = filepath.ToSlash(path)
 	path = filepath.Clean(path)
 	path = filepath.ToSlash(path)
+	path = filepath.Join("/", path)
+	path = strings.TrimPrefix(path, "/")
+	if path == "" {
+		return errors.New("cannot map over the root node")
+	}
 
 	f = CustomFile(CustomFileArgs{
 		Name:               filepath.Base(path),
@@ -880,12 +560,6 @@ func (t *tree) Map(path string, f File) error {
 }
 
 func (t *tree) MapSubTree(path string, sub FileTree) error {
-
-	t.lock.Lock()
-	defer t.lock.Unlock()
-	if t.closed {
-		return errors.New("cannot map onto closed tree")
-	}
 
 	path = filepath.ToSlash(path)
 	path = filepath.Clean(path)
@@ -941,49 +615,23 @@ func (t *tree) SubTree(path string) (FileTree, error) {
 
 	node := t.root
 	for {
-		var next, rest string
-		strs := strings.SplitN(path, "/", 2)
-		next = strs[0]
-		if len(strs) == 2 {
-			next = strs[1]
-		}
+		next, rest := splitPath(path)
+		_, selected, _ := node.sliceChildren(next)
 
-		// find child
-		l := len(node.Children)
-
-		k := sort.Search(l, func(i int) bool {
-			return next <= node.Children[i].File.Name()
-		})
-
-		if k == l {
-			return nil, ErrNodeNotFound
-		}
-
-		child := node.Children[k]
-		if next != child.File.Name() {
+		if selected == nil {
 			return nil, ErrNodeNotFound
 		}
 
 		if rest == "" {
-			child.File = CustomFile(CustomFileArgs{
-				Size:               child.File.Size(),
-				ModTime:            child.File.ModTime(),
-				IsDir:              child.File.IsDir(),
-				IsSymlink:          child.File.IsSymlink(),
-				IsSymlinkNotCached: !child.File.SymlinkIsCached(),
-				Symlink:            child.File.Symlink(),
-				Name:               ".",
-				ReadCloser:         child.File,
-			})
-			child.Parent = nil
+			selected.Parent = nil
 			subtree := &tree{
-				root: child,
+				root: selected,
 			}
 			return subtree, nil
 		}
 
 		path = rest
-		node = child
+		node = selected
 
 	}
 

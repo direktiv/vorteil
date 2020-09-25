@@ -67,6 +67,9 @@ func (v *Virtualizer) getState() (string, error) {
 
 	err := v.execute(cmd)
 	if err != nil {
+		if strings.Contains(err.Error(), "Could not find a registered machine named") {
+			return "", nil
+		}
 		return "", err
 	}
 
@@ -224,7 +227,10 @@ func (v *Virtualizer) Close(force bool) error {
 	stopVM := func() error {
 		err := v.execute(exec.Command("VBoxManage", "unregistervm", v.name))
 		if err != nil {
-			return err
+			if !strings.Contains(err.Error(),
+				fmt.Sprintf("Could not find a registered machine named")) {
+				return err
+			}
 		}
 		return nil
 	}
@@ -234,6 +240,7 @@ func (v *Virtualizer) Close(force bool) error {
 			fmt.Sprintf("Cannot unregister the machine '%s' while it is locked",
 				v.name)) && !strings.Contains(err.Error(),
 			fmt.Sprintf("Could not find a registered machine")) && !strings.Contains(err.Error(), "(MISSING)") {
+
 			return err
 		}
 	}
@@ -243,10 +250,6 @@ func (v *Virtualizer) Close(force bool) error {
 	}
 	v.disk.Close()
 	virtualizers.ActiveVMs.Delete(v.name)
-	// err = os.RemoveAll(v.folder)
-	// if err != nil {
-	// 	return err
-	// }
 
 	return nil
 }
@@ -420,7 +423,7 @@ func (v *Virtualizer) checkState() {
 	for {
 		state, err := v.getState()
 		if err != nil {
-			if !strings.Contains(err.Error(), "Could not find a registered machine") {
+			if !strings.Contains(err.Error(), "Could not find a registered machine") || !strings.Contains(err.Error(), "exit status 3221225786") || !strings.Contains(err.Error(), "The object is not ready") {
 				v.logger.Errorf("Getting VM State: %s", err.Error())
 			}
 		}
@@ -503,49 +506,49 @@ func (v *Virtualizer) prepareVM(diskpath string) error {
 	return nil
 }
 
+func (v *Virtualizer) Bind(args []string, i int, j int, protocol string, port virtualizers.RouteMap, networkType string) ([]string, string, bool, error) {
+	var hasDefinedPorts bool
+	bind, nr, err := virtualizers.BindPort(v.networkType, protocol, port.Port)
+	if err != nil {
+		return nil, "", false, err
+	}
+	hasDefinedPorts = true
+	args = append(args, fmt.Sprintf("--natpf%s", strconv.Itoa(i+1)))
+	args = append(args, fmt.Sprintf("nat%s%s,%s,,%s,,%s", bind, networkType, protocol, bind, port.Port))
+	return args, nr, hasDefinedPorts, nil
+}
+
 func (v *Virtualizer) handlePorts(args []string, route virtualizers.NetworkInterface, protocol string, i int) ([]string, bool, error) {
+	var err error
+	var nr string
 	var hasDefinedPorts bool
 	for j, port := range route.HTTP {
-		bind, nr, err := virtualizers.BindPort(v.networkType, protocol, port.Port)
+		args, nr, hasDefinedPorts, err = v.Bind(args, i, j, protocol, port, "http")
 		if err != nil {
 			return nil, false, err
 		}
 		v.routes[i].HTTP[j].Address = nr
-		hasDefinedPorts = true
-		args = append(args, fmt.Sprintf("--natpf%s", strconv.Itoa(i+1)))
-		args = append(args, fmt.Sprintf("nat%s%s,%s,,%s,,%s", bind, "http", protocol, bind, port.Port))
 	}
 	for j, port := range route.HTTPS {
-		bind, nr, err := virtualizers.BindPort(v.networkType, protocol, port.Port)
+		args, nr, hasDefinedPorts, err = v.Bind(args, i, j, protocol, port, "https")
 		if err != nil {
 			return nil, false, err
 		}
 		v.routes[i].HTTPS[j].Address = nr
-		hasDefinedPorts = true
-		args = append(args, fmt.Sprintf("--natpf%s", strconv.Itoa(i+1)))
-		args = append(args, fmt.Sprintf("nat%s%s,%s,,%s,,%s", bind, "https", protocol, bind, port.Port))
-
 	}
 	for j, port := range route.TCP {
-		bind, nr, err := virtualizers.BindPort(v.networkType, protocol, port.Port)
+		args, nr, hasDefinedPorts, err = v.Bind(args, i, j, protocol, port, "tcp")
 		if err != nil {
 			return nil, false, err
 		}
 		v.routes[i].TCP[j].Address = nr
-		hasDefinedPorts = true
-		args = append(args, fmt.Sprintf("--natpf%s", strconv.Itoa(i+1)))
-		args = append(args, fmt.Sprintf("nat%s%s,%s,,%s,,%s", bind, "tcp", protocol, bind, port.Port))
-
 	}
 	for j, port := range route.UDP {
-		bind, nr, err := virtualizers.BindPort(v.networkType, protocol, port.Port)
+		args, nr, hasDefinedPorts, err = v.Bind(args, i, j, protocol, port, "udp")
 		if err != nil {
 			return nil, false, err
 		}
 		v.routes[i].UDP[j].Address = nr
-		hasDefinedPorts = true
-		args = append(args, fmt.Sprintf("--natpf%s", strconv.Itoa(i+1)))
-		args = append(args, fmt.Sprintf("nat%s%s,%s,,%s,,%s", bind, "udp", protocol, bind, port.Port))
 	}
 	return args, hasDefinedPorts, nil
 }
@@ -600,7 +603,6 @@ func (v *Virtualizer) gatherNetworkDetails() error {
 	if err != nil {
 		return err
 	}
-
 	return nil
 }
 

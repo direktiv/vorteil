@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/vorteil/vorteil/pkg/elog"
 	"github.com/vorteil/vorteil/pkg/vcfg"
 	"github.com/vorteil/vorteil/pkg/vimg"
 )
@@ -17,15 +18,24 @@ type Format string
 
 // Supported disk image formats.
 const (
-	RAWFormat                 Format = "raw"
-	VMDKFormat                Format = "vmdk"
-	VMDKSparseFormat          Format = "vmdk-sparse"
+	// RAWFormat is a disk type that returns "raw"
+	RAWFormat Format = "raw"
+	// VMDKFormat is a disk type that returns "vmdk"
+	VMDKFormat Format = "vmdk"
+	// VMDKSparseFormat is a disk type that returns "vmdk-sparse"
+	VMDKSparseFormat Format = "vmdk-sparse"
+	// VMDKStreamOptimizedFormat is a disk type that returns "vmdk-stream-optimized"
 	VMDKStreamOptimizedFormat Format = "vmdk-stream-optimized"
-	GCPFArchiveFormat         Format = "gcp"
-	XVAFormat                 Format = "xva"
-	VHDFormat                 Format = "vhd"
-	VHDFixedFormat            Format = "vhd-fixed"
-	VHDDynamicFormat          Format = "vhd-dynamic"
+	// GCPFArchiveFormat is a disk type that returns "gcp"
+	GCPFArchiveFormat Format = "gcp"
+	// XVAFormat is a disk type that returns "xva"
+	XVAFormat Format = "xva"
+	// VHDFormat is a disk type that returns "vhd"
+	VHDFormat Format = "vhd"
+	// VHDFixedFormat is a disk type that returns "vhd-fixed"
+	VHDFixedFormat Format = "vhd-fixed"
+	// VHDDynamicFormat is a disk type that returns "vhd-dynamic"
+	VHDDynamicFormat Format = "vhd-dynamic"
 )
 
 // AllFormatStrings returns a list of all supported disk image formats.
@@ -163,7 +173,11 @@ func (x *Format) DefaultMTU() uint {
 	return defaultMTUs[*x]
 }
 
-func (x *Format) build(ctx context.Context, w io.WriteSeeker, b *vimg.Builder, cfg *vcfg.VCFG) error {
+// Build creates the disk for the correct format ...
+func (x *Format) Build(ctx context.Context, log elog.View, w io.WriteSeeker, b *vimg.Builder, cfg *vcfg.VCFG) error {
+
+	p := log.NewProgress(fmt.Sprintf("Initializing %s image file", x), "", 0)
+	defer p.Finish(false)
 
 	w, err := buildFuncs[*x](w, b, cfg)
 	if err != nil {
@@ -173,6 +187,8 @@ func (x *Format) build(ctx context.Context, w io.WriteSeeker, b *vimg.Builder, c
 	if ok {
 		defer closer.Close()
 	}
+
+	p.Finish(true)
 
 	err = b.Build(ctx, w)
 	if err != nil {

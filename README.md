@@ -4,17 +4,19 @@
     <img src="assets/images/vlogo.png" alt="vorteil">
   </a>
   <h3 align="center">vorteil.io</h3>
+    <h5 align="center">turn your applications and containers into micro virtual machines</h5>
 </p>
 <hr/>
 
-[![Build Status](https://travis-ci.org/vorteil/vorteil.svg?branch=master)](https://travis-ci.org/vorteil/vorteil) <a href="https://codeclimate.com/github/vorteil/vorteil/maintainability"><img src="https://api.codeclimate.com/v1/badges/bb819f04d7550b91f24d/maintainability" /></a> <a href="https://codeclimate.com/github/vorteil/vorteil/test_coverage"><img src="https://api.codeclimate.com/v1/badges/bb819f04d7550b91f24d/test_coverage" /></a> [![Go Report Card](https://goreportcard.com/badge/github.com/vorteil/vorteil)](https://goreportcard.com/report/github.com/vorteil/vorteil)
-
-Turn your applications and containers into micro virtual machines with Vorteil.
-<hr/>
+[![Build Status](https://travis-ci.org/vorteil/vorteil.svg?branch=master)](https://travis-ci.org/vorteil/vorteil) <a href="https://codeclimate.com/github/vorteil/vorteil/maintainability"><img src="https://api.codeclimate.com/v1/badges/bb819f04d7550b91f24d/maintainability" /></a> [![Go Report Card](https://goreportcard.com/badge/github.com/vorteil/vorteil)](https://goreportcard.com/report/github.com/vorteil/vorteil) [![](https://godoc.org/github.com/vorteil/vorteil?status.svg)](http://godoc.org/github.com/vorteil/vorteil) [![Discord](https://img.shields.io/badge/chat-on%20discord-6A7EC2)](https://discord.gg/VjF6wn4) <!-- [![Github All Releases](https://img.shields.io/github/downloads/vorteil/vorteil/total.svg)]() -->
 
 Vorteil is an operating system for running cloud applications on micro virtual machines. It takes only the files you need and runs them on a custom Linux kernel without any unnecessary background services: there's no ssh, no shell, and no login; just a toml file that Vorteil's init process (vinitd) uses to configure the system and launch your apps.
 
-Vorteil's lightweight design enhances security, reduces capital and operating costs, and reduces performance overhead compared to containers and other server operating systems.
+<p align="center">
+  <a href="https://github.com/vorteil/vorteil">
+    <img src="assets/images/terminal.gif" alt="terminal">
+  </a>
+</p>
 
 The tools that build Vorteil images have been optimized for speed, and can take your project from loose files to a running virtual machine in as little as one second.
 
@@ -23,15 +25,32 @@ The tools that build Vorteil images have been optimized for speed, and can take 
 The Vorteil binary runs anywhere, just download the archive for your system, extract it, and put the executable on your `PATH`.
 
 ### Linux
-```
+```sh
 wget https://github.com/vorteil/vorteil/releases/latest/download/vorteil_linux-x86.tar.gz
 tar -xzf vorteil_linux-x86.tar.gz
-./vorteil --help
+./vorteil version
+```
+### Windows
+
+```sh
+wget https://github.com/vorteil/vorteil/releases/latest/download/vorteil_windows-x86.zip -UseBasicParsing -OutFile .\vorteil_windows-x86.zip
+Expand-Archive -Path .\vorteil_windows-x86.zip -DestinationPath .\
+.\vorteil.exe version
+```
+
+### Mac
+
+```sh
+curl -LJO https://github.com/vorteil/vorteil/releases/latest/download/vorteil_darwin-x86.dmg
+hdiutil attach vorteil_darwin-x86.dmg
+cp /Volumes/Vorteil\ CLI/vorteil ./vorteil
+hdiutil detach /Volumes/Vorteil\ CLI
+./vorteil version
 ```
 
 ### Dependencies
 
-To use the `vorteil run` command you'll need VirtualBox, QEMU, or Hyper-V installed on your system and reachable on the `PATH`.
+To use the `vorteil run` command you'll need [VirtualBox](https://www.virtualbox.org/wiki/Downloads), [QEMU](https://www.qemu.org/download/), [firecracker](https://github.com/firecracker-microvm/firecracker) or Hyper-V installed on your system and reachable on the `PATH`.
 
 If you're using Windows, it's recommended that you enable developer mode as well, so that the tools can use Unix-style symlinks.
 
@@ -39,7 +58,7 @@ If you're using Windows, it's recommended that you enable developer mode as well
 
 ### Hello World
 
-```
+```console
 vorteil run https://apps.vorteil.io/file/vorteil/helloworld
 ```
 
@@ -47,9 +66,22 @@ This command downloads our Hello World package from apps.vorteil.io and runs it 
 
 Our Hello World app is a simple web server that should be reachable via NAT on port 8888 (http://localhost:8888/). If that port was unavailable you should notice a yellow warning message in the logs telling you which port it bound instead.
 
-### Convert a Docker Container
+### Convert from a Container
 
-TODO: quick example
+An easy way to build Vorteil micro virtual machines is to build them from container images. Vorteil can convert all OCI compliant images from remote repositories or local docker and containerd runtimes. The following command would convert the _hello-world_ application from docker hub.
+
+```console
+
+# converts hello-world from docker hub into /tmp/hello
+vorteil projects convert-container hello-world /tmp/hello
+
+# converts hello-world from local docker into /tmp/hellolocal
+vorteil projects convert-container local.docker/hello-world /tmp/hellolocal
+
+# run it
+vorteil run /tmp/hellolocal
+
+```
 
 ### Modify an Existing Package
 
@@ -76,10 +108,6 @@ vorteil run cockroachdb-modified.vorteil
 ```
 
 Try out your modified package by using the `vorteil run` command on it.
-
-### Making Your Own Package
-
-TODO: link to a superior article / docs
 
 ## Need Help?
 

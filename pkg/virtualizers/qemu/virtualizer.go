@@ -224,10 +224,23 @@ func (v *Virtualizer) initLogging() error {
 	return nil
 }
 
+func (v *Virtualizer) Bind(args string, i int, j int, protocol string, port virtualizers.RouteMap, networkType string) (string, string, bool, error) {
+	var hasDefinedPorts bool
+	bind, nr, err := virtualizers.BindPort(v.networkType, protocol, port.Port)
+	if err != nil {
+		return "", "", false, err
+	}
+	hasDefinedPorts = true
+	args += fmt.Sprintf(",hostfwd=%s::%s-:%s", protocol, bind, port.Port)
+	return args, nr, hasDefinedPorts, nil
+}
+
 // initializeNetworkCards attempts the bind the ports provided and if it fails attempts to bind to a random port and adds it to the arguments for the qemu command.
 func (v *Virtualizer) initializeNetworkCards() ([]string, error) {
 	v.logger.Debugf("Initializing Network Cards")
 	var nicArgs string
+	var err error
+	var nr string
 	noNic := 0
 	hasDefinedPorts := false
 
@@ -235,47 +248,34 @@ func (v *Virtualizer) initializeNetworkCards() ([]string, error) {
 		var args string
 		noNic++
 		protocol := "tcp"
-
 		for j, port := range route.HTTP {
-			bind, nr, err := virtualizers.BindPort(v.networkType, protocol, port.Port)
+			args, nr, hasDefinedPorts, err = v.Bind(args, i, j, protocol, port, "http")
 			if err != nil {
-				v.logger.Errorf("Error binding port: %s", err.Error())
 				return nil, err
 			}
 			v.routes[i].HTTP[j].Address = nr
-			hasDefinedPorts = true
-			args += fmt.Sprintf(",hostfwd=%s::%s-:%s", protocol, bind, port.Port)
 		}
 		for j, port := range route.HTTPS {
-			bind, nr, err := virtualizers.BindPort(v.networkType, protocol, port.Port)
+			args, nr, hasDefinedPorts, err = v.Bind(args, i, j, protocol, port, "https")
 			if err != nil {
-				v.logger.Errorf("Error binding port: %s", err.Error())
 				return nil, err
 			}
 			v.routes[i].HTTPS[j].Address = nr
-			hasDefinedPorts = true
-			args += fmt.Sprintf(",hostfwd=%s::%s-:%s", protocol, bind, port.Port)
 		}
 		for j, port := range route.TCP {
-			bind, nr, err := virtualizers.BindPort(v.networkType, protocol, port.Port)
+			args, nr, hasDefinedPorts, err = v.Bind(args, i, j, protocol, port, "tcp")
 			if err != nil {
-				v.logger.Errorf("Error binding port: %s", err.Error())
 				return nil, err
 			}
 			v.routes[i].TCP[j].Address = nr
-			hasDefinedPorts = true
-			args += fmt.Sprintf(",hostfwd=%s::%s-:%s", protocol, bind, port.Port)
 		}
 		for j, port := range route.UDP {
 			protocol = "udp"
-			bind, nr, err := virtualizers.BindPort(v.networkType, protocol, port.Port)
+			args, nr, hasDefinedPorts, err = v.Bind(args, i, j, protocol, port, "udp")
 			if err != nil {
-				v.logger.Errorf("Error binding port: %s", err.Error())
 				return nil, err
 			}
 			v.routes[i].UDP[j].Address = nr
-			hasDefinedPorts = true
-			args += fmt.Sprintf(",hostfwd=%s::%s-:%s", protocol, bind, port.Port)
 		}
 		nicArgs += fmt.Sprintf(" -netdev user,id=network%v%s -device virtio-net-pci,netdev=network%v,id=virtio%v,mac=26:10:05:00:00:0%x", i, args, i, i, 0xa+(i*0x1))
 	}

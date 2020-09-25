@@ -382,6 +382,7 @@ func vcfgSansInfo(cfg *vcfg.VCFG, name string) (vio.File, error) {
 	}), nil
 }
 
+// TarFromPackage writes a tar to w from the package reader
 func TarFromPackage(w io.Writer, pkg vpkg.Reader) error {
 
 	tw := tar.NewWriter(w)
@@ -700,6 +701,7 @@ func TarFromPackage(w io.Writer, pkg vpkg.Reader) error {
 	return nil
 }
 
+// CreateFromPackage tars the reader and proceeds to unpack on path
 func CreateFromPackage(path string, pkg vpkg.Reader) error {
 
 	pr, pw := nio.Pipe(buffer.New(0x100000))
@@ -772,6 +774,7 @@ func CreateFromPackage(path string, pkg vpkg.Reader) error {
 
 }
 
+// Split takes src and returns the path and target of provided value
 func Split(src string) (path string, target string) {
 	src = filepath.ToSlash(src)
 	parts := strings.Split(src, ":")

@@ -118,17 +118,22 @@ func (l List) BestMatch(v CalVer) (*Tuple, error) {
 	if v.Modifier() != "" {
 		return nil, fmt.Errorf("no match for kernel %s", v.String())
 	}
+
+	var candidate *Tuple
+	var cErr error = fmt.Errorf("no match for kernel %s", v.String()) // Place holder error for if there is no valid candidate
 	if Idx != 0 {
-		candidate := &l[Idx-1]
-		if candidate.Version.Major() == v.Major() &&
-			candidate.Version.Minor() == v.Minor() {
-			if v.Patch() == -1 || candidate.Version.Patch() == v.Patch() {
-				return candidate, nil
+		potentialCandidate := &l[Idx-1]
+		if potentialCandidate.Version.Major() == v.Major() &&
+			potentialCandidate.Version.Minor() == v.Minor() {
+			if v.Patch() == -1 || potentialCandidate.Version.Patch() == v.Patch() {
+				// Candidate found, set error to nil
+				candidate = potentialCandidate
+				cErr = nil
 			}
 		}
 	}
 
-	return nil, fmt.Errorf("no match for kernel %s", v.String())
+	return candidate, cErr
 
 }
 

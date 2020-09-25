@@ -341,4 +341,5 @@ func handleVprjFile(v *vcfg.VCFG, vprj ProjectData, tw *tar.Writer, s, x string)
 		return err
 	}
 
+	return nil
 }

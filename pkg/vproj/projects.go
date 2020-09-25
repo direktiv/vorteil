@@ -282,60 +282,94 @@ func CreateFromPackage(path string, pkg vpkg.Reader) error {
 
 	tr := tar.NewReader(pr)
 	for {
-		hdr, err := tr.Next()
+		err := readFromTarReader(tr, path)
 		if err != nil {
 			if err == io.EOF {
 				break
 			}
 			return err
 		}
-
-		if hdr.FileInfo().Mode()&os.ModeSymlink > 0 {
-			dpath := filepath.Join(path, hdr.Name)
-			err = os.MkdirAll(filepath.Dir(dpath), 0777)
-			if err != nil {
-				return err
-			}
-
-			err = os.Symlink(hdr.Linkname, dpath)
-			if err != nil {
-				return err
-			}
-
-		} else if hdr.FileInfo().IsDir() {
-
-			err = os.MkdirAll(filepath.Join(path, hdr.Name), os.FileMode(hdr.Mode))
-			if err != nil {
-				return err
-			}
-
-		} else {
-			err = os.MkdirAll(filepath.Join(path, filepath.Dir(hdr.Name)), os.FileMode(hdr.Mode))
-			if err != nil {
-				return err
-			}
-
-			f, err := os.Create(filepath.Join(path, hdr.Name))
-			if err != nil {
-				return err
-			}
-			defer f.Close()
-
-			_, err = io.Copy(f, tr)
-			if err != nil {
-				return err
-			}
-
-			err = f.Close()
-			if err != nil {
-				return err
-			}
-		}
-
 	}
 
 	return nil
 
+}
+
+func readFromTarReader(tr *tar.Reader, path string) error {
+
+	hdr, err := tr.Next()
+	if err != nil {
+		return err
+	}
+
+	if hdr.FileInfo().Mode()&os.ModeSymlink > 0 {
+		err = handleSymlinkFromTarReader(hdr, path)
+		if err != nil {
+			return err
+		}
+	} else {
+		err = handleFileFromTarReader(tr, hdr, path)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func handleSymlinkFromTarReader(hdr *tar.Header, path string) error {
+	dpath := filepath.Join(path, hdr.Name)
+	err := os.MkdirAll(filepath.Dir(dpath), 0777)
+	if err != nil {
+		return err
+	}
+
+	err = os.Symlink(hdr.Linkname, dpath)
+	if err != nil {
+		return err
+	}
+
+	return err
+}
+
+func handleDirFromTarReader(hdr *tar.Header, path string) error {
+
+	err := os.MkdirAll(filepath.Join(path, hdr.Name), os.FileMode(hdr.Mode))
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func handleFileFromTarReader(tr *tar.Reader, hdr *tar.Header, path string) error {
+
+	p := filepath.Join(path, filepath.Dir(hdr.Name))
+	if hdr.FileInfo().IsDir() {
+		p = filepath.Join(path, hdr.Name)
+	}
+
+	err := os.MkdirAll(p, os.FileMode(hdr.Mode))
+	if err != nil {
+		return err
+	}
+
+	if !hdr.FileInfo().IsDir() {
+		var f *os.File
+		f, err = os.Create(filepath.Join(path, hdr.Name))
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+
+		_, err = io.Copy(f, tr)
+		if err != nil {
+			return err
+		}
+
+		err = f.Close()
+	}
+	return err
 }
 
 // Split takes src and returns the path and target of provided value

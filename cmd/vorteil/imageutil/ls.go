@@ -12,35 +12,43 @@ import (
 	"github.com/vorteil/vorteil/pkg/vdecompiler"
 )
 
-func LS(log elog.View, cmd *cobra.Command, args []string, flagOS bool) error {
-	numbers, err := cmd.Flags().GetString("numbers")
-	if err != nil {
-		return err
-	}
-
-	err = SetNumbersMode(numbers)
-	if err != nil {
-		return fmt.Errorf("couldn't parse value of --numbers: %v", err)
-	}
-
-	var reiterating bool
+func returnLSBoolFlags(cmd *cobra.Command) (bool, bool, bool, bool, error) {
+	var returnErr error
 
 	all, err := cmd.Flags().GetBool("all")
 	if err != nil {
-		return err
+		returnErr = err
 	}
 
 	almostAll, err := cmd.Flags().GetBool("almost-all")
 	if err != nil {
-		return err
+		returnErr = err
 	}
 
 	long, err := cmd.Flags().GetBool("long")
 	if err != nil {
-		return err
+		returnErr = err
 	}
 
 	recursive, err := cmd.Flags().GetBool("recursive")
+	if err != nil {
+		returnErr = err
+	}
+
+	return all, almostAll, long, recursive, returnErr
+}
+
+// LS list directory contents.
+func LS(log elog.View, cmd *cobra.Command, args []string, flagOS bool) error {
+
+	err := FetchNumberFlags(cmd)
+	if err != nil {
+		return err
+	}
+
+	var reiterating bool
+
+	all, almostAll, long, recursive, err := returnLSBoolFlags(cmd)
 	if err != nil {
 		return err
 	}

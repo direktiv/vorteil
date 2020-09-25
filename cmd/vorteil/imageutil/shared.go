@@ -7,7 +7,21 @@ import (
 	"strings"
 
 	"github.com/sisatech/tablewriter"
+	"github.com/spf13/cobra"
 )
+
+func FetchNumberFlags(cmd *cobra.Command) error {
+	numbers, err := cmd.Flags().GetString("numbers")
+	if err != nil {
+		return err
+	}
+
+	err = SetNumbersMode(numbers)
+	if err != nil {
+		return fmt.Errorf("couldn't parse value of --numbers: %v", err)
+	}
+	return nil
+}
 
 // PrintableSize is a wrapper around int to alter its string formatting behaviour.
 type PrintableSize int

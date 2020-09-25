@@ -61,36 +61,16 @@ func (p *ProjectData) Marshal() ([]byte, error) {
 // LoadProject ..
 func LoadProject(path string) (*Project, error) {
 
-	fi, err := os.Stat(path)
-	if err != nil {
-		return nil, err
-	}
-
-	if !fi.IsDir() {
-		return nil, fmt.Errorf("'%s' is not a directory", path)
-	}
-
 	p := new(Project)
-	p.Dir = path
-
-	path = filepath.Join(path, FileName)
-	fi, err = os.Stat(path)
+	err := p.loadProjectPath(path)
 	if err != nil {
 		return nil, err
-	}
-
-	if fi.IsDir() {
-		return nil, fmt.Errorf("'%s' is a directory", path)
-	}
-
-	if fi.Size() > 64*1024 {
-		return nil, fmt.Errorf("'%s' is too large", path)
 	}
 
 	data, err := ioutil.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, errors.New("no project in directory")
+			err = errors.New("no project in directory")
 		}
 		return nil, err
 	}
@@ -102,6 +82,53 @@ func LoadProject(path string) (*Project, error) {
 
 	return p, nil
 
+}
+
+func (p *Project) loadProjectPath(path string) error {
+
+	err := p.checkBasePath(path)
+	if err != nil {
+		return err
+	}
+	p.Dir = path
+
+	err = p.checkProjectFile()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (p *Project) checkBasePath(path string) error {
+	fi, err := os.Stat(path)
+	if err != nil {
+		return err
+	}
+
+	if !fi.IsDir() {
+		return fmt.Errorf("'%s' is not a directory", path)
+	}
+
+	return nil
+}
+
+func (p *Project) checkProjectFile() error {
+	path := filepath.Join(p.Dir, FileName)
+	fi, err := os.Stat(path)
+	if err != nil {
+		return err
+	}
+
+	if fi.IsDir() {
+		return fmt.Errorf("'%s' is a directory", path)
+	}
+
+	if fi.Size() > 64*1024 {
+		return fmt.Errorf("'%s' is too large", path)
+	}
+
+	return nil
 }
 
 // Target ..

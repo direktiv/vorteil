@@ -119,8 +119,7 @@ func LS(log elog.View, cmd *cobra.Command, args []string, flagOS bool) error {
 		return err
 	}
 	defer iio.Close()
-
-	err = readInodesLS(log, iio, ino, long, recursive, all, almostAll, fpath)
+	err = readInodesLS(&inodeReader{log: log, iio: iio, ino: ino, long: long, recursive: recursive, all: all, almostAll: almostAll, fpath: fpath})
 	if err != nil {
 		return err
 	}
@@ -128,7 +127,18 @@ func LS(log elog.View, cmd *cobra.Command, args []string, flagOS bool) error {
 	return nil
 }
 
-func readInodesLS(log elog.View, iio *vdecompiler.IO, ino int, long, recursive, all, almostAll bool, fpath string) error {
+type inodeReader struct {
+	log       elog.View
+	iio       *vdecompiler.IO
+	ino       int
+	long      bool
+	recursive bool
+	all       bool
+	almostAll bool
+	fpath     string
+}
+
+func readInodesLS(read *inodeReader) error {
 	var reiterating bool
 
 	var fpaths []string
@@ -137,7 +147,7 @@ func readInodesLS(log elog.View, iio *vdecompiler.IO, ino int, long, recursive, 
 	var table [][]string
 	var entries []*vdecompiler.DirectoryEntry
 inoEntry:
-	inode, err := iio.ResolveInode(ino)
+	inode, err := read.iio.ResolveInode(read.ino)
 	if err != nil {
 		return err
 	}
@@ -153,36 +163,36 @@ inodeEntry:
 	}
 
 	if reiterating {
-		log.Infof("")
+		read.log.Infof("")
 	}
 
-	entries, err = iio.Readdir(inode)
+	entries, err = read.iio.Readdir(inode)
 	if err != nil {
 		return err
 	}
 
-	if recursive {
-		log.Printf("%s:", fpath)
+	if read.recursive {
+		read.log.Printf("%s:", read.fpath)
 	}
 
-	if long {
+	if read.long {
 		table = [][]string{{"", "", "", "", "", "", ""}}
 	}
 
 	for _, entry := range entries {
-		if !(all || almostAll) && strings.HasPrefix(entry.Name, ".") {
+		if !(read.all || read.almostAll) && strings.HasPrefix(entry.Name, ".") {
 			continue
 		}
-		if almostAll && (entry.Name == "." || entry.Name == "..") {
+		if read.almostAll && (entry.Name == "." || entry.Name == "..") {
 			continue
 		}
 
-		if recursive && !(entry.Name == "." || entry.Name == "..") {
-			fpaths = append(fpaths, filepath.ToSlash(filepath.Join(fpath, entry.Name)))
+		if read.recursive && !(entry.Name == "." || entry.Name == "..") {
+			fpaths = append(fpaths, filepath.ToSlash(filepath.Join(read.fpath, entry.Name)))
 		}
 
-		if long {
-			child, err := iio.ResolveInode(entry.Inode)
+		if read.long {
+			child, err := read.iio.ResolveInode(entry.Inode)
 			if err != nil {
 				return err
 			}
@@ -206,36 +216,36 @@ inodeEntry:
 
 			table = append(table, []string{child.Permissions(), links, uid, gid, ts, size, entry.Name})
 
-			if recursive && !(entry.Name == "." || entry.Name == "..") {
+			if read.recursive && !(entry.Name == "." || entry.Name == "..") {
 				inodes = append(inodes, child)
 			}
 		} else {
 
-			if recursive {
-				log.Printf("  %s", entry.Name)
+			if read.recursive {
+				read.log.Printf("  %s", entry.Name)
 				if !(entry.Name == "." || entry.Name == "..") {
 					inos = append(inos, entry.Inode)
 				}
 			} else {
-				log.Printf("%s", entry.Name)
+				read.log.Printf("%s", entry.Name)
 			}
 		}
 
 	}
 
-	if long {
+	if read.long {
 		PlainTable(table)
 	}
 
 skip:
-	if recursive {
+	if read.recursive {
 		reiterating = true
 		if len(fpaths) > 0 {
-			fpath = fpaths[0]
+			read.fpath = fpaths[0]
 			fpaths = fpaths[1:]
 		}
 		if len(inos) > 0 {
-			ino = inos[0]
+			read.ino = inos[0]
 			inos = inos[1:]
 			goto inoEntry
 		}

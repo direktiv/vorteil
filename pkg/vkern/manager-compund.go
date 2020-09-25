@@ -22,6 +22,36 @@ func NewCompoundManager(mgrs ...Manager) (*CompoundManager, error) {
 	return mgr, nil
 }
 
+// Get ..
+func (mgr *CompoundManager) Get(ctx context.Context, version CalVer) (*ManagedBundle, error) {
+	var err error
+	var b *ManagedBundle
+
+	list, err := mgr.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	tuple, err := list.BestMatch(version)
+	if err == nil {
+		return mgr.mgrs[tuple.Idx].Get(ctx, tuple.Version)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	// this branch in logic exists to handle CLI-style situations where the list might not update until the get call
+	for _, m := range mgr.mgrs {
+		b, err = m.Get(ctx, version)
+		if err == nil {
+			break
+		}
+	}
+
+	return b, err
+}
+
 // List ..
 func (mgr *CompoundManager) List(ctx context.Context) (List, error) {
 

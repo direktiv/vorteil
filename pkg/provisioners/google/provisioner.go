@@ -117,10 +117,6 @@ func (p *Provisioner) init() error {
 	}
 
 	p.jsonKey, _ = base64.StdEncoding.DecodeString(p.cfg.Key)
-	oauthToken, err = google.JWTConfigFromJSON(key, scopes...)
-	if err != nil {
-		return err
-	}
 
 	p.keyMap = make(map[string]interface{})
 	err = json.Unmarshal(key, &p.keyMap)
@@ -139,49 +135,72 @@ func (p *Provisioner) init() error {
 		return err
 	}
 
+	oauthToken, err = google.JWTConfigFromJSON(key, scopes...)
+	if err != nil {
+		return err
+	}
+
 	p.computeClient, err = compute.New(oauthToken.Client(context.Background()))
 
 	return err
 
 }
 
-func (p *Provisioner) deleteConflictingImage(projectID, name string) error {
+func (p *Provisioner) deleteImage(projectID, name string) error {
 
-	// args.Logger.Infof("Deleting conflicting image.")
-	imagesForce := p.computeClient.Images.List(projectID)
-	list, err := imagesForce.Do()
+	var (
+		err   error
+		delOp *compute.Operation
+	)
+
+	delOp, err = p.computeClient.Images.Delete(projectID, name).Do()
 	if err != nil {
 		return err
 	}
 
 	var pollTimeout int
+	for delOp.Status != statusDone && pollTimeout <= waitInSecs {
+		delOp, err = p.computeClient.GlobalOperations.Get(projectID, delOp.Name).Do()
+		if err != nil {
+			break
+		}
+
+		if delOp.Status == statusDone {
+			break
+		}
+
+		time.Sleep(time.Second)
+		pollTimeout++
+	}
+	if pollTimeout >= waitInSecs {
+		return fmt.Errorf("timed out waiting for image deletion")
+	}
+
+	return nil
+}
+
+func (p *Provisioner) deleteConflictingImage(projectID, name string) error {
+
+	var (
+		err  error
+		list *compute.ImageList
+	)
+
+	// args.Logger.Infof("Deleting conflicting image.")
+	imagesForce := p.computeClient.Images.List(projectID)
+	list, err = imagesForce.Do()
+	if err != nil {
+		return err
+	}
+
 	for _, image := range list.Items {
 		if image.Name == name {
-			delOp, err := p.computeClient.Images.Delete(projectID, image.Name).Do()
-			if err != nil {
-				return err
-			}
-			for delOp.Status != statusDone && pollTimeout <= waitInSecs {
-				delOp, err = p.computeClient.GlobalOperations.Get(projectID, delOp.Name).Do()
-				if err != nil {
-					return err
-				}
-
-				if delOp.Status == statusDone {
-					break
-				}
-
-				time.Sleep(time.Second)
-				pollTimeout++
-			}
-			if pollTimeout >= waitInSecs {
-				return fmt.Errorf("timed out waiting for image deletion")
-			}
+			err = p.deleteImage(projectID, name)
 			break
 		}
 	}
 
-	return nil
+	return err
 }
 
 // Provision provisions BUILDABLE to GCP
@@ -189,7 +208,7 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 
 	projectID := p.keyMap["project_id"].(string)
 
-	_, err := p.computeClient.Images.Get(projectID, args.Name).Do()
+	img, err := p.computeClient.Images.Get(projectID, args.Name).Do()
 	if err == nil && !args.Force {
 		return fmt.Errorf("image '%s' already exists", args.Name)
 	}
@@ -197,7 +216,7 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 	name := strings.Replace(fmt.Sprintf("%s.tar.gz", uuid.New().String()), "-", "", -1)
 	obj := p.bucketHandle.Object(name)
 
-	attrs, err := obj.Attrs(args.Context)
+	_, err = obj.Attrs(args.Context)
 	if err == nil {
 		return fmt.Errorf("object '%s' already exists", name)
 	}
@@ -221,7 +240,7 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 		obj.Delete(args.Context)
 	}()
 
-	if args.Force && attrs != nil {
+	if args.Force && img != nil {
 		err := p.deleteConflictingImage(projectID, args.Name)
 		if err != nil {
 			return err

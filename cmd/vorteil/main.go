@@ -360,6 +360,53 @@ func PlainTable(vals [][]string) {
 	table.Render()
 }
 
+func createSymlinkCallback(iio *vdecompiler.IO, inode *vdecompiler.Inode, dpath string) func() error {
+	return func() error {
+		rdr, err := iio.InodeReader(inode)
+		if err != nil {
+			return err
+		}
+		data, err := ioutil.ReadAll(rdr)
+		if err != nil {
+			return err
+		}
+
+		err = os.Symlink(string(string(data)), dpath)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+}
+
+func copyInodeToRegularFile(iio *vdecompiler.IO, inode *vdecompiler.Inode, dpath string) error {
+	var err error
+	var f *os.File
+	var rdr io.Reader
+
+	_, err = os.Stat(dpath)
+	if !os.IsNotExist(err) {
+		if err == nil {
+			err = fmt.Errorf("file already exists: %s", dpath)
+		}
+		return err
+	}
+
+	f, err = os.Create(dpath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	rdr, err = iio.InodeReader(inode)
+	if err != nil {
+		return err
+	}
+
+	_, err = io.CopyN(f, rdr, int64(inode.Fullsize()))
+	return err
+}
+
 func decompile(srcPath, outPath string) {
 	iio, err := vdecompiler.Open(srcPath)
 	if err != nil {
@@ -405,56 +452,24 @@ func decompile(srcPath, outPath string) {
 
 		log.Printf("copying %s", rpath)
 
+		var inodeIsFile bool
+
 		if inode.IsRegularFile() {
-			fi, err = os.Stat(dpath)
-			if !os.IsNotExist(err) {
-				if err == nil {
-					return fmt.Errorf("file already exists: %s", dpath)
-				}
-				return err
-			}
-
-			f, err := os.Create(dpath)
-			if err != nil {
-				return err
-			}
-			defer f.Close()
-
-			rdr, err := iio.InodeReader(inode)
-			if err != nil {
-				return err
-			}
-
-			_, err = io.CopyN(f, rdr, int64(inode.Fullsize()))
-			if err != nil {
-				return err
-			}
-			return nil
+			inodeIsFile = true
+			return copyInodeToRegularFile(iio, inode, dpath)
 		}
 
 		if inode.IsSymlink() {
-
-			symlinkCallbacks = append(symlinkCallbacks, func() error {
-				rdr, err := iio.InodeReader(inode)
-				if err != nil {
-					return err
-				}
-				data, err := ioutil.ReadAll(rdr)
-				if err != nil {
-					return err
-				}
-
-				err = os.Symlink(string(string(data)), dpath)
-				if err != nil {
-					return err
-				}
-				return nil
-			})
-			return nil
+			inodeIsFile = true
+			symlinkCallbacks = append(symlinkCallbacks, createSymlinkCallback(iio, inode, dpath))
 		}
 
 		if !inode.IsDirectory() {
 			log.Warnf("skipping abnormal file: %s", rpath)
+			inodeIsFile = true
+		}
+
+		if inodeIsFile {
 			return nil
 		}
 

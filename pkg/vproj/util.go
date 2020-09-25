@@ -195,7 +195,7 @@ func writeFileToTar(tw *tar.Writer, f vio.File) error {
 	if err != nil {
 		return err
 	}
-	cfgHeader.Name = f.Name()
+
 	err = tw.WriteHeader(cfgHeader)
 	if err != nil {
 		return err
@@ -272,30 +272,7 @@ func defaultPNGAndVCFG(args *defaultIconAndConfigArgs) error {
 		}
 	}
 
-	b, err := args.vprj.Marshal()
-	if err != nil {
-		return err
-	}
-
-	vprjTmp := vio.CustomFile(vio.CustomFileArgs{
-		ModTime:    time.Now(),
-		Name:       FileName,
-		ReadCloser: ioutil.NopCloser(bytes.NewReader(b)),
-		Size:       len(b),
-	})
-	defer vprjTmp.Close()
-
-	vprjHeader, err := tar.FileInfoHeader(vio.Info(vprjTmp), "")
-	if err != nil {
-		return err
-	}
-
-	err = args.tw.WriteHeader(vprjHeader)
-	if err != nil {
-		return err
-	}
-
-	_, err = io.Copy(args.tw, vprjTmp)
+	err = handleVprjTargetFile(args.vprj, args.tw)
 	if err != nil {
 		return err
 	}
@@ -303,13 +280,7 @@ func defaultPNGAndVCFG(args *defaultIconAndConfigArgs) error {
 	return nil
 }
 
-func handleVprjTargetFile(vprj ProjectData, tw *tar.Writer, x string) error {
-
-	for i := range vprj.Targets {
-		if vprj.Targets[i].Name == strings.TrimSuffix(x, path.Ext(x)) {
-			vprj.Targets[i].VCFGs = append(vprj.Targets[i].VCFGs, "readme.vcfg")
-		}
-	}
+func handleVprjTargetFile(vprj ProjectData, tw *tar.Writer) error {
 
 	b, err := vprj.Marshal()
 	if err != nil {
@@ -336,7 +307,14 @@ func tarFromVorteilProject(v *vcfg.VCFG, vprj ProjectData, files []string, tw *t
 	for _, x := range vprj.Targets[0].VCFGs {
 		for _, s := range files {
 			if s == FileName {
-				err := handleVprjTargetFile(vprj, tw, x)
+
+				for i := range vprj.Targets {
+					if vprj.Targets[i].Name == strings.TrimSuffix(x, path.Ext(x)) {
+						vprj.Targets[i].VCFGs = append(vprj.Targets[i].VCFGs, "readme.vcfg")
+					}
+				}
+
+				err := handleVprjTargetFile(vprj, tw)
 				if err != nil {
 					return err
 				}

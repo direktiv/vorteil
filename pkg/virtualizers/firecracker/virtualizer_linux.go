@@ -484,7 +484,7 @@ func (o *operation) generateFirecrackerConfig(diskpath string) (firecracker.Conf
 	return firecracker.Config{
 			SocketPath:      filepath.Join(o.folder, fmt.Sprintf("%s.%s", o.name, "socket")),
 			KernelImagePath: o.kip,
-			KernelArgs:      fmt.Sprintf("init=/vorteil/vinitd root=PARTUUID=%s reboot=k panic=1 pci=off vt.color=0x00", vimg.Part2UUIDString),
+			KernelArgs:      fmt.Sprintf("loglevel=4 init=/vorteil/vinitd root=PARTUUID=%s reboot=k panic=1 pci=off vt.color=0x00", vimg.Part2UUIDString),
 			Drives:          devices,
 			MachineCfg: models.MachineConfiguration{
 				VcpuCount:  firecracker.Int64(int64(o.config.VM.CPUs)),

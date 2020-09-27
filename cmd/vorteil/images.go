@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/vorteil/vorteil/pkg/imageUtils"
 	"github.com/vorteil/vorteil/pkg/vdecompiler"
 	"github.com/vorteil/vorteil/pkg/vdisk"
 	"github.com/vorteil/vorteil/pkg/vpkg"
@@ -153,13 +154,32 @@ func init() {
 
 var decompileCmd = &cobra.Command{
 	Use:   "decompile IMAGE OUTPUT",
-	Short: "Create a usable project directory from a Vorteil disk vdecompiler.",
+	Short: "Creatsse a usable project directory from a Vorteil disk vdecompiler.",
 	Args:  cobra.ExactArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
 
 		srcPath := args[0]
 		outPath := args[1]
-		decompile(srcPath, outPath)
+		report, err := imageUtils.DecompileImage(srcPath, outPath, flagTouched)
+		if err != nil {
+			log.Errorf("%v", err)
+			os.Exit(1)
+		}
+
+		for _, dFile := range report.ImageFiles {
+			switch dFile.Result {
+			case imageUtils.CopiedMkDir:
+				log.Infof("Creating Dir > %s", dFile.Path)
+			case imageUtils.CopiedRegularFile:
+				log.Infof("Copied File > %s", dFile.Path)
+			case imageUtils.CopiedSymlink:
+				log.Infof("Created Symlink > %s", dFile.Path)
+			case imageUtils.SkippedAbnormalFile:
+				log.Infof("Skipped Abnormal > %s", dFile.Path)
+			case imageUtils.SkippedNotTouched:
+				log.Infof("Skipped Untouched File > %s", dFile.Path)
+			}
+		}
 
 	},
 }

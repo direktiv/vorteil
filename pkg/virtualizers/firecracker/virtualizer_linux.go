@@ -407,6 +407,7 @@ func (o *operation) initializeVM(args *virtualizers.PrepareArgs) error {
 	if err != nil {
 		return err
 	}
+
 	return nil
 }
 

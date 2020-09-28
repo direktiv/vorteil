@@ -196,18 +196,30 @@ var catCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		img := args[0]
 
+		// Create Vorteil Image Object From Image
+		vImageIO, err := vdecompiler.Open(img)
+		if err != nil {
+			log.Errorf("%v", err)
+			os.Exit(1)
+		}
+		defer vImageIO.Close()
+
 		for i := 1; i < len(args); i++ {
 			fpath := args[i]
 
 			// Get Reader
-			rdr, err := imageUtils.CatImageFile(img, fpath, flagOS)
+			rdr, err := imageUtils.CatImageFile(vImageIO, fpath, flagOS)
 			if err != nil {
 				log.Errorf("%v", err)
 				os.Exit(1)
 			}
 
 			// Copy Contents
-			log.Printf(rdr)
+			_, err = io.Copy(os.Stdout, rdr)
+			if err != nil {
+				log.Errorf("%v", err)
+				os.Exit(1)
+			}
 
 		}
 	},

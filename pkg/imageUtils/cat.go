@@ -1,7 +1,7 @@
 package imageUtils
 
 import (
-	"bytes"
+	"fmt"
 	"io"
 	"strings"
 
@@ -9,51 +9,38 @@ import (
 )
 
 // CatImageFile ...
-func CatImageFile(vorteilImagePath string, imageFilePath string, os bool) (string, error) {
-	var catOut string
-
-	iio, err := vdecompiler.Open(vorteilImagePath)
-	if err != nil {
-		return catOut, err
-	}
-	defer iio.Close()
-
+func CatImageFile(vorteilImage *vdecompiler.IO, imageFilePath string, os bool) (io.Reader, error) {
 	var rdr io.Reader
+	var err error
 
 	if os {
 		imageFilePath = strings.TrimPrefix(imageFilePath, "/")
-		rdr, err = iio.KernelFile(imageFilePath)
-		if err != nil {
-			return catOut, err
-		}
+		rdr, err = vorteilImage.KernelFile(imageFilePath)
 	} else {
-		ino, err := iio.ResolvePathToInodeNo(imageFilePath)
+		ino, err := vorteilImage.ResolvePathToInodeNo(imageFilePath)
 		if err != nil {
-			return catOut, err
+			return nil, err
 		}
 
-		inode, err := iio.ResolveInode(ino)
-		if err != nil {
-			return catOut, err
+		inode, err := vorteilImage.ResolveInode(ino)
+		if err == nil {
+			if !inode.IsRegularFile() {
+				err = fmt.Errorf("\"%s\" is not a regular file", imageFilePath)
+			}
 		}
 
-		if !inode.IsRegularFile() {
-			return catOut, err
+		if err != nil {
+			return nil, err
 		}
 
-		rdr, err = iio.InodeReader(inode)
+		rdr, err = vorteilImage.InodeReader(inode)
 		if err != nil {
-			return catOut, err
+			return nil, err
 		}
 
 		rdr = io.LimitReader(rdr, int64(inode.Fullsize()))
 	}
 
-	buf := new(bytes.Buffer)
-	_, err = io.Copy(buf, rdr)
-	if err == nil {
-		catOut = buf.String()
-	}
-	return catOut, err
+	return rdr, err
 
 }

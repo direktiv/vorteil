@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/sisatech/tablewriter"
+	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/vorteil/vorteil/pkg/vcfg"
 	"github.com/vorteil/vorteil/pkg/vdisk"
@@ -307,6 +308,30 @@ func SetNumbersMode(s string) error {
 		return fmt.Errorf("numbers mode must be one of 'dec', 'hex', or 'short'")
 	}
 	return nil
+}
+
+// SetNumberModeFlagCMD : Will SetNumberMode to the value of the cmd flag 'numbers'
+func SetNumberModeFlagCMD(cmd *cobra.Command) error {
+	numbers, err := cmd.Flags().GetString("numbers")
+	if err != nil {
+		return err
+	}
+
+	err = SetNumbersMode(numbers)
+	if err != nil {
+		return fmt.Errorf("couldn't parse value of --numbers: %v", err)
+	}
+
+	return nil
+}
+
+// genericErrCheck : Very simple helper command to reduce duplication of err checks in the main package.
+//	Exits program with given exit code and error if error is not nil
+func genericErrCheck(err error, exitCode int) {
+	if err != nil {
+		log.Errorf("%v", err)
+		os.Exit(exitCode)
+	}
 }
 
 // PrintableSize is a wrapper around int to alter its string formatting behaviour.

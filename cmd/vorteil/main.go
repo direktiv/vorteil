@@ -127,11 +127,16 @@ func getSourceType(src string) (sourceType, error) {
 }
 
 func getBuilderURL(argName, src string) (vpkg.Builder, error) {
+
+	p := log.NewProgress(fmt.Sprintf("Downloading %s", src), "%", 0)
+
 	resp, err := http.Get(src)
 	if err != nil {
 		resp.Body.Close()
+		p.Finish(false)
 		return nil, err
 	}
+	p.Finish(true)
 
 	pkgr, err := vpkg.Load(resp.Body)
 	if err != nil {
@@ -417,6 +422,9 @@ func utilFileNotExists(fpath string) error {
 }
 
 func decompile(srcPath, outPath string) {
+
+	log.Printf("decompiling disk")
+
 	iio, err := vdecompiler.Open(srcPath)
 	if err != nil {
 		log.Errorf("%v", err)
@@ -460,7 +468,7 @@ func decompile(srcPath, outPath string) {
 
 		counter++
 
-		log.Printf("copying %s", rpath)
+		log.Debugf("copying %s", rpath)
 
 		if inode.IsRegularFile() {
 			err = copyInodeToRegularFile(iio, inode, dpath)

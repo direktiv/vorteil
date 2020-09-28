@@ -49,19 +49,19 @@ func StatImageFile(vorteilImagePath string, imageFilePath string, seekOS bool) (
 			size = 0
 		} else {
 			kfiles, err := vorteilImage.KernelFiles()
-			if err != nil {
-				return statOut, err
-			}
-
-			for _, kf := range kfiles {
-				if kf.Name == imageFilePath {
-					s = imageFilePath
-					size = kf.Size
-					break
+			if err == nil {
+				for _, kf := range kfiles {
+					if kf.Name == imageFilePath {
+						s = imageFilePath
+						size = kf.Size
+						break
+					}
+				}
+				if s == "" {
+					err = fmt.Errorf("kernel file not found: %s", imageFilePath)
 				}
 			}
-
-			if s == "" {
+			if err != nil {
 				return statOut, err
 			}
 		}
@@ -70,12 +70,12 @@ func StatImageFile(vorteilImagePath string, imageFilePath string, seekOS bool) (
 		statOut.FileType = ftype
 		statOut.Size = size
 	} else {
+		var inode *vdecompiler.Inode
 		ino, err := vorteilImage.ResolvePathToInodeNo(imageFilePath)
-		if err != nil {
-			return statOut, err
+		if err == nil {
+			inode, err = vorteilImage.ResolveInode(ino)
 		}
 
-		inode, err := vorteilImage.ResolveInode(ino)
 		if err != nil {
 			return statOut, err
 		}

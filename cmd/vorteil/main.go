@@ -127,40 +127,43 @@ func getSourceType(src string) (sourceType, error) {
 	return sourceINVALID, err
 }
 
-func getBuilderURL(argName, src string) (vpkg.Builder, error) {
-
-	p := log.NewProgress(fmt.Sprintf("Downloading %s", src), "%", 0)
+func getReaderURL(src string) (vpkg.Reader, error) {
 
 	resp, err := http.Get(src)
 	if err != nil {
 		resp.Body.Close()
-		p.Finish(false)
 		return nil, err
 	}
-	p.Finish(true)
+	p := log.NewProgress("Downloading package", "KiB", resp.ContentLength)
 
-	pkgr, err := vpkg.Load(resp.Body)
+	pkgr, err := vpkg.Load(p.ProxyReader(resp.Body))
 	if err != nil {
-		resp.Body.Close()
 		return nil, err
 	}
 
+	return pkgr, nil
+}
+
+func getBuilderURL(argName, src string) (vpkg.Builder, error) {
+	pkgr, err := getReaderURL(src)
+	if err != nil {
+		return nil, err
+	}
 	pkgb, err := vpkg.NewBuilderFromReader(pkgr)
 	if err != nil {
-		resp.Body.Close()
 		pkgr.Close()
 		return nil, err
 	}
 	return pkgb, nil
 }
 
-func getBuilderFile(argName, src string) (vpkg.Builder, error) {
+func getReaderFile(src string) (vpkg.Reader, error) {
 	f, err := os.Open(src)
 	if err != nil {
 		if !os.IsNotExist(err) {
 			return nil, err
 		}
-		return nil, fmt.Errorf("failed to resolve %s '%s'", argName, src)
+		return nil, fmt.Errorf("failed to resolve %s ", src)
 	}
 
 	pkgr, err := vpkg.Load(f)
@@ -168,11 +171,19 @@ func getBuilderFile(argName, src string) (vpkg.Builder, error) {
 		f.Close()
 		return nil, err
 	}
+	return pkgr, nil
+}
+func getBuilderFile(argName, src string) (vpkg.Builder, error) {
 
+	pkgr, err := getReaderFile(src)
+	if err != nil {
+		pkgr.Close()
+		return nil, err
+	}
 	pkgb, err := vpkg.NewBuilderFromReader(pkgr)
 	if err != nil {
 		pkgr.Close()
-		f.Close()
+		return nil, err
 	}
 	return pkgb, err
 }
@@ -197,6 +208,27 @@ func getBuilderDir(argName, src string) (vpkg.Builder, error) {
 	return pkgb, err
 }
 
+func getPackagerReader(argName, src string) (vpkg.Reader, error) {
+	var err error
+	var pkgR vpkg.Reader
+	sType, err := getSourceType(src)
+	if err != nil {
+		return nil, err
+	}
+
+	switch sType {
+	case sourceURL:
+		pkgR, err = getReaderURL(src)
+	case sourceFile:
+		pkgR, err = getReaderFile(src)
+	case sourceINVALID:
+		fallthrough
+	default:
+		err = fmt.Errorf("failed to resolve %s '%s'", argName, src)
+	}
+
+	return pkgR, err
+}
 func getPackageBuilder(argName, src string) (vpkg.Builder, error) {
 	var err error
 	var pkgB vpkg.Builder

@@ -46,6 +46,8 @@ func commandInit() {
 	addModifyFlags(buildCmd.Flags())
 	addModifyFlags(runCmd.Flags())
 
+	addModifyFlags(provisionCmd.Flags())
+
 	// setup logging across all commands
 	rootCmd.PersistentFlags().BoolVarP(&flagVerbose, "verbose", "v", false, "enable verbose output")
 	rootCmd.PersistentFlags().BoolVarP(&flagDebug, "debug", "d", false, "enable debug output")

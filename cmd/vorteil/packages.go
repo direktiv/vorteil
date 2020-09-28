@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-	"github.com/vorteil/vorteil/pkg/vpkg"
 	"github.com/vorteil/vorteil/pkg/vproj"
 )
 
@@ -154,11 +153,12 @@ other files. If the DEST argument is omitted it will default to ".".`,
 			os.Exit(1)
 		}
 
-		pkg, err := vpkg.Open(pkgPath)
+		pkg, err := getReaderURL(pkgPath)
 		if err != nil {
 			log.Errorf("%v", err)
 			os.Exit(1)
 		}
+
 		defer pkg.Close()
 
 		err = vproj.CreateFromPackage(prjPath, pkg)
@@ -166,8 +166,6 @@ other files. If the DEST argument is omitted it will default to ".".`,
 			log.Errorf("%v", err)
 			os.Exit(1)
 		}
-
-		// TODO: progress tracking
 
 		log.Printf("unpacked to: %s", prjPath)
 	},

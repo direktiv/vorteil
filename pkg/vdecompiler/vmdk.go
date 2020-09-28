@@ -5,46 +5,9 @@ import (
 	"errors"
 	"io"
 	"io/ioutil"
+
+	"github.com/vorteil/vorteil/pkg/vmdk"
 )
-
-type vmdkInfo struct {
-	header *VMDKHeader
-}
-
-// Image file format.
-const (
-	ImageFormatVMDKSparse          = "vmdk (sparse extent)"
-	ImageFormatVMDKStreamOptimized = "vmdk (stream optimized extent)"
-	VMDKMagicNumber                = 0x564d444b
-)
-
-// VMDKHeaderFields keep all of the VMDK header information except for the magic number.
-// The complete VMDK header is called VMDKHeader.
-type VMDKHeaderFields struct {
-	Version            uint32 // 4
-	Flags              uint32 // 8
-	Capacity           uint64 // 12
-	GrainSize          uint64 // 20
-	DescriptorOffset   uint64 // 28
-	DescriptorSize     uint64 // 36
-	NumGTEsPerGT       uint32 // 44
-	RGDOffset          uint64 // 48
-	GDOffset           uint64 // 56
-	OverHead           uint64 // 64
-	UncleanShutdown    byte   // 72
-	SingleEndLineChar  byte   // 73
-	NonEndLineChar     byte   // 74
-	DoubleEndLineChar1 byte   // 75
-	DoubleEndLineChar2 byte   // 76
-	CompressAlgorithm  uint16 // 77
-	Pad                [433]uint8
-}
-
-// VMDKHeader keeps all of the VMDK header information.
-type VMDKHeader struct {
-	MagicNumber uint32           // 0
-	Fields      VMDKHeaderFields // 4
-}
 
 type vmdkSparseIO struct {
 	iio         *IO
@@ -53,6 +16,7 @@ type vmdkSparseIO struct {
 	grainSize   int
 	offset      int
 	remainder   int
+	gdes        []uint32
 	grains      []uint32
 	buffer      io.Reader
 }
@@ -63,7 +27,7 @@ func (sio *vmdkSparseIO) loadGrain(grain int) (io.Reader, error) {
 	}
 
 	offset := sio.grains[grain]
-	_, err := sio.iio.src.Seek(int64(offset)*SectorSize, io.SeekStart)
+	_, err := sio.iio.src.Seek(int64(offset)*vmdk.SectorSize, io.SeekStart)
 	if err != nil {
 		return nil, err
 	}
@@ -142,51 +106,85 @@ func (sio *vmdkSparseIO) Write(p []byte) (n int, err error) {
 	return 0, errors.New("writing not supported")
 }
 
+func (sio *vmdkSparseIO) readGrainTable(i int) error {
+
+	_, err := sio.iio.src.Seek(int64(sio.gdes[i])*vmdk.SectorSize, io.SeekStart)
+	if err != nil {
+		return err
+	}
+
+	gtes := make([]uint32, 512)
+	err = binary.Read(sio.iio.src, binary.LittleEndian, &gtes)
+	if err != nil {
+		return err
+	}
+
+	sio.grains = append(sio.grains, gtes...)
+
+	return nil
+
+}
+
+func (sio *vmdkSparseIO) readGrainTables() error {
+
+	for i := 0; i < len(sio.gdes); i++ {
+		err := sio.readGrainTable(i)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+
+}
+
+func (sio *vmdkSparseIO) readGrainDirectory() error {
+
+	tables := (sio.totalGrains + 511) / 512
+	sio.gdes = make([]uint32, tables)
+
+	_, err := sio.iio.src.Seek(int64(sio.iio.vmdk.GDOffset)*vmdk.SectorSize, io.SeekStart)
+	if err != nil {
+		return err
+	}
+
+	err = binary.Read(sio.iio.src, binary.LittleEndian, &sio.gdes)
+	if err != nil {
+		return err
+	}
+
+	return nil
+
+}
+
 func (iio *IO) vmdkSparseIO() (*partialIO, error) {
 
 	pio := new(partialIO)
-	pio.name = iio.src.name // TODO: ?
-	pio.size = int(iio.vmdk.header.Fields.Capacity) * SectorSize
+	pio.name = iio.src.name
+	pio.size = int(iio.vmdk.Capacity) * vmdk.SectorSize
 	pio.closer = iio.src.closer
 
 	sio := new(vmdkSparseIO)
 	sio.grain = -1
 	sio.iio = iio
-	sio.grainSize = int(iio.vmdk.header.Fields.GrainSize) * SectorSize
+	sio.grainSize = int(iio.vmdk.GrainSize) * vmdk.SectorSize
 	sio.totalGrains = pio.size / sio.grainSize
 	pio.reader = sio
 	pio.seeker = sio
 	pio.writer = sio
 
-	tables := (sio.totalGrains + 511) / 512
-	gdes := make([]uint32, tables)
-
-	_, err := iio.src.Seek(int64(iio.vmdk.header.Fields.GDOffset)*SectorSize, io.SeekStart)
+	err := sio.readGrainDirectory()
 	if err != nil {
 		return nil, err
 	}
 
-	err = binary.Read(iio.src, binary.LittleEndian, &gdes)
+	err = sio.readGrainTables()
 	if err != nil {
 		return nil, err
-	}
-
-	for i := 0; i < tables; i++ {
-		_, err = iio.src.Seek(int64(gdes[i])*SectorSize, io.SeekStart)
-		if err != nil {
-			return nil, err
-		}
-
-		gtes := make([]uint32, 512)
-		err = binary.Read(iio.src, binary.LittleEndian, &gtes)
-		if err != nil {
-			return nil, err
-		}
-
-		sio.grains = append(sio.grains, gtes...)
 	}
 
 	sio.grains = sio.grains[:sio.totalGrains]
 
 	return pio, nil
+
 }

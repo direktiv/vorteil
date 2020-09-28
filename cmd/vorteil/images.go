@@ -13,8 +13,10 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/vorteil/vorteil/pkg/ext"
 	"github.com/vorteil/vorteil/pkg/vdecompiler"
 	"github.com/vorteil/vorteil/pkg/vdisk"
+	"github.com/vorteil/vorteil/pkg/vimg"
 	"github.com/vorteil/vorteil/pkg/vpkg"
 )
 
@@ -207,7 +209,7 @@ var catCmd = &cobra.Command{
 					os.Exit(1)
 				}
 
-				if !inode.IsRegularFile() {
+				if !vdecompiler.InodeIsRegularFile(inode) {
 					log.Errorf("\"%s\" is not a regular file", fpath)
 					os.Exit(1)
 				}
@@ -218,7 +220,7 @@ var catCmd = &cobra.Command{
 					os.Exit(1)
 				}
 
-				rdr = io.LimitReader(rdr, int64(inode.Fullsize()))
+				rdr = io.LimitReader(rdr, int64(vdecompiler.InodeSize(inode)))
 			}
 
 			_, err := io.Copy(os.Stdout, rdr)
@@ -332,7 +334,7 @@ var cpCmd = &cobra.Command{
 				return err
 			}
 
-			if inode.IsRegularFile() {
+			if vdecompiler.InodeIsRegularFile(inode) {
 				f, err := os.Create(dpath)
 				if err != nil {
 					return err
@@ -344,14 +346,14 @@ var cpCmd = &cobra.Command{
 					return err
 				}
 
-				_, err = io.CopyN(f, rdr, int64(inode.Fullsize()))
+				_, err = io.CopyN(f, rdr, int64(vdecompiler.InodeSize(inode)))
 				if err != nil {
 					return err
 				}
 				return nil
 			}
 
-			if inode.IsSymlink() {
+			if vdecompiler.InodeIsSymlink(inode) {
 
 				rdr, err := iio.InodeReader(inode)
 				if err != nil {
@@ -368,7 +370,7 @@ var cpCmd = &cobra.Command{
 				return nil
 			}
 
-			if !inode.IsDirectory() {
+			if !vdecompiler.InodeIsDirectory(inode) {
 				log.Warnf("skipping abnormal file: %s", rpath)
 				return nil
 			}
@@ -459,8 +461,8 @@ var duCmd = &cobra.Command{
 
 		var depth = 0
 
-		var recurse func(*vdecompiler.Inode, string) (int, error)
-		recurse = func(inode *vdecompiler.Inode, name string) (int, error) {
+		var recurse func(*ext.Inode, string) (int, error)
+		recurse = func(inode *ext.Inode, name string) (int, error) {
 
 			depth++
 			defer func() {
@@ -468,9 +470,9 @@ var duCmd = &cobra.Command{
 			}()
 
 			var size int
-			size = int(inode.Sectors) * vdecompiler.SectorSize
+			size = int(inode.Sectors) * ext.SectorSize
 
-			if !inode.IsDirectory() {
+			if !vdecompiler.InodeIsDirectory(inode) {
 				return size, nil
 			}
 
@@ -493,7 +495,7 @@ var duCmd = &cobra.Command{
 				if err != nil {
 					return 0, err
 				}
-				if all || inode.IsDirectory() {
+				if all || vdecompiler.InodeIsDirectory(inode) {
 					if (maxDepth >= 0 && depth <= maxDepth) || maxDepth < 0 {
 						table = append(table, []string{child, fmt.Sprintf("%s", PrintableSize(delta))})
 					}
@@ -603,7 +605,7 @@ var fsCmd = &cobra.Command{
 		}
 		defer iio.Close()
 
-		entry, err := iio.GPTEntry(vdecompiler.FilesystemPartitionName)
+		entry, err := iio.GPTEntry(vdecompiler.UTF16toString(vimg.RootPartitionName))
 		if err != nil {
 			log.Errorf("%v", err)
 			os.Exit(1)
@@ -666,7 +668,7 @@ var fsimgCmd = &cobra.Command{
 		}
 		defer iio.Close()
 
-		rdr, err := iio.PartitionReader(vdecompiler.FilesystemPartitionName)
+		rdr, err := iio.PartitionReader(vdecompiler.UTF16toString(vimg.RootPartitionName))
 		if err != nil {
 			_ = os.Remove(f.Name())
 			log.Errorf("%v", err)
@@ -723,10 +725,10 @@ var gptCmd = &cobra.Command{
 		log.Printf("Backup LBA:       \t%s", PrintableSize(int(header.BackupLBA)))
 		log.Printf("First usable LBA: \t%s", PrintableSize(int(header.FirstUsableLBA)))
 		log.Printf("Last usable LBA:  \t%s", PrintableSize(int(header.LastUsableLBA)))
-		log.Printf("First entries LBA:\t%s", PrintableSize(int(header.FirstEntriesLBA)))
+		log.Printf("First entries LBA:\t%s", PrintableSize(int(header.StartLBAParts)))
 		log.Printf("Entries:")
 		for i, entry := range entries {
-			name := entry.NameString()
+			name := vdecompiler.UTF16toString(entry.Name[:])
 			if name != "" {
 				log.Printf("  %d: %s", i, name)
 				log.Printf("     First LBA:\t%s", PrintableSize(int(entry.FirstLBA)))
@@ -790,7 +792,7 @@ var lsCmd = &cobra.Command{
 
 		var fpaths []string
 		var inos []int
-		var inodes []*vdecompiler.Inode
+		var inodes []*ext.Inode
 		var table [][]string
 		var entries []*vdecompiler.DirectoryEntry
 
@@ -842,7 +844,7 @@ var lsCmd = &cobra.Command{
 		}
 
 	inodeEntry:
-		if !inode.IsDirectory() {
+		if !vdecompiler.InodeIsDirectory(inode) {
 			if reiterating {
 				goto skip
 			}
@@ -890,22 +892,13 @@ var lsCmd = &cobra.Command{
 				links := "?"
 
 				var uid, gid string
-				if child.UID == vdecompiler.VorteilUserID {
-					uid = vdecompiler.VorteilUserName
-				} else {
-					uid = fmt.Sprintf("%d", child.UID)
-				}
-
-				if child.GID == vdecompiler.VorteilGroupID {
-					gid = vdecompiler.VorteilGroupName
-				} else {
-					gid = fmt.Sprintf("%d", child.GID)
-				}
+				uid = fmt.Sprintf("%d", child.UID)
+				gid = fmt.Sprintf("%d", child.GID)
 
 				ts := fmt.Sprintf("%s", time.Unix(int64(child.ModificationTime), 0))
-				size := fmt.Sprintf("%s", PrintableSize(child.Fullsize()))
+				size := fmt.Sprintf("%s", PrintableSize(vdecompiler.InodeSize(inode)))
 
-				table = append(table, []string{child.Permissions(), links, uid, gid, ts, size, entry.Name})
+				table = append(table, []string{vdecompiler.InodePermissionsString(child), links, uid, gid, ts, size, entry.Name})
 
 				if recursive && !(entry.Name == "." || entry.Name == "..") {
 					inodes = append(inodes, child)
@@ -996,7 +989,7 @@ var md5Cmd = &cobra.Command{
 				os.Exit(1)
 			}
 
-			if inode.IsDirectory() {
+			if vdecompiler.InodeIsDirectory(inode) {
 				log.Errorf("\"%s\" is not a regular file", fpath)
 				os.Exit(1)
 			}
@@ -1007,7 +1000,7 @@ var md5Cmd = &cobra.Command{
 				os.Exit(1)
 			}
 
-			rdr = io.LimitReader(rdr, int64(inode.Fullsize()))
+			rdr = io.LimitReader(rdr, int64(vdecompiler.InodeSize(inode)))
 		}
 
 		hasher := md5.New()
@@ -1113,22 +1106,16 @@ var statCmd = &cobra.Command{
 			var ftype string
 
 			var user, group string
-			user = "?"
-			group = "?"
-			if inode.UID == vdecompiler.VorteilUserID {
-				user = vdecompiler.VorteilUserName
-			}
-			if inode.GID == vdecompiler.VorteilGroupID {
-				group = vdecompiler.VorteilGroupName
-			}
+			user = "?"  // TODO
+			group = "?" // TODO
 
 			log.Printf("File: %s\t%s", filepath.Base(fpath), ftype)
-			log.Printf("Size: %s", PrintableSize(inode.Fullsize()))
+			log.Printf("Size: %s", PrintableSize(vdecompiler.InodeSize(inode)))
 			// TODO: log.Printf("Blocks: %s", PrintableSize(int()))
 			// TODO: log.Printf("IO Block: %s", PrintableSize())
 			log.Printf("Inode: %d", ino)
 			// TODO: log.Printf("Links: %s")
-			log.Printf("Access: %#o/%s", inode.Mode&vdecompiler.InodePermissionsMask, inode.Permissions())
+			log.Printf("Access: %#o/%s", inode.Permissions&ext.InodePermissionsMask, vdecompiler.InodePermissionsString(inode))
 			log.Printf("Uid: %d (%s)", inode.UID, user)
 			log.Printf("Gid: %d (%s)", inode.GID, group)
 			log.Printf("Access: %s", time.Unix(int64(inode.LastAccessTime), 0))
@@ -1222,7 +1209,7 @@ var treeCmd = &cobra.Command{
 
 			log.Printf("%s%s", prefix, name)
 
-			if !inode.IsDirectory() {
+			if !vdecompiler.InodeIsDirectory(inode) {
 				return nil
 			}
 

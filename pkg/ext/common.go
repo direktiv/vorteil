@@ -12,8 +12,10 @@ import (
 
 // Various ext2 build constants.
 const (
+	Signature                = 0xEF53
 	SectorSize               = 512
 	BlockSize                = 0x1000
+	SuperblockOffset         = 1024
 	InodeSize                = 128
 	InodesPerBlock           = BlockSize / InodeSize
 	BlockGroupDescriptorSize = 32
@@ -27,11 +29,19 @@ const (
 
 	dentryNameAlignment = 4
 
+	RootDirInode = 2
+
+	InodeTypeDirectory          = 0x4000
+	InodeTypeRegularFile        = 0x8000
+	InodeTypeSymlink            = 0xA000
+	InodeTypeMask               = 0xF000
+	InodePermissionsMask        = 0777
+	DefaultInodePermissions     = 0700
 	SuperUID                    = 1000
 	SuperGID                    = 1000
-	inodeDirectoryPermissions   = 0x4000 | 0700
-	inodeRegularFilePermissions = 0x8000 | 0700
-	inodeSymlinkPermissions     = 0xA000 | 0700
+	inodeDirectoryPermissions   = InodeTypeDirectory | DefaultInodePermissions
+	inodeRegularFilePermissions = InodeTypeRegularFile | DefaultInodePermissions
+	inodeSymlinkPermissions     = InodeTypeSymlink | DefaultInodePermissions
 )
 
 // Superblock is the structure of a superblock as written to the disk.
@@ -63,6 +73,18 @@ type Superblock struct {
 	SuperGroup          uint16
 }
 
+// BlockGroupDescriptorTableEntry is the structure of an ext block group
+// descriptor table entry.
+type BlockGroupDescriptorTableEntry struct {
+	BlockBitmapBlockAddr uint32
+	InodeBitmapBlockAddr uint32
+	InodeTableBlockAddr  uint32
+	UnallocatedBlocks    uint16
+	UnallocatedInodes    uint16
+	Directories          uint16
+	_                    [14]byte
+}
+
 // Inode is the structure of an inode as written to the disk.
 type Inode struct {
 	Permissions      uint16
@@ -82,7 +104,8 @@ type Inode struct {
 	DoublyIndirect   uint32
 	TriplyIndirect   uint32
 	GenNo            uint32
-	Reserved         [2]uint32
+	FileACL          uint32
+	SizeUpper        uint32
 	FragAddr         uint32
 	OSStuff          [12]byte
 }

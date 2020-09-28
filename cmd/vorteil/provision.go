@@ -247,7 +247,7 @@ var (
 )
 
 var provisionersNewAmazonEC2Cmd = &cobra.Command{
-	Use:   "amazon-ec2",
+	Use:   "amazon-ec2 <OUTPUT_FILE>",
 	Short: "Add a new AWS (Amazon Web Services) Provisioner.",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
@@ -294,7 +294,7 @@ func init() {
 }
 
 var provisionersNewAzureCmd = &cobra.Command{
-	Use:   "azure",
+	Use:   "azure <OUTPUT_FILE>",
 	Short: "Add a new Microsoft Azure Provisioner.",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {

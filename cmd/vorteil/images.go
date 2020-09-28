@@ -586,43 +586,33 @@ var fsCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		img := args[0]
-
-		iio, err := vdecompiler.Open(img)
+		iio, err := vdecompiler.Open(args[0])
 		if err != nil {
 			log.Errorf("%v", err)
 			os.Exit(1)
 		}
 		defer iio.Close()
 
-		entry, err := iio.GPTEntry(vdecompiler.FilesystemPartitionName)
+		fsReport, err := imageUtils.FSImageFile(iio)
 		if err != nil {
 			log.Errorf("%v", err)
 			os.Exit(1)
 		}
 
-		sb, err := iio.Superblock(0)
-		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
-		}
+		log.Printf("First LBA:        \t%s", PrintableSize(fsReport.FirstLBA))
+		log.Printf("Last LBA:         \t%s", PrintableSize(fsReport.LastLBA))
+		log.Printf("Type:             \t%s", fsReport.Type)
+		log.Printf("Block size:       \t%s", PrintableSize(fsReport.BlockSize))
+		log.Printf("Blocks allocated: \t%s / %s", PrintableSize(fsReport.BlocksAllocated), PrintableSize(fsReport.BlocksAvaliable))
+		log.Printf("Inodes allocated: \t%s / %s", PrintableSize(fsReport.InodesAllocated), PrintableSize(fsReport.InodesAvaliable))
 
-		log.Printf("First LBA:        \t%s", PrintableSize(int(entry.FirstLBA)))
-		log.Printf("Last LBA:         \t%s", PrintableSize(int(entry.LastLBA)))
-		log.Printf("Type:             \text2")
-
-		blocksize := 1024 << int(sb.BlockSize)
-		log.Printf("Block size:       \t%s", PrintableSize(blocksize))
-		log.Printf("Blocks allocated: \t%s / %s", PrintableSize(int(sb.TotalBlocks-sb.UnallocatedBlocks)), PrintableSize(int(sb.TotalBlocks)))
-		log.Printf("Inodes allocated: \t%s / %s", PrintableSize(int(sb.TotalInodes-sb.UnallocatedInodes)), PrintableSize(int(sb.TotalInodes)))
-
-		log.Printf("Block groups:     \t%s", PrintableSize(int((sb.TotalBlocks+sb.BlocksPerGroup-1)/sb.BlocksPerGroup)))
-		log.Printf("  Max blocks each:\t%s", PrintableSize(int(sb.BlocksPerGroup)))
-		log.Printf("  Max inodes each:\t%s", PrintableSize(int(sb.InodesPerGroup)))
+		log.Printf("Block groups:     \t%s", PrintableSize(fsReport.BlockGroups))
+		log.Printf("  Max blocks each:\t%s", PrintableSize(fsReport.MaxBlock))
+		log.Printf("  Max inodes each:\t%s", PrintableSize(fsReport.MaxInodes))
 
 		// TODO: log.Printf("Expansion ceiling: %s")
-		log.Printf("Last mount time:  \t%s", time.Unix(int64(sb.LastMountTime), 0))
-		log.Printf("Last written time:\t%s", time.Unix(int64(sb.LastWrittenTime), 0))
+		log.Printf("Last mount time:  \t%s", fsReport.LastMountTime)
+		log.Printf("Last written time:\t%s", fsReport.LastWriteTime)
 
 		// TODO: files
 		// TODO: dirs

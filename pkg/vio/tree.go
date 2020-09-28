@@ -7,7 +7,7 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
-	"path"
+	unixpath "path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -121,7 +121,7 @@ func (n *TreeNode) Path() string {
 	}
 
 	s := n.Parent.Path()
-	return path.Join(s, n.File.Name())
+	return unixpath.Join(s, n.File.Name())
 
 }
 
@@ -536,16 +536,16 @@ func (t *tree) Map(path string, f File) error {
 	}
 
 	path = filepath.ToSlash(path)
-	path = filepath.Clean(path)
+	path = unixpath.Clean(path)
 	path = filepath.ToSlash(path)
-	path = filepath.Join("/", path)
+	path = unixpath.Join("/", path)
 	path = strings.TrimPrefix(path, "/")
 	if path == "" {
 		return errors.New("cannot map over the root node")
 	}
 
 	f = CustomFile(CustomFileArgs{
-		Name:               filepath.Base(path),
+		Name:               unixpath.Base(path),
 		Size:               f.Size(),
 		IsDir:              f.IsDir(),
 		IsSymlink:          f.IsSymlink(),
@@ -562,13 +562,13 @@ func (t *tree) Map(path string, f File) error {
 func (t *tree) MapSubTree(path string, sub FileTree) error {
 
 	path = filepath.ToSlash(path)
-	path = filepath.Clean(path)
+	path = unixpath.Clean(path)
 	path = filepath.ToSlash(path)
 
 	st := sub.(*tree)
 	f := st.root.File
 	st.root.File = CustomFile(CustomFileArgs{
-		Name:               filepath.Base(path),
+		Name:               unixpath.Base(path),
 		Size:               f.Size(),
 		IsDir:              f.IsDir(),
 		IsSymlink:          f.IsSymlink(),
@@ -610,7 +610,7 @@ func (t *tree) Walk(fn WalkFunc) error {
 
 func (t *tree) SubTree(path string) (FileTree, error) {
 
-	path = filepath.Clean(path)
+	path = unixpath.Clean(path)
 	path = filepath.ToSlash(path)
 
 	node := t.root
@@ -639,7 +639,7 @@ func (t *tree) SubTree(path string) (FileTree, error) {
 
 func (t *tree) Unmap(path string) error {
 
-	path = filepath.Clean(path)
+	path = unixpath.Clean(path)
 	path = filepath.ToSlash(path)
 	return t.root.unmap(path)
 

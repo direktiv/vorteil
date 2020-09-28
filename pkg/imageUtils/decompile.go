@@ -12,8 +12,8 @@ import (
 
 // DecompileReport ...
 type DecompileReport struct {
-	CopyTouched bool
-	ImageFiles  []DecompiledFile
+	SkipNotTouched bool
+	ImageFiles     []DecompiledFile
 }
 
 // DecompiledFile ...
@@ -90,10 +90,10 @@ func utilFileNotExists(fpath string) error {
 }
 
 // DecompileImage ...
-func DecompileImage(vorteilImagePath string, Outputpath string, copyTouched bool) (DecompileReport, error) {
+func DecompileImage(vorteilImagePath string, Outputpath string, skipNotTouched bool) (DecompileReport, error) {
 	report := DecompileReport{
-		ImageFiles:  make([]DecompiledFile, 0),
-		CopyTouched: copyTouched,
+		ImageFiles:     make([]DecompiledFile, 0),
+		SkipNotTouched: skipNotTouched,
 	}
 
 	iio, err := vdecompiler.Open(vorteilImagePath)
@@ -130,7 +130,7 @@ func DecompileImage(vorteilImagePath string, Outputpath string, copyTouched bool
 			return err
 		}
 
-		if copyTouched && inode.LastAccessTime == 0 && !inode.IsDirectory() && rpath != "/" {
+		if report.SkipNotTouched && inode.LastAccessTime == 0 && !inode.IsDirectory() && rpath != "/" {
 			report.ImageFiles = append(report.ImageFiles, DecompiledFile{
 				Copied: false,
 				Path:   rpath,

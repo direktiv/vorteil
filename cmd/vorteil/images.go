@@ -633,31 +633,14 @@ var fsimgCmd = &cobra.Command{
 		img := args[0]
 		dst := args[1]
 
-		f, err := os.Create(dst)
-		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
-		}
-		defer f.Close()
-
 		iio, err := vdecompiler.Open(img)
 		if err != nil {
-			_ = os.Remove(f.Name())
 			log.Errorf("%v", err)
 			os.Exit(1)
 		}
 		defer iio.Close()
 
-		rdr, err := iio.PartitionReader(vdecompiler.FilesystemPartitionName)
-		if err != nil {
-			_ = os.Remove(f.Name())
-			log.Errorf("%v", err)
-			os.Exit(1)
-		}
-
-		_, err = io.Copy(f, rdr)
-		if err != nil {
-			_ = os.Remove(f.Name())
+		if err := imageUtils.FSIMGImage(iio, dst); err != nil {
 			log.Errorf("%v", err)
 			os.Exit(1)
 		}

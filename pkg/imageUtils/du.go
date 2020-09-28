@@ -1,55 +1,101 @@
 package imageUtils
 
 import (
+	"path/filepath"
+
 	"github.com/vorteil/vorteil/pkg/vdecompiler"
 )
 
-// ImageGPTReport ...
-type ImageGPTReport struct {
-	HeaderLBA       int
-	BackupLBA       int
-	FirstUsableLBA  int
-	LastUsableLBA   int
-	FirstEntriesLBA int
-	Entries         []GPTEntry
+// DUImageReport ...
+type DUImageReport struct {
+	FreeSpace  int
+	ImageFiles []duImageInfo
 }
 
-// GPTEntry ...
-type GPTEntry struct {
-	Name     string
-	FirstLBA int
-	LastLBA  int
+type duImageInfo struct {
+	FilePath string
+	FileSize int
 }
 
-// ImageGPT ...
-func ImageGPT(vorteilImage *vdecompiler.IO) (ImageGPTReport, error) {
-	var gptOut ImageGPTReport
-	header, err := vorteilImage.GPTHeader()
-	if err != nil {
-		return gptOut, err
+// DUImageFile ...
+func DUImageFile(vorteilImage *vdecompiler.IO, imageFilePath string, calcFreeSpace bool, maxDepth int, all bool) (DUImageReport, error) {
+	var duOut DUImageReport
+	var depth = 0
+
+	var recurse func(*vdecompiler.Inode, string) (int, error)
+	recurse = func(inode *vdecompiler.Inode, name string) (int, error) {
+
+		depth++
+		defer func() {
+			depth--
+		}()
+
+		var size int
+		size = int(inode.Sectors) * vdecompiler.SectorSize
+
+		if !inode.IsDirectory() {
+			return size, nil
+		}
+
+		entries, err := vorteilImage.Readdir(inode)
+		if err != nil {
+			return 0, err
+		}
+
+		var delta int
+		for i := 2; i < len(entries); i++ {
+			entry := entries[i]
+			child := filepath.ToSlash(filepath.Join(name, entry.Name))
+
+			cinode, err := vorteilImage.ResolveInode(entry.Inode)
+			if err != nil {
+				return 0, err
+			}
+
+			delta, err = recurse(cinode, child)
+			if err != nil {
+				return 0, err
+			}
+			if all || inode.IsDirectory() {
+				if (maxDepth >= 0 && depth <= maxDepth) || maxDepth < 0 {
+					duOut.ImageFiles = append(duOut.ImageFiles, duImageInfo{
+						FilePath: child,
+						FileSize: delta,
+					})
+				}
+			}
+			size += delta
+		}
+
+		return size, nil
 	}
 
-	entries, err := vorteilImage.GPTEntries()
+	ino, err := vorteilImage.ResolvePathToInodeNo(imageFilePath)
 	if err != nil {
-		return gptOut, err
+		return duOut, err
 	}
 
-	gptOut.HeaderLBA = int(header.CurrentLBA)
-	gptOut.BackupLBA = int(header.BackupLBA)
-	gptOut.FirstUsableLBA = int(header.FirstUsableLBA)
-	gptOut.LastUsableLBA = int(header.LastUsableLBA)
-	gptOut.FirstEntriesLBA = int(header.FirstEntriesLBA)
+	inode, err := vorteilImage.ResolveInode(ino)
+	if err != nil {
+		return duOut, err
+	}
 
-	for _, entry := range entries {
-		name := entry.NameString()
-		if name != "" {
-			gptOut.Entries = append(gptOut.Entries, GPTEntry{
-				Name:     entry.NameString(),
-				FirstLBA: int(entry.FirstLBA),
-				LastLBA:  int(entry.LastLBA),
-			})
+	size, err := recurse(inode, imageFilePath)
+	if err != nil {
+		return duOut, err
+	}
+
+	duOut.ImageFiles = append(duOut.ImageFiles, duImageInfo{
+		FilePath: imageFilePath,
+		FileSize: size,
+	})
+
+	if calcFreeSpace {
+		sb, err := vorteilImage.Superblock(0)
+		if err == nil {
+			duOut.FreeSpace = int(sb.UnallocatedBlocks) * int(1024<<sb.BlockSize)
 		}
 	}
 
-	return gptOut, err
+	return duOut, err
 }

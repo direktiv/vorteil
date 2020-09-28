@@ -300,53 +300,6 @@ var duCmd = &cobra.Command{
 		var table [][]string
 		table = [][]string{{"", ""}}
 
-		var depth = 0
-
-		var recurse func(*vdecompiler.Inode, string) (int, error)
-		recurse = func(inode *vdecompiler.Inode, name string) (int, error) {
-
-			depth++
-			defer func() {
-				depth--
-			}()
-
-			var size int
-			size = int(inode.Sectors) * vdecompiler.SectorSize
-
-			if !inode.IsDirectory() {
-				return size, nil
-			}
-
-			entries, err := iio.Readdir(inode)
-			if err != nil {
-				return 0, err
-			}
-
-			var delta int
-			for i := 2; i < len(entries); i++ {
-				entry := entries[i]
-				child := filepath.ToSlash(filepath.Join(name, entry.Name))
-
-				cinode, err := iio.ResolveInode(entry.Inode)
-				if err != nil {
-					return 0, err
-				}
-
-				delta, err = recurse(cinode, child)
-				if err != nil {
-					return 0, err
-				}
-				if all || inode.IsDirectory() {
-					if (maxDepth >= 0 && depth <= maxDepth) || maxDepth < 0 {
-						table = append(table, []string{child, fmt.Sprintf("%s", PrintableSize(delta))})
-					}
-				}
-				size += delta
-			}
-
-			return size, nil
-		}
-
 		var fpath string
 		if len(args) > 1 {
 			fpath = args[1]
@@ -354,37 +307,19 @@ var duCmd = &cobra.Command{
 			fpath = "/"
 		}
 
-		ino, err := iio.ResolvePathToInodeNo(fpath)
+		duOut, err := imageUtils.DUImageFile(iio, fpath, free, maxDepth, all)
 		if err != nil {
 			log.Errorf("%v", err)
 			os.Exit(1)
 		}
 
-		inode, err := iio.ResolveInode(ino)
-		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
+		for i := range duOut.ImageFiles {
+			table = append(table, []string{duOut.ImageFiles[i].FilePath, fmt.Sprintf("%s", PrintableSize(duOut.ImageFiles[i].FileSize))})
 		}
-
-		size, err := recurse(inode, fpath)
-		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
-		}
-
-		table = append(table, []string{fpath, fmt.Sprintf("%s", PrintableSize(size))})
 
 		PlainTable(table)
-
 		if free {
-			sb, err := iio.Superblock(0)
-			if err != nil {
-				log.Errorf("%v", err)
-				os.Exit(1)
-			}
-
-			leftover := int(sb.UnallocatedBlocks) * int(1024<<sb.BlockSize)
-			log.Printf("Free space: %s", PrintableSize(leftover))
+			log.Printf("Free space: %s", PrintableSize(duOut.FreeSpace))
 		}
 	},
 }

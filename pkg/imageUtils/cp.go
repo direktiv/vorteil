@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/prometheus/common/log"
 	"github.com/vorteil/vorteil/pkg/vdecompiler"
 )
 
@@ -94,50 +93,37 @@ func copyImageFileFromVPartition(vorteilImage *vdecompiler.IO, imageFilePath str
 	return err
 }
 
-func copyImageFileRecusive(vorteilImage *vdecompiler.IO, ino int, rpath string, destFilePath string) error {
+func copyImageFileRecursive(vorteilImage *vdecompiler.IO, ino int, rpath string, destFilePath string) error {
+	var f *os.File
+	var rdr io.Reader
+	var err error
 	inode, err := vorteilImage.ResolveInode(ino)
-	if err != nil {
+	if err == nil {
 		return err
 	}
 
 	if inode.IsRegularFile() {
-		f, err := os.Create(destFilePath)
-		if err != nil {
-			return err
+		if f, err = os.Create(destFilePath); err == nil {
+			defer f.Close()
+			if rdr, err = vorteilImage.InodeReader(inode); err == nil {
+				_, err = io.CopyN(f, rdr, int64(inode.Fullsize()))
+			}
 		}
-		defer f.Close()
-
-		rdr, err := vorteilImage.InodeReader(inode)
-		if err != nil {
-			return err
-		}
-
-		_, err = io.CopyN(f, rdr, int64(inode.Fullsize()))
-		if err != nil {
-			return err
-		}
-		return nil
+		return err
 	}
 
 	if inode.IsSymlink() {
+		var data []byte
 
-		rdr, err := vorteilImage.InodeReader(inode)
-		if err != nil {
-			return err
+		if rdr, err = vorteilImage.InodeReader(inode); err == nil {
+			if data, err = ioutil.ReadAll(rdr); err == nil {
+				err = os.Symlink(string(data), destFilePath)
+			}
 		}
-		data, err := ioutil.ReadAll(rdr)
-		if err != nil {
-			return err
-		}
-		err = os.Symlink(string(data), destFilePath)
-		if err != nil {
-			return err
-		}
-		return nil
+		return err
 	}
 
 	if !inode.IsDirectory() {
-		log.Warnf("skipping abnormal file: %s", rpath)
 		return nil
 	}
 
@@ -146,21 +132,20 @@ func copyImageFileRecusive(vorteilImage *vdecompiler.IO, ino int, rpath string, 
 		return err
 	}
 
-	entries, err := vorteilImage.Readdir(inode)
-	if err != nil {
-		return err
+	var entries []*vdecompiler.DirectoryEntry
+	entries, err = vorteilImage.Readdir(inode)
+	if err == nil {
+		for _, entry := range entries {
+			if entry.Name == "." || entry.Name == ".." {
+				continue
+			}
+			err = copyImageFileRecursive(vorteilImage, entry.Inode, filepath.ToSlash(filepath.Join(rpath, entry.Name)), filepath.Join(destFilePath, entry.Name))
+			if err != nil {
+				break
+			}
+		}
 	}
 
-	for _, entry := range entries {
-		if entry.Name == "." || entry.Name == ".." {
-			continue
-		}
-		err = copyImageFileRecusive(vorteilImage, entry.Inode, filepath.ToSlash(filepath.Join(rpath, entry.Name)), filepath.Join(destFilePath, entry.Name))
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return err
 
 }

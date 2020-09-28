@@ -13,6 +13,7 @@ import (
 
 	"github.com/sisatech/tablewriter"
 	"github.com/spf13/pflag"
+	"github.com/vorteil/vorteil/pkg/ext"
 	"github.com/vorteil/vorteil/pkg/vcfg"
 	"github.com/vorteil/vorteil/pkg/vdecompiler"
 	"github.com/vorteil/vorteil/pkg/vdisk"
@@ -366,7 +367,7 @@ func PlainTable(vals [][]string) {
 	table.Render()
 }
 
-func createSymlinkCallback(iio *vdecompiler.IO, inode *vdecompiler.Inode, dpath string) func() error {
+func createSymlinkCallback(iio *vdecompiler.IO, inode *ext.Inode, dpath string) func() error {
 	return func() error {
 		rdr, err := iio.InodeReader(inode)
 		if err != nil {
@@ -385,7 +386,7 @@ func createSymlinkCallback(iio *vdecompiler.IO, inode *vdecompiler.Inode, dpath 
 	}
 }
 
-func copyInodeToRegularFile(iio *vdecompiler.IO, inode *vdecompiler.Inode, dpath string) error {
+func copyInodeToRegularFile(iio *vdecompiler.IO, inode *ext.Inode, dpath string) error {
 	var err error
 	var f *os.File
 	var rdr io.Reader
@@ -406,7 +407,7 @@ func copyInodeToRegularFile(iio *vdecompiler.IO, inode *vdecompiler.Inode, dpath
 		return err
 	}
 
-	_, err = io.CopyN(f, rdr, int64(inode.Fullsize()))
+	_, err = io.CopyN(f, rdr, int64(vdecompiler.InodeSize(inode)))
 	return err
 }
 
@@ -461,7 +462,7 @@ func decompile(srcPath, outPath string) {
 			return err
 		}
 
-		if flagTouched && inode.LastAccessTime == 0 && !inode.IsDirectory() && rpath != "/" {
+		if flagTouched && inode.LastAccessTime == 0 && !vdecompiler.InodeIsDirectory(inode) && rpath != "/" {
 			log.Printf("skipping untouched object: %s", rpath)
 			goto DONE
 		}
@@ -470,17 +471,17 @@ func decompile(srcPath, outPath string) {
 
 		log.Debugf("copying %s", rpath)
 
-		if inode.IsRegularFile() {
+		if vdecompiler.InodeIsRegularFile(inode) {
 			err = copyInodeToRegularFile(iio, inode, dpath)
 			goto DONE
 		}
 
-		if inode.IsSymlink() {
+		if vdecompiler.InodeIsSymlink(inode) {
 			symlinkCallbacks = append(symlinkCallbacks, createSymlinkCallback(iio, inode, dpath))
 			goto DONE
 		}
 
-		if !inode.IsDirectory() {
+		if !vdecompiler.InodeIsDirectory(inode) {
 			log.Warnf("skipping abnormal file: %s", rpath)
 			goto DONE
 		}

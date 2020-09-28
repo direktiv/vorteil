@@ -217,7 +217,7 @@ func (b *Builder) writePrimaryGPTHeader(ctx context.Context, w io.WriteSeeker) e
 		BackupLBA:      uint64(b.secondaryGPTHeaderLBA),
 		FirstUsableLBA: P0FirstLBA,
 		LastUsableLBA:  uint64(b.lastUsableLBA),
-		StartLBAParts:  2,
+		StartLBAParts:  PrimaryGPTEntriesLBA,
 		NoOfParts:      MaximumGPTEntries,
 		SizePartEntry:  GPTEntrySize,
 		CRCParts:       b.gptEntriesCRC,

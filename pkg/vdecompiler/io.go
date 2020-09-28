@@ -9,29 +9,12 @@ import (
 	"io/ioutil"
 	"os"
 	"unicode/utf16"
+
+	"github.com/vorteil/vorteil/pkg/vdisk"
+	"github.com/vorteil/vorteil/pkg/vimg"
+	"github.com/vorteil/vorteil/pkg/vio"
+	"github.com/vorteil/vorteil/pkg/vmdk"
 )
-
-// Image file formats.
-const (
-	ImageFormatRAW = "raw"
-)
-
-type zeroes struct {
-}
-
-func (z *zeroes) Read(p []byte) (n int, err error) {
-
-	if len(p) == 0 {
-		return
-	}
-
-	p[0] = 0
-	for bp := 1; bp < len(p); bp *= 2 {
-		copy(p[bp:], p[:bp])
-	}
-
-	return len(p), nil
-}
 
 // Partial IO errors, for when attempting to perform an operation that
 // would be legal on a file but impossible on a read-only stream.
@@ -76,12 +59,7 @@ func (pio *partialIO) Write(p []byte) (n int, err error) {
 	return
 }
 
-func (pio *partialIO) Seek(offset int64, whence int) (n int64, err error) {
-	if pio.seeker != nil {
-		n, err = pio.seeker.Seek(offset, whence)
-		pio.offset = int(n)
-		return
-	}
+func (pio *partialIO) calculateAim(offset int64, whence int) (int64, error) {
 
 	var aim int64
 	switch whence {
@@ -91,13 +69,31 @@ func (pio *partialIO) Seek(offset int64, whence int) (n int64, err error) {
 		aim = int64(pio.offset) + offset
 	case io.SeekEnd:
 		if pio.size < 0 {
-			return int64(pio.offset), errors.New("underlying IO object does not know how long it will be")
+			return 0, errors.New("underlying IO object does not know how long it will be")
 		}
 		aim = int64(pio.size) + offset
 	}
 
 	if aim < int64(pio.offset) {
-		return int64(pio.offset), errors.New("underlying IO object does not support rewinding")
+		return 0, errors.New("underlying IO object does not support rewinding")
+	}
+
+	return aim, nil
+
+}
+
+func (pio *partialIO) Seek(offset int64, whence int) (n int64, err error) {
+
+	if pio.seeker != nil {
+		n, err = pio.seeker.Seek(offset, whence)
+		pio.offset = int(n)
+		return
+	}
+
+	aim, err := pio.calculateAim(offset, whence)
+	if err != nil {
+		n = int64(pio.offset)
+		return
 	}
 
 	if pio.reader != nil {
@@ -113,7 +109,7 @@ func (pio *partialIO) Seek(offset int64, whence int) (n int64, err error) {
 
 	if pio.writer != nil {
 		var k int64
-		k, err = io.CopyN(pio, &zeroes{}, aim-int64(pio.offset))
+		k, err = io.CopyN(pio, vio.Zeroes, aim-int64(pio.offset))
 		pio.offset += int(k)
 		if err == io.EOF {
 			err = nil
@@ -123,6 +119,7 @@ func (pio *partialIO) Seek(offset int64, whence int) (n int64, err error) {
 	}
 
 	panic("No seeker, reader, or writer?")
+
 }
 
 // IO provides an entry point into a virtual disk image, making it
@@ -131,10 +128,10 @@ func (pio *partialIO) Seek(offset int64, whence int) (n int64, err error) {
 // and read-only streams.
 type IO struct {
 	src, img   *partialIO
-	format     string
-	gptHeader  *GPTHeader
-	gptEntries []*GPTEntry
-	vmdk       vmdkInfo
+	format     vdisk.Format
+	gptHeader  *vimg.GPTHeader
+	gptEntries []*vimg.GPTEntry
+	vmdk       *vmdk.Header
 	vpart      vpartInfo
 	fs         fsInfo
 }
@@ -200,6 +197,7 @@ func newIO(srcName string, srcSize int, img interface{}) (*IO, error) {
 	iio.img.writer = imgLoader
 
 	return iio, nil
+
 }
 
 // Open returns an image IO object from a file at path.
@@ -222,166 +220,174 @@ func Open(path string) (*IO, error) {
 	}
 
 	return iio, nil
+
 }
 
-// ImageFormat returns a string describing the image's file format.
-func (iio *IO) ImageFormat() (format string, err error) {
-	if iio.format != "" {
-		return iio.format, nil
+func (iio *IO) resolveVMDKFormat(buf []byte) error {
+
+	header := new(vmdk.Header)
+	err := binary.Read(bytes.NewReader(buf), binary.LittleEndian, header)
+	if err != nil {
+		return err
 	}
 
-	_, err = iio.src.Seek(0, io.SeekStart)
+	iio.vmdk = header
+
+	switch iio.vmdk.Version {
+	case 1:
+		iio.format = vdisk.VMDKSparseFormat
+		iio.img, err = iio.vmdkSparseIO()
+	case 3:
+		iio.format = vdisk.VMDKStreamOptimizedFormat
+		err = fmt.Errorf("stream-optimized VMDK not yet supported")
+	default:
+		err = fmt.Errorf("unsupported VMDK version: %d", iio.vmdk.Version)
+	}
+
+	return err
+
+}
+
+func (iio *IO) determineImageFormat() error {
+
+	_, err := iio.src.Seek(0, io.SeekStart)
 	if err != nil {
-		return
+		return err
+	}
+
+	buf := new(bytes.Buffer)
+	_, err = io.CopyN(buf, iio.src, 512)
+	if err != nil {
+		return err
 	}
 
 	var magic uint32
 
-	err = binary.Read(iio.src, binary.LittleEndian, &magic)
+	err = binary.Read(bytes.NewReader(buf.Bytes()), binary.LittleEndian, &magic)
 	if err != nil {
-		return
+		return err
 	}
 
 	switch magic {
-	case VMDKMagicNumber:
-		header := new(VMDKHeader)
-		header.MagicNumber = magic
-		err = binary.Read(iio.src, binary.LittleEndian, &header.Fields)
-		if err != nil {
-			return
-		}
-
-		iio.vmdk.header = header
-
-		switch header.Fields.Version {
-		case 1:
-			iio.format = ImageFormatVMDKSparse
-			iio.img, err = iio.vmdkSparseIO()
-			if err != nil {
-				return
-			}
-		case 3:
-			iio.format = ImageFormatVMDKStreamOptimized
-			return iio.format, fmt.Errorf("stream-optimized VMDK not yet supported")
-		default:
-			err = fmt.Errorf("unsupported VMDK version: %d", header.Fields.Version)
-			return
-		}
-
+	case uint32(vmdk.Magic):
+		err = iio.resolveVMDKFormat(buf.Bytes())
 	default:
-		iio.format = ImageFormatRAW
+		iio.format = vdisk.RAWFormat
 		iio.img = iio.src
 	}
 
+	return err
+
+}
+
+// ImageFormat returns the image's file format.
+func (iio *IO) ImageFormat() (vdisk.Format, error) {
+
+	if iio.format != "" {
+		return iio.format, nil
+	}
+
+	err := iio.determineImageFormat()
+	if err != nil {
+		return iio.format, err
+	}
+
 	return iio.format, nil
+
 }
 
-// ..
-const (
-	SectorSize              = 512
-	GPTHeaderLBA            = 1
-	GPTHeaderSectors        = 1
-	VorteilPartitionName    = "vorteil-os"
-	FilesystemPartitionName = "vorteil-root"
-)
-
-// GPTHeader ..
-type GPTHeader struct {
-	Signature       [8]byte
-	Revision        uint32
-	HeaderSize      uint32
-	HeaderCRC32     uint32
-	_               uint32
-	CurrentLBA      uint64
-	BackupLBA       uint64
-	FirstUsableLBA  uint64
-	LastUsableLBA   uint64
-	DiskGUID        [16]byte
-	FirstEntriesLBA uint64
-	TotalEntries    uint32
-	EntrySize       uint32
-	EntriesCRC32    uint32
+// GPTEntryName returns a normal string representation of the GPT entry. Without
+// calling this function the data in the GPT entry is encoded in UTF16.
+func GPTEntryName(e *vimg.GPTEntry) string {
+	return UTF16toString(e.Name[:])
 }
 
-// GPTEntry ..
-type GPTEntry struct {
-	TypeGUID   [16]byte
-	UniqueGUID [16]byte
-	FirstLBA   uint64
-	LastLBA    uint64
-	Attributes uint64
-	Name       [72]byte
+func (iio *IO) readGPTHeader() error {
+
+	_, err := iio.img.Seek(vimg.PrimaryGPTHeaderLBA*vimg.SectorSize, io.SeekStart)
+	if err != nil {
+		return err
+	}
+
+	hdr := new(vimg.GPTHeader)
+
+	err = binary.Read(iio.img, binary.LittleEndian, hdr)
+	if err != nil {
+		return err
+	}
+
+	iio.gptHeader = hdr
+
+	if hdr.SizePartEntry != vimg.GPTEntrySize {
+		return fmt.Errorf("GPT uses abnormal entry size: %d", hdr.SizePartEntry)
+	}
+
+	return nil
+
 }
 
-// NameString ..
-func (e *GPTEntry) NameString() string {
-	return cstringUTF16(e.Name[:])
-}
-
-// GPTHeader ..
-func (iio *IO) GPTHeader() (*GPTHeader, error) {
+// GPTHeader returns the primary GPT header for the image.
+func (iio *IO) GPTHeader() (*vimg.GPTHeader, error) {
 
 	if iio.gptHeader != nil {
 		return iio.gptHeader, nil
 	}
 
-	_, err := iio.img.Seek(GPTHeaderLBA*SectorSize, io.SeekStart)
+	err := iio.readGPTHeader()
 	if err != nil {
 		return nil, err
 	}
-
-	hdr := new(GPTHeader)
-
-	err = binary.Read(iio.img, binary.LittleEndian, hdr)
-	if err != nil {
-		return nil, err
-	}
-
-	iio.gptHeader = hdr
 
 	return iio.gptHeader, nil
+
 }
 
-// GPTEntries ..
-func (iio *IO) GPTEntries() ([]*GPTEntry, error) {
-
-	if iio.gptEntries != nil {
-		return iio.gptEntries, nil
-	}
+func (iio *IO) readGPTEntries() error {
 
 	hdr, err := iio.GPTHeader()
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	// PrintX(9, "first GPT entries LBA: %s", PrintableSize(int(hdr.FirstEntriesLBA)))
-
-	_, err = iio.img.Seek(int64(hdr.FirstEntriesLBA*SectorSize), io.SeekStart)
+	_, err = iio.img.Seek(int64(hdr.StartLBAParts*vimg.SectorSize), io.SeekStart)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	if hdr.EntrySize != 128 {
-		return nil, fmt.Errorf("GPT uses abnormal entry size: %d", hdr.EntrySize)
-	}
-
-	list := make([]*GPTEntry, hdr.TotalEntries)
+	list := make([]*vimg.GPTEntry, hdr.NoOfParts)
 	for i := range list {
-		entry := new(GPTEntry)
+		entry := new(vimg.GPTEntry)
 		err = binary.Read(iio.img, binary.LittleEndian, entry)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		list[i] = entry
 	}
 
 	iio.gptEntries = list
 
-	return iio.gptEntries, nil
+	return nil
+
 }
 
-// GPTEntry ..
-func (iio *IO) GPTEntry(name string) (*GPTEntry, error) {
+// GPTEntries returns a list of all GPT partition entries on the disk.
+func (iio *IO) GPTEntries() ([]*vimg.GPTEntry, error) {
+
+	if iio.gptEntries != nil {
+		return iio.gptEntries, nil
+	}
+
+	err := iio.readGPTEntries()
+	if err != nil {
+		return nil, err
+	}
+
+	return iio.gptEntries, nil
+
+}
+
+// GPTEntry returns the GPT entry for a specific partition on-disk.
+func (iio *IO) GPTEntry(name string) (*vimg.GPTEntry, error) {
 
 	entries, err := iio.GPTEntries()
 	if err != nil {
@@ -389,16 +395,21 @@ func (iio *IO) GPTEntry(name string) (*GPTEntry, error) {
 	}
 
 	for _, entry := range entries {
-		if cstringUTF16(entry.Name[:]) == name {
+		if UTF16toString(entry.Name[:]) == name {
 			return entry, nil
 		}
 	}
 
 	return nil, fmt.Errorf("partition entry not found: %s", name)
+
 }
 
+// PartitionReader returns a limited reader for the an entire disk partition.
+// Valid arguments are vimg.RootPartitionName and vimg.OSPartitionName. This
+// function can be used to easily extract the file-system from a Vorteil image.
 func (iio *IO) PartitionReader(name string) (io.Reader, error) {
-	entry, err := iio.GPTEntry(FilesystemPartitionName)
+
+	entry, err := iio.GPTEntry(name)
 	if err != nil {
 		return nil, err
 	}
@@ -406,15 +417,17 @@ func (iio *IO) PartitionReader(name string) (io.Reader, error) {
 	lbas := entry.LastLBA - entry.FirstLBA + 1
 	start := entry.FirstLBA
 
-	_, err = iio.img.Seek(int64(start)*SectorSize, io.SeekStart)
+	_, err = iio.img.Seek(int64(start)*vimg.SectorSize, io.SeekStart)
 	if err != nil {
 		return nil, err
 	}
 
-	return io.LimitReader(iio.img, int64(lbas)*SectorSize), nil
+	return io.LimitReader(iio.img, int64(lbas)*vimg.SectorSize), nil
+
 }
 
 func cstring(data []byte) string {
+
 	var s string
 	s = string(data[:])
 	for i := 0; i < len(data); i++ {
@@ -423,10 +436,13 @@ func cstring(data []byte) string {
 			break
 		}
 	}
+
 	return s
+
 }
 
-func cstringUTF16(data []byte) string {
+func UTF16toString(data []byte) string {
+
 	if len(data)%2 != 0 {
 		panic("string length makes UTF16 impossible")
 	}
@@ -447,4 +463,5 @@ func cstringUTF16(data []byte) string {
 	}
 
 	return s
+
 }

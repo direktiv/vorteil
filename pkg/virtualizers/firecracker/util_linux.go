@@ -244,7 +244,7 @@ func (o *operation) createFileAndGetLength(kernel string, client *http.Client, u
 	if err != nil {
 		return nil, 0, err
 	}
-	defer file.Close()
+	// defer file.Close()
 
 	length, err := o.fetchLength(file, client, url, kernel)
 	if err != nil {
@@ -293,7 +293,7 @@ func (o *operation) fetchVMLinux(kernel string) (string, error) {
 			os.Remove(file.Name())
 			return "", err
 		}
-
+		defer file.Close()
 	}
 
 	return filepath.Join(o.firecrackerPath, kernel), nil

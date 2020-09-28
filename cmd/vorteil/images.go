@@ -499,7 +499,7 @@ var fsimgCmd = &cobra.Command{
 }
 
 var gptCmd = &cobra.Command{
-	Use:   "cat IMAGE",
+	Use:   "gpt IMAGE",
 	Short: "Summarize the information in the GUID Partition Table.",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
@@ -523,31 +523,22 @@ var gptCmd = &cobra.Command{
 		}
 		defer iio.Close()
 
-		header, err := iio.GPTHeader()
+		gptOut, err := imageUtils.ImageGPT(iio)
 		if err != nil {
 			log.Errorf("%v", err)
 			os.Exit(1)
 		}
 
-		entries, err := iio.GPTEntries()
-		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
-		}
-
-		log.Printf("GPT Header LBA:   \t%s", PrintableSize(int(header.CurrentLBA)))
-		log.Printf("Backup LBA:       \t%s", PrintableSize(int(header.BackupLBA)))
-		log.Printf("First usable LBA: \t%s", PrintableSize(int(header.FirstUsableLBA)))
-		log.Printf("Last usable LBA:  \t%s", PrintableSize(int(header.LastUsableLBA)))
-		log.Printf("First entries LBA:\t%s", PrintableSize(int(header.FirstEntriesLBA)))
+		log.Printf("GPT Header LBA:   \t%s", PrintableSize(gptOut.HeaderLBA))
+		log.Printf("Backup LBA:       \t%s", PrintableSize(gptOut.BackupLBA))
+		log.Printf("First usable LBA: \t%s", PrintableSize(gptOut.FirstUsableLBA))
+		log.Printf("Last usable LBA:  \t%s", PrintableSize(gptOut.LastUsableLBA))
+		log.Printf("First entries LBA:\t%s", PrintableSize(gptOut.FirstEntriesLBA))
 		log.Printf("Entries:")
-		for i, entry := range entries {
-			name := entry.NameString()
-			if name != "" {
-				log.Printf("  %d: %s", i, name)
-				log.Printf("     First LBA:\t%s", PrintableSize(int(entry.FirstLBA)))
-				log.Printf("     Last LBA: \t%s", PrintableSize(int(entry.LastLBA)))
-			}
+		for i, entry := range gptOut.Entries {
+			log.Printf("  %d: %s", i, entry.Name)
+			log.Printf("     First LBA:\t%s", PrintableSize(int(entry.FirstLBA)))
+			log.Printf("     Last LBA: \t%s", PrintableSize(int(entry.LastLBA)))
 		}
 	},
 }

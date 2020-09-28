@@ -17,11 +17,14 @@ import (
 )
 
 // DownloadPath is the path where we pull firecracker-vmlinux's from
-const DownloadPath = "https://storage.googleapis.com/vorteil-dl/firecracker-vmlinux/"
+const DownloadPath = "https://downloads.vorteil.io/vcli/firecracker-vmlinux/"
 
+// FetchBridgeDev fetches the bridge device used for firecracker normally 'vorteil-bridge'
 func FetchBridgeDev() error {
 	return errors.New("bridge devices for firecracker only supported on linux")
 }
+
+// SetupBridgeAndDHCPServer initializes the dhcp and bridge device
 func SetupBridgeAndDHCPServer(log elog.View) error {
 	return errors.New("firecracker init not supported on this operating system")
 }
@@ -105,11 +108,6 @@ func (v *Virtualizer) Download() (vio.File, error) {
 
 // Close shuts down the virtual machine and cleans up the disk and folders
 func (v *Virtualizer) Close(force bool) error {
-	return nil
-}
-
-// ConvertToVM is a wrapper function that provides us abilities to use the old APIs
-func (v *Virtualizer) ConvertToVM() interface{} {
 	return nil
 }
 

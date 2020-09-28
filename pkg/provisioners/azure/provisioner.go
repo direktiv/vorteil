@@ -5,6 +5,7 @@
 package azure
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/base64"
@@ -26,8 +27,11 @@ import (
 	"github.com/vorteil/vorteil/pkg/vdisk"
 )
 
-// ProvisionerType : Constant string value used to represent the provisioner type azure
-const ProvisionerType = "microsoft-azure"
+const (
+	// ProvisionerType : Constant string value used to represent the provisioner type azure
+	ProvisionerType = "microsoft-azure"
+	blobSize        = 4194304
+)
 
 // Provisioner satisfies the provisioners.Provisioner interface
 type Provisioner struct {
@@ -76,6 +80,7 @@ func (p *Provisioner) DiskFormat() vdisk.Format {
 	return vdisk.VHDFormat
 }
 
+// Initialize initializes n Azure provisioner
 func (p *Provisioner) Initialize(data []byte) error {
 
 	cfg := new(Config)
@@ -93,6 +98,13 @@ func (p *Provisioner) Initialize(data []byte) error {
 	return nil
 }
 
+func fetchVal(keyMap map[string]interface{}, name string) string {
+
+	str, _ := keyMap[name].(string)
+	return str
+
+}
+
 func (p *Provisioner) init() error {
 
 	var err error
@@ -108,46 +120,12 @@ func (p *Provisioner) init() error {
 		return err
 	}
 
-	x, ok := keyMap["subscriptionId"]
-	if !ok {
-		return fmt.Errorf("'subscriptionId' field not found in credentials")
-	}
+	p.clientID = fetchVal(keyMap, "clientId")
+	p.tenantID = fetchVal(keyMap, "tenantId")
+	p.clientSecret = fetchVal(keyMap, "clientSecret")
+	p.resourceManagerEndpointURL = fetchVal(keyMap, "resourceManagerEndpointUrl")
+	p.subscriptionID = fetchVal(keyMap, "subscriptionId")
 
-	subID, ok := x.(string)
-	if !ok {
-		return fmt.Errorf("unable to interpret 'project_id' field as string")
-	}
-
-	x, ok = keyMap["clientId"]
-	if ok {
-		str, ok := x.(string)
-		if ok {
-			p.clientID = str
-		}
-	}
-	x, ok = keyMap["tenantId"]
-	if ok {
-		str, ok := x.(string)
-		if ok {
-			p.tenantID = str
-		}
-	}
-	x, ok = keyMap["clientSecret"]
-	if ok {
-		str, ok := x.(string)
-		if ok {
-			p.clientSecret = str
-		}
-	}
-	x, ok = keyMap["resourceManagerEndpointUrl"]
-	if ok {
-		str, ok := x.(string)
-		if ok {
-			p.resourceManagerEndpointURL = str
-		}
-	}
-
-	p.subscriptionID = subID
 	return nil
 
 }
@@ -157,20 +135,18 @@ func (p *Provisioner) SizeAlign() vcfg.Bytes {
 	return vcfg.Bytes(0)
 }
 
-// Provision will provision the configured vorteil project to your configured gcp provisioner
-func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
+func (p *Provisioner) getBlobRef(name string) (*storage.Blob, error) {
 
 	creds, err := azblob.NewSharedKeyCredential(p.cfg.StorageAccountName, p.cfg.StorageAccountKey)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	pi := azblob.NewPipeline(creds, azblob.PipelineOptions{})
 
-	url, err := url.Parse(
-		fmt.Sprintf("https://%s.blob.core.windows.net/%s",
-			p.cfg.StorageAccountName, p.cfg.Container))
+	url, err := url.Parse(fmt.Sprintf("https://%s.blob.core.windows.net/%s",
+		p.cfg.StorageAccountName, p.cfg.Container))
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	containerURL := azblob.NewContainerURL(*url, pi)
@@ -180,27 +156,23 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 
 	storageClient, err := storage.NewBasicClient(p.cfg.StorageAccountName, p.cfg.StorageAccountKey)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	x := storageClient.GetBlobService()
 	container := x.GetContainerReference(p.cfg.Container)
 
-	remoteDiskName := fmt.Sprintf("%s.vhd", strings.TrimSuffix(args.Name, ".vhd"))
-	blob := container.GetBlobReference(remoteDiskName)
+	remoteDiskName := fmt.Sprintf("%s.vhd", strings.TrimSuffix(name, ".vhd"))
+	return container.GetBlobReference(remoteDiskName), nil
 
-	if args.Force {
-		_, err = blob.DeleteIfExists(&storage.DeleteBlobOptions{})
-		if err != nil {
-			return err
-		}
+}
 
-	}
+func (p *Provisioner) getImagesClient() (compute.ImagesClient, error) {
 
 	imagesClient := compute.NewImagesClient(p.subscriptionID)
 	settings, err := auth.GetSettingsFromEnvironment()
 	if err != nil {
-		return err
+		return imagesClient, err
 	}
 
 	settings.Values[auth.SubscriptionID] = p.subscriptionID
@@ -211,19 +183,146 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 	settings.Values[auth.TenantID] = p.tenantID
 
 	imagesClient.Authorizer, err = settings.GetAuthorizer()
+
+	return imagesClient, err
+
+}
+
+func bytesToGB(l int64) int32 {
+
+	g := int64(1024 * 1024 * 1024)
+	gigs := int64(l) / g
+
+	if l%g != 0 {
+		gigs++
+	}
+
+	return int32(gigs)
+
+}
+
+func prepTempFile(args *provisioners.ProvisionArgs) (*os.File, int64, error) {
+
+	f, err := ioutil.TempFile(os.TempDir(), "")
+	if err != nil {
+		return nil, 0, err
+	}
+
+	n, err := io.Copy(f, args.Image)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return f, n, nil
+
+}
+
+func uploadBlob(f *os.File, args *provisioners.ProvisionArgs, blob *storage.Blob) error {
+
+	var ps int64
+
+	if args.Force {
+		_, err := blob.DeleteIfExists(&storage.DeleteBlobOptions{})
+		if err != nil {
+			return err
+		}
+	}
+
+	progress := args.Logger.NewProgress(fmt.Sprintf("Uploading %s:", args.Name), "KiB", int64(args.Image.Size()))
+	pr := progress.ProxyReader(f)
+	defer pr.Close()
+
+	err := blob.PutPageBlob(nil)
 	if err != nil {
 		return err
 	}
 
-	forced := args.Force
+	reader := bufio.NewReader(pr)
+	buf := make([]byte, blobSize)
+
+	f.Seek(0, 0)
+
+	for {
+		ps, _ = f.Seek(0, 1)
+		n, err := reader.Read(buf)
+
+		if err != nil {
+			if err != io.EOF {
+				progress.Finish(false)
+				return err
+			}
+			break
+		}
+
+		br := storage.BlobRange{
+			Start: uint64(ps),
+			End:   uint64(int(ps) + (n - 1)),
+		}
+
+		// the last request might be smaller so we cut it off
+		if n < blobSize {
+			buf = buf[:n]
+		}
+
+		err = blob.WriteRange(br, bytes.NewReader(buf), nil)
+		if err != nil {
+			progress.Finish(false)
+			return err
+		}
+
+	}
+	progress.Finish(true)
+	return nil
+
+}
+
+// Provision will provision the configured vorteil project to your configured gcp provisioner
+func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
+
+	var (
+		length int64
+		f      *os.File
+	)
+
+	blob, err := p.getBlobRef(args.Name)
+	if err != nil {
+		return err
+	}
+
+	f, length, err = prepTempFile(args)
+	if err != nil {
+		return err
+	}
+	defer os.Remove(f.Name())
+
+	blob.Properties.ContentType = "text/plain"
+	blob.Properties.ContentLength = length
+
+	err = uploadBlob(f, args, blob)
+	if err != nil {
+		return err
+	}
+
+	err = p.createImage(length, args, blob)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (p *Provisioner) deleteImageIfRequired(imagesClient compute.ImagesClient, args *provisioners.ProvisionArgs) error {
+
 	result, err := imagesClient.Get(args.Context, p.cfg.ResourceGroup, args.Name, "")
 	if err == nil || result.ID != nil {
 		// image already exists
-		if !forced {
-			return fmt.Errorf("Image already exists; aborting. To replace conflicting image, include the 'force' directive.")
+		if !args.Force {
+			return fmt.Errorf("Image already exists; aborting. To replace conflicting image, include the 'force' directive")
 		}
 
-		args.Logger.Infof("Deleting existing image.")
+		ciprogree := args.Logger.NewProgress("Deleting existing image", "", 0)
+		defer ciprogree.Finish(false)
+
 		delFuture, err := imagesClient.Delete(args.Context, p.cfg.ResourceGroup, args.Name)
 		if err != nil {
 			return err
@@ -235,92 +334,25 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 		}
 	}
 
-	f, err := ioutil.TempFile(os.TempDir(), "")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(f.Name())
-	defer f.Close()
+	return nil
+}
 
-	_, err = io.Copy(f, args.Image)
-	if err != nil {
-		return err
-	}
+func (p *Provisioner) createImage(length int64, args *provisioners.ProvisionArgs, blob *storage.Blob) error {
 
-	err = f.Close()
+	imagesClient, err := p.getImagesClient()
 	if err != nil {
 		return err
 	}
 
-	stat, err := os.Stat(f.Name())
+	err = p.deleteImageIfRequired(imagesClient, args)
 	if err != nil {
 		return err
 	}
 
-	length := stat.Size()
+	ciprogree := args.Logger.NewProgress("Creating Image from blob", "", 0)
+	defer ciprogree.Finish(false)
 
-	blob.Properties.ContentType = "text/plain"
-	blob.Properties.ContentLength = length
-
-	err = blob.PutPageBlob(nil)
-	if err != nil {
-		return err
-	}
-
-	rBytes, err := ioutil.ReadFile(f.Name())
-	if err != nil {
-		return err
-	}
-
-	i := 0
-	for i = 0; i < (int(length) - 4194304); i += 4194304 {
-		data := make([]byte, 4194304)
-		copy(data[:], rBytes[i:i+4194304])
-		br := storage.BlobRange{
-			Start: uint64(i),
-			End:   uint64(i + 4194304 - 1),
-		}
-
-		var uploadSegment bool
-		for _, d := range data {
-			if d != byte(0) {
-				uploadSegment = true
-				break
-			}
-		}
-
-		if uploadSegment {
-			err = blob.WriteRange(br, bytes.NewReader(data), nil)
-			if err != nil {
-				return err
-			}
-		}
-		args.Logger.Infof("Uploading: %.1f%s\n", (float64(i)+float64(len(data)))/float64(length)*100, "%")
-	}
-
-	rem := length - int64(i)
-	data := make([]byte, rem)
-	copy(data[:], rBytes[i:length])
-	br := storage.BlobRange{
-		Start: uint64(i),
-		End:   uint64(length) - 1,
-	}
-
-	err = blob.WriteRange(br, bytes.NewReader(data), nil)
-	if err != nil {
-		return err
-	}
-
-	args.Logger.Infof("Uploading: 100%")
-
-	g := int32(1024 * 1024 * 1024)
-	gigs := int32(length) / g
-	gigsmod := int32(length) % g
-	if gigsmod != 0 {
-		gigs++
-	}
-	diskSize := gigs
-
+	diskSize := bytesToGB(length)
 	img := new(compute.Image)
 	img.ImageProperties = new(compute.ImageProperties)
 	img.Location = &p.cfg.Location
@@ -336,21 +368,18 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 	img.StorageProfile.OsDisk.BlobURI = &u
 	img.HyperVGeneration = compute.HyperVGenerationTypesV1
 
-	args.Logger.Infof("Sent request to create image from storage object.")
 	future, err := imagesClient.CreateOrUpdate(args.Context, p.cfg.ResourceGroup, args.Name, *img)
 	if err != nil {
 		return err
 	}
 
-	args.Logger.Infof("Waiting for completion.")
 	err = future.WaitForCompletionRef(args.Context, imagesClient.Client)
 	if err != nil {
 		return err
 	}
 
-	args.Logger.Printf("Done!")
-
 	return nil
+
 }
 
 // Marshal returns json provisioner as bytes

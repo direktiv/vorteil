@@ -182,6 +182,29 @@ func defaultVirtualizer() string {
 	return defaultP
 }
 
+func runDecompile(diskpath string, outpath string, skipUnTouched bool) error {
+	report, err := imageUtils.DecompileImage(diskpath, outpath, skipUnTouched)
+	if err != nil {
+		return err
+	}
+
+	for _, dFile := range report.ImageFiles {
+		switch dFile.Result {
+		case imageUtils.CopiedMkDir:
+			log.Infof("Creating Dir > %s", dFile.Path)
+		case imageUtils.CopiedRegularFile:
+			log.Infof("Copied File > %s", dFile.Path)
+		case imageUtils.CopiedSymlink:
+			log.Infof("Created Symlink > %s", dFile.Path)
+		case imageUtils.SkippedAbnormalFile:
+			log.Infof("Skipped Abnormal > %s", dFile.Path)
+		case imageUtils.SkippedNotTouched:
+			log.Infof("Skipped Untouched File > %s", dFile.Path)
+		}
+	}
+
+	return nil
+}
 func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG, name string) error {
 
 	// Gather home directory for firecracker storage path
@@ -218,25 +241,9 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG, name st
 		virt.Close(false)
 
 		if flagRecord != "" {
-			report, err := imageUtils.DecompileImage(diskpath, flagRecord, flagTouched)
-			if err != nil {
+			if err := runDecompile(diskpath, flagRecord, flagTouched); err != nil {
 				log.Errorf("%v", err)
 				os.Exit(1)
-			}
-
-			for _, dFile := range report.ImageFiles {
-				switch dFile.Result {
-				case imageUtils.CopiedMkDir:
-					log.Infof("Creating Dir > %s", dFile.Path)
-				case imageUtils.CopiedRegularFile:
-					log.Infof("Copied File > %s", dFile.Path)
-				case imageUtils.CopiedSymlink:
-					log.Infof("Created Symlink > %s", dFile.Path)
-				case imageUtils.SkippedAbnormalFile:
-					log.Infof("Skipped Abnormal > %s", dFile.Path)
-				case imageUtils.SkippedNotTouched:
-					log.Infof("Skipped Untouched File > %s", dFile.Path)
-				}
 			}
 		}
 	}()

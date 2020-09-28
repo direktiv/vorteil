@@ -157,27 +157,10 @@ var decompileCmd = &cobra.Command{
 
 		srcPath := args[0]
 		outPath := args[1]
-		report, err := imageUtils.DecompileImage(srcPath, outPath, flagTouched)
-		if err != nil {
+		if err := runDecompile(srcPath, outPath, flagTouched); err != nil {
 			log.Errorf("%v", err)
 			os.Exit(1)
 		}
-
-		for _, dFile := range report.ImageFiles {
-			switch dFile.Result {
-			case imageUtils.CopiedMkDir:
-				log.Infof("Creating Dir > %s", dFile.Path)
-			case imageUtils.CopiedRegularFile:
-				log.Infof("Copied File > %s", dFile.Path)
-			case imageUtils.CopiedSymlink:
-				log.Infof("Created Symlink > %s", dFile.Path)
-			case imageUtils.SkippedAbnormalFile:
-				log.Infof("Skipped Abnormal > %s", dFile.Path)
-			case imageUtils.SkippedNotTouched:
-				log.Infof("Skipped Untouched File > %s", dFile.Path)
-			}
-		}
-
 	},
 }
 

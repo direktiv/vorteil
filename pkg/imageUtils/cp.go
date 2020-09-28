@@ -33,12 +33,8 @@ func CopyImageFile(vorteilImage *vdecompiler.IO, imageFilePath string, destFileP
 	if err != nil {
 		return err
 	}
-	err = copyImageFileRecusive(vorteilImage, ino, filepath.Base(imageFilePath), destFilePath)
-	if err != nil {
-		return err
-	}
 
-	return nil
+	return copyImageFileRecursive(vorteilImage, ino, filepath.Base(imageFilePath), destFilePath)
 }
 
 func copyImageFileFromVPartition(vorteilImage *vdecompiler.IO, imageFilePath string, destFilePath string) error {
@@ -97,8 +93,9 @@ func copyImageFileRecursive(vorteilImage *vdecompiler.IO, ino int, rpath string,
 	var f *os.File
 	var rdr io.Reader
 	var err error
+	var entries []*vdecompiler.DirectoryEntry
 	inode, err := vorteilImage.ResolveInode(ino)
-	if err == nil {
+	if err != nil {
 		return err
 	}
 
@@ -109,7 +106,7 @@ func copyImageFileRecursive(vorteilImage *vdecompiler.IO, ino int, rpath string,
 				_, err = io.CopyN(f, rdr, int64(inode.Fullsize()))
 			}
 		}
-		return err
+		goto DONE
 	}
 
 	if inode.IsSymlink() {
@@ -120,11 +117,11 @@ func copyImageFileRecursive(vorteilImage *vdecompiler.IO, ino int, rpath string,
 				err = os.Symlink(string(data), destFilePath)
 			}
 		}
-		return err
+		goto DONE
 	}
 
 	if !inode.IsDirectory() {
-		return nil
+		goto SKIP
 	}
 
 	err = os.MkdirAll(destFilePath, 0777)
@@ -132,7 +129,6 @@ func copyImageFileRecursive(vorteilImage *vdecompiler.IO, ino int, rpath string,
 		return err
 	}
 
-	var entries []*vdecompiler.DirectoryEntry
 	entries, err = vorteilImage.Readdir(inode)
 	if err == nil {
 		for _, entry := range entries {
@@ -146,6 +142,8 @@ func copyImageFileRecursive(vorteilImage *vdecompiler.IO, ino int, rpath string,
 		}
 	}
 
+DONE:
+SKIP:
 	return err
 
 }

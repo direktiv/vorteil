@@ -980,15 +980,11 @@ var statCmd = &cobra.Command{
 	Short: "Print detailed metadata relating to the file at FILE_PATH.",
 	Args:  cobra.RangeArgs(1, 2),
 	Run: func(cmd *cobra.Command, args []string) {
-		numbers, err := cmd.Flags().GetString("numbers")
-		if err != nil {
+		if numbers, err := cmd.Flags().GetString("numbers"); err != nil {
 			log.Errorf("%v", err)
 			os.Exit(1)
-		}
-
-		err = SetNumbersMode(numbers)
-		if err != nil {
-			log.Errorf("couldn't parse value of --numbers: %v", err)
+		} else if setNoErr := SetNumbersMode(numbers); setNoErr != nil {
+			log.Errorf("%v", setNoErr)
 			os.Exit(1)
 		}
 

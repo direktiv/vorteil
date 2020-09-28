@@ -27,52 +27,7 @@ func CopyImageFile(vorteilImage *vdecompiler.IO, imageFilePath string, destFileP
 	}
 
 	if seekOS {
-		if imageFilePath != "" && imageFilePath != "/" && imageFilePath != "." {
-			// single file
-			imageFilePath = strings.TrimPrefix(imageFilePath, "/")
-			r, err := vorteilImage.KernelFile(imageFilePath)
-			f, err := os.Create(destFilePath)
-			defer f.Close()
-			_, err = io.Copy(f, r)
-			if err != nil {
-				return err
-			}
-		} else {
-			// entire folder
-			kfiles, err := vorteilImage.KernelFiles()
-			if err != nil {
-				return err
-			}
-
-			err = os.MkdirAll(destFilePath, 077)
-			if err != nil {
-				return err
-			}
-
-			for _, kf := range kfiles {
-				r, err := vorteilImage.KernelFile(kf.Name)
-				if err != nil {
-					return err
-				}
-
-				f, err := os.Create(filepath.Join(destFilePath, kf.Name))
-				if err != nil {
-					return err
-				}
-				defer f.Close()
-
-				_, err = io.Copy(f, r)
-				if err != nil {
-					return err
-				}
-
-				err = f.Close()
-				if err != nil {
-					return err
-				}
-			}
-		}
-		return nil
+		return copyImageFileFromVPartition(vorteilImage, imageFilePath, destFilePath)
 	}
 
 	var recurse func(int, string, string) error
@@ -156,5 +111,54 @@ func CopyImageFile(vorteilImage *vdecompiler.IO, imageFilePath string, destFileP
 		return err
 	}
 
+	return nil
+}
+
+func copyImageFileFromVPartition(vorteilImage *vdecompiler.IO, imageFilePath string, destFilePath string) error {
+	if imageFilePath != "" && imageFilePath != "/" && imageFilePath != "." {
+		// single file
+		imageFilePath = strings.TrimPrefix(imageFilePath, "/")
+		r, err := vorteilImage.KernelFile(imageFilePath)
+		f, err := os.Create(destFilePath)
+		defer f.Close()
+		_, err = io.Copy(f, r)
+		if err != nil {
+			return err
+		}
+	} else {
+		// entire folder
+		kfiles, err := vorteilImage.KernelFiles()
+		if err != nil {
+			return err
+		}
+
+		err = os.MkdirAll(destFilePath, 077)
+		if err != nil {
+			return err
+		}
+
+		for _, kf := range kfiles {
+			r, err := vorteilImage.KernelFile(kf.Name)
+			if err != nil {
+				return err
+			}
+
+			f, err := os.Create(filepath.Join(destFilePath, kf.Name))
+			if err != nil {
+				return err
+			}
+			defer f.Close()
+
+			_, err = io.Copy(f, r)
+			if err != nil {
+				return err
+			}
+
+			err = f.Close()
+			if err != nil {
+				return err
+			}
+		}
+	}
 	return nil
 }

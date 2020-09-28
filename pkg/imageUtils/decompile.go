@@ -34,9 +34,9 @@ const (
 	CopiedMkDir                    = 4
 )
 
-func createSymlinkCallback(iio *vdecompiler.IO, inode *vdecompiler.Inode, dpath string) func() error {
+func createSymlinkCallback(vorteilImage *vdecompiler.IO, inode *vdecompiler.Inode, dpath string) func() error {
 	return func() error {
-		rdr, err := iio.InodeReader(inode)
+		rdr, err := vorteilImage.InodeReader(inode)
 		if err != nil {
 			return err
 		}
@@ -53,7 +53,7 @@ func createSymlinkCallback(iio *vdecompiler.IO, inode *vdecompiler.Inode, dpath 
 	}
 }
 
-func copyInodeToRegularFile(iio *vdecompiler.IO, inode *vdecompiler.Inode, dpath string) error {
+func copyInodeToRegularFile(vorteilImage *vdecompiler.IO, inode *vdecompiler.Inode, dpath string) error {
 	var err error
 	var f *os.File
 	var rdr io.Reader
@@ -69,7 +69,7 @@ func copyInodeToRegularFile(iio *vdecompiler.IO, inode *vdecompiler.Inode, dpath
 	}
 	defer f.Close()
 
-	rdr, err = iio.InodeReader(inode)
+	rdr, err = vorteilImage.InodeReader(inode)
 	if err != nil {
 		return err
 	}
@@ -89,18 +89,93 @@ func utilFileNotExists(fpath string) error {
 	return nil
 }
 
+// decompileImageRecursive : Recursively loop through all image nodes and decompile them to the correct files
+func decompileImageRecursive(vorteilImage *vdecompiler.IO, report DecompileReport, symlinkCallbacks []func() error, ino int, rpath string, dpath string) (DecompileReport, []func() error, error) {
+	var entries []*vdecompiler.DirectoryEntry
+
+	inode, err := vorteilImage.ResolveInode(ino)
+	if err != nil {
+		return report, nil, err
+	}
+
+	if report.SkipNotTouched && inode.LastAccessTime == 0 && !inode.IsDirectory() && rpath != "/" {
+		report.ImageFiles = append(report.ImageFiles, DecompiledFile{
+			Copied: false,
+			Path:   rpath,
+			Result: SkippedNotTouched,
+		})
+		goto DONE
+	}
+
+	if inode.IsRegularFile() {
+		err = copyInodeToRegularFile(vorteilImage, inode, dpath)
+		if err == nil {
+			report.ImageFiles = append(report.ImageFiles, DecompiledFile{
+				Copied: false,
+				Path:   rpath,
+				Result: CopiedRegularFile,
+			})
+		}
+		goto DONE
+	}
+
+	if inode.IsSymlink() {
+		symlinkCallbacks = append(symlinkCallbacks, createSymlinkCallback(vorteilImage, inode, dpath))
+		report.ImageFiles = append(report.ImageFiles, DecompiledFile{
+			Copied: false,
+			Path:   rpath,
+			Result: CopiedSymlink,
+		})
+		goto DONE
+	}
+
+	if !inode.IsDirectory() {
+		report.ImageFiles = append(report.ImageFiles, DecompiledFile{
+			Copied: false,
+			Path:   rpath,
+			Result: SkippedAbnormalFile,
+		})
+		goto DONE
+	}
+
+	// INODE IS DIR
+	err = utilFileNotExists(dpath)
+	if err == nil {
+		err = os.MkdirAll(dpath, 0777)
+		if err == nil {
+			report.ImageFiles = append(report.ImageFiles, DecompiledFile{
+				Copied: false,
+				Path:   rpath,
+				Result: CopiedMkDir,
+			})
+			entries, err = vorteilImage.Readdir(inode)
+		}
+	}
+
+	if err != nil {
+		return report, nil, err
+	}
+
+	for _, entry := range entries {
+		if entry.Name == "." || entry.Name == ".." {
+			continue
+		}
+		report, symlinkCallbacks, err = decompileImageRecursive(vorteilImage, report, symlinkCallbacks, entry.Inode, filepath.ToSlash(filepath.Join(rpath, entry.Name)), filepath.Join(dpath, entry.Name))
+		if err != nil {
+			return report, nil, err
+		}
+	}
+
+DONE:
+	return report, symlinkCallbacks, err
+}
+
 // DecompileImage ...
-func DecompileImage(vorteilImagePath string, Outputpath string, skipNotTouched bool) (DecompileReport, error) {
+func DecompileImage(vorteilImage *vdecompiler.IO, Outputpath string, skipNotTouched bool) (DecompileReport, error) {
 	report := DecompileReport{
 		ImageFiles:     make([]DecompiledFile, 0),
 		SkipNotTouched: skipNotTouched,
 	}
-
-	iio, err := vdecompiler.Open(vorteilImagePath)
-	if err != nil {
-		return report, err
-	}
-	defer iio.Close()
 
 	fi, err := os.Stat(Outputpath)
 	if err != nil && !os.IsNotExist(err) {
@@ -117,98 +192,13 @@ func DecompileImage(vorteilImagePath string, Outputpath string, skipNotTouched b
 		dpath = filepath.ToSlash(filepath.Join(Outputpath, filepath.Base(fpath)))
 	}
 
-	var counter int
-
 	symlinkCallbacks := make([]func() error, 0)
 
-	var recurse func(int, string, string) error
-	recurse = func(ino int, rpath string, dpath string) error {
-		var entries []*vdecompiler.DirectoryEntry
-
-		inode, err := iio.ResolveInode(ino)
-		if err != nil {
-			return err
-		}
-
-		if report.SkipNotTouched && inode.LastAccessTime == 0 && !inode.IsDirectory() && rpath != "/" {
-			report.ImageFiles = append(report.ImageFiles, DecompiledFile{
-				Copied: false,
-				Path:   rpath,
-				Result: SkippedNotTouched,
-			})
-			goto DONE
-		}
-
-		counter++
-
-		if inode.IsRegularFile() {
-			err = copyInodeToRegularFile(iio, inode, dpath)
-			if err == nil {
-				report.ImageFiles = append(report.ImageFiles, DecompiledFile{
-					Copied: false,
-					Path:   rpath,
-					Result: CopiedRegularFile,
-				})
-			}
-			goto DONE
-		}
-
-		if inode.IsSymlink() {
-			symlinkCallbacks = append(symlinkCallbacks, createSymlinkCallback(iio, inode, dpath))
-			report.ImageFiles = append(report.ImageFiles, DecompiledFile{
-				Copied: false,
-				Path:   rpath,
-				Result: CopiedSymlink,
-			})
-			goto DONE
-		}
-
-		if !inode.IsDirectory() {
-			report.ImageFiles = append(report.ImageFiles, DecompiledFile{
-				Copied: false,
-				Path:   rpath,
-				Result: SkippedAbnormalFile,
-			})
-			goto DONE
-		}
-
-		// INODE IS DIR
-		err = utilFileNotExists(dpath)
-		if err == nil {
-			err = os.MkdirAll(dpath, 0777)
-			if err == nil {
-				report.ImageFiles = append(report.ImageFiles, DecompiledFile{
-					Copied: false,
-					Path:   rpath,
-					Result: CopiedMkDir,
-				})
-				entries, err = iio.Readdir(inode)
-			}
-		}
-
-		if err != nil {
-			return err
-		}
-
-		for _, entry := range entries {
-			if entry.Name == "." || entry.Name == ".." {
-				continue
-			}
-			err = recurse(entry.Inode, filepath.ToSlash(filepath.Join(rpath, entry.Name)), filepath.Join(dpath, entry.Name))
-			if err != nil {
-				return err
-			}
-		}
-
-	DONE:
-		return err
-	}
-
-	ino, err := iio.ResolvePathToInodeNo(fpath)
+	ino, err := vorteilImage.ResolvePathToInodeNo(fpath)
 	if err != nil {
 		return report, err
 	}
-	err = recurse(ino, filepath.ToSlash(filepath.Base(fpath)), dpath)
+	report, symlinkCallbacks, err = decompileImageRecursive(vorteilImage, report, symlinkCallbacks, ino, filepath.ToSlash(filepath.Base(fpath)), dpath)
 	if err != nil {
 		return report, err
 	}

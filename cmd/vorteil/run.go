@@ -18,6 +18,7 @@ import (
 	"github.com/thanhpk/randstr"
 	"github.com/vorteil/vorteil/pkg/imageUtils"
 	"github.com/vorteil/vorteil/pkg/vcfg"
+	"github.com/vorteil/vorteil/pkg/vdecompiler"
 	"github.com/vorteil/vorteil/pkg/virtualizers"
 	"github.com/vorteil/vorteil/pkg/virtualizers/firecracker"
 	"github.com/vorteil/vorteil/pkg/virtualizers/util"
@@ -183,7 +184,15 @@ func defaultVirtualizer() string {
 }
 
 func runDecompile(diskpath string, outpath string, skipUnTouched bool) error {
-	report, err := imageUtils.DecompileImage(diskpath, outpath, skipUnTouched)
+	iio, err := vdecompiler.Open(diskpath)
+	if err != nil {
+		log.Errorf("%v", err)
+		os.Exit(1)
+	}
+
+	defer iio.Close()
+
+	report, err := imageUtils.DecompileImage(iio, outpath, skipUnTouched)
 	if err != nil {
 		return err
 	}
@@ -191,15 +200,15 @@ func runDecompile(diskpath string, outpath string, skipUnTouched bool) error {
 	for _, dFile := range report.ImageFiles {
 		switch dFile.Result {
 		case imageUtils.CopiedMkDir:
-			log.Infof("Creating Dir > %s", dFile.Path)
+			log.Printf("Creating Dir > %s", dFile.Path)
 		case imageUtils.CopiedRegularFile:
-			log.Infof("Copied File > %s", dFile.Path)
+			log.Printf("Copied File  > %s", dFile.Path)
 		case imageUtils.CopiedSymlink:
-			log.Infof("Created Symlink > %s", dFile.Path)
+			log.Printf("Created Symlink > %s", dFile.Path)
 		case imageUtils.SkippedAbnormalFile:
-			log.Infof("Skipped Abnormal > %s", dFile.Path)
+			log.Printf("Skipped Abnormal > %s", dFile.Path)
 		case imageUtils.SkippedNotTouched:
-			log.Infof("Skipped Untouched File > %s", dFile.Path)
+			log.Printf("Skipped Untouched File > %s", dFile.Path)
 		}
 	}
 

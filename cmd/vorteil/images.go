@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"github.com/vorteil/vorteil/pkg/imageUtils"
+	"github.com/vorteil/vorteil/pkg/imagetools"
 	"github.com/vorteil/vorteil/pkg/vdecompiler"
 	"github.com/vorteil/vorteil/pkg/vdisk"
 	"github.com/vorteil/vorteil/pkg/vpkg"
@@ -155,7 +155,7 @@ var catCmd = &cobra.Command{
 			fpath := args[i]
 
 			// Get Reader
-			rdr, err := imageUtils.CatImageFile(vImageIO, fpath, flagOS)
+			rdr, err := imagetools.CatImageFile(vImageIO, fpath, flagOS)
 			if err != nil {
 				log.Errorf("%v", err)
 				os.Exit(1)
@@ -192,7 +192,7 @@ var cpCmd = &cobra.Command{
 		dest := args[2]
 		fpath := args[1]
 
-		err = imageUtils.CopyImageFile(iio, fpath, dest, flagOS)
+		err = imagetools.CopyImageFile(iio, fpath, dest, flagOS)
 		if err != nil {
 			panic(err)
 		}
@@ -232,7 +232,7 @@ var duCmd = &cobra.Command{
 			fpath = args[1]
 		}
 
-		duOut, err := imageUtils.DUImageFile(iio, fpath, free, maxDepth, all)
+		duOut, err := imagetools.DUImageFile(iio, fpath, free, maxDepth, all)
 		genericErrCheck(err, 1)
 
 		for i := range duOut.ImageFiles {
@@ -283,7 +283,7 @@ var fsCmd = &cobra.Command{
 		genericErrCheck(err, 1)
 		defer iio.Close()
 
-		fsReport, err := imageUtils.FSImageFile(iio)
+		fsReport, err := imagetools.FSImageFile(iio)
 		genericErrCheck(err, 1)
 
 		log.Printf("First LBA:        \t%s", PrintableSize(fsReport.FirstLBA))
@@ -324,7 +324,7 @@ var fsimgCmd = &cobra.Command{
 		genericErrCheck(err, 1)
 		defer iio.Close()
 
-		if err := imageUtils.FSIMGImage(iio, dst); err != nil {
+		if err := imagetools.FSIMGImage(iio, dst); err != nil {
 			log.Errorf("%v", err)
 			os.Exit(1)
 		}
@@ -344,7 +344,7 @@ var gptCmd = &cobra.Command{
 		genericErrCheck(err, 1)
 		defer iio.Close()
 
-		gptOut, err := imageUtils.ImageGPT(iio)
+		gptOut, err := imagetools.ImageGPT(iio)
 		genericErrCheck(err, 1)
 
 		log.Printf("GPT Header LBA:   \t%s", PrintableSize(gptOut.HeaderLBA))
@@ -569,7 +569,7 @@ var md5Cmd = &cobra.Command{
 		img := args[0]
 
 		fpath := args[1]
-		imageFileMD5, err := imageUtils.MDSumImageFile(img, fpath, flagOS)
+		imageFileMD5, err := imagetools.MDSumImageFile(img, fpath, flagOS)
 		genericErrCheck(err, 1)
 
 		log.Printf("%s", imageFileMD5)
@@ -596,7 +596,7 @@ var statCmd = &cobra.Command{
 			fpath = args[1]
 		}
 
-		fileStat, err := imageUtils.StatImageFile(img, fpath, flagOS)
+		fileStat, err := imagetools.StatImageFile(img, fpath, flagOS)
 		genericErrCheck(err, 1)
 
 		log.Printf("File: %s", fileStat.FileName)
@@ -629,7 +629,7 @@ var treeCmd = &cobra.Command{
 			fpath = args[1]
 		}
 
-		treeResults, err := imageUtils.TreeImageFile(img, fpath, flagOS)
+		treeResults, err := imagetools.TreeImageFile(img, fpath, flagOS)
 		genericErrCheck(err, 1)
 
 		log.Printf(treeResults.String())

@@ -1,4 +1,4 @@
-package imageUtils
+package imagetools
 
 import (
 	"github.com/vorteil/vorteil/pkg/vdecompiler"

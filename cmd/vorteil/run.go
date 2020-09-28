@@ -16,7 +16,7 @@ import (
 	"github.com/mitchellh/go-homedir"
 	"github.com/spf13/cobra"
 	"github.com/thanhpk/randstr"
-	"github.com/vorteil/vorteil/pkg/imageUtils"
+	"github.com/vorteil/vorteil/pkg/imagetools"
 	"github.com/vorteil/vorteil/pkg/vcfg"
 	"github.com/vorteil/vorteil/pkg/vdecompiler"
 	"github.com/vorteil/vorteil/pkg/virtualizers"
@@ -192,22 +192,22 @@ func runDecompile(diskpath string, outpath string, skipUnTouched bool) error {
 
 	defer iio.Close()
 
-	report, err := imageUtils.DecompileImage(iio, outpath, skipUnTouched)
+	report, err := imagetools.DecompileImage(iio, outpath, skipUnTouched)
 	if err != nil {
 		return err
 	}
 
 	for _, dFile := range report.ImageFiles {
 		switch dFile.Result {
-		case imageUtils.CopiedMkDir:
+		case imagetools.CopiedMkDir:
 			log.Printf("Creating Dir > %s", dFile.Path)
-		case imageUtils.CopiedRegularFile:
+		case imagetools.CopiedRegularFile:
 			log.Printf("Copied File  > %s", dFile.Path)
-		case imageUtils.CopiedSymlink:
+		case imagetools.CopiedSymlink:
 			log.Printf("Created Symlink > %s", dFile.Path)
-		case imageUtils.SkippedAbnormalFile:
+		case imagetools.SkippedAbnormalFile:
 			log.Printf("Skipped Abnormal > %s", dFile.Path)
-		case imageUtils.SkippedNotTouched:
+		case imagetools.SkippedNotTouched:
 			log.Printf("Skipped Untouched File > %s", dFile.Path)
 		}
 	}

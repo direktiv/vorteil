@@ -6,7 +6,6 @@ import (
 	"io"
 
 	"github.com/vorteil/vorteil/pkg/elog"
-	"github.com/vorteil/vorteil/pkg/ext"
 	"github.com/vorteil/vorteil/pkg/gcparchive"
 	"github.com/vorteil/vorteil/pkg/vcfg"
 	"github.com/vorteil/vorteil/pkg/vhd"
@@ -75,16 +74,18 @@ func build(ctx context.Context, w io.WriteSeeker, cfg *vcfg.VCFG, args *BuildArg
 
 	log := args.Logger
 
+	fsCompiler, err := NewFilesystemCompiler(string(cfg.System.Filesystem), log, args.PackageReader.FS(), nil)
+	if err != nil {
+		return err
+	}
+
 	vimgBuilder, err := CreateBuilder(ctx, &vimg.BuilderArgs{
 		Kernel: vimg.KernelOptions{
 			Shell: args.KernelOptions.Shell,
 		},
-		FSCompiler: ext.NewCompiler(&ext.CompilerArgs{
-			FileTree: args.PackageReader.FS(),
-			Logger:   args.Logger,
-		}),
-		VCFG:   cfg,
-		Logger: log,
+		FSCompiler: fsCompiler,
+		VCFG:       cfg,
+		Logger:     log,
 	})
 	if err != nil {
 		return err

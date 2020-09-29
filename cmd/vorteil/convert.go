@@ -1,8 +1,6 @@
 package main
 
 import (
-	"os"
-
 	"github.com/spf13/cobra"
 	"github.com/vorteil/vorteil/pkg/vconvert"
 )
@@ -40,7 +38,6 @@ repositories:
    url: https://myurl
 `,
 	Run: func(cmd *cobra.Command, args []string) {
-
 		// in case of an error we pass empty user/pwd/config in
 		user, _ := cmd.Flags().GetString("user")
 		pwd, _ := cmd.Flags().GetString("password")
@@ -48,14 +45,14 @@ repositories:
 
 		cc, err := vconvert.NewContainerConverter(args[0], config, log)
 		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
+			SetError(err, 1)
+			return
 		}
 
 		err = cc.ConvertToProject(args[1], user, pwd)
 		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
+			SetError(err, 2)
+			return
 		}
 	},
 }

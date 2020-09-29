@@ -32,10 +32,10 @@ var initFirecrackerCmd = &cobra.Command{
 	Hidden: true,
 	Args:   cobra.MaximumNArgs(0),
 	Run: func(cmd *cobra.Command, args []string) {
+
 		err := firecracker.SetupBridgeAndDHCPServer(log)
 		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
+			SetError(err, 1)
 		}
 	},
 }
@@ -55,9 +55,7 @@ and cleaning up the instance when it's done.`,
 		if len(args) >= 1 {
 			buildablePath = args[0]
 		}
-
 		// Fetch name of the app from path
-
 		var name string
 		_, err := os.Stat(buildablePath)
 		if err != nil {
@@ -73,8 +71,8 @@ and cleaning up the instance when it's done.`,
 					name = "vorteil-vm"
 				}
 			} else {
-				log.Errorf("%v", err)
-				os.Exit(1)
+				SetError(err, 1)
+				return
 			}
 		} else {
 			name = strings.ReplaceAll(filepath.Base(buildablePath), ".vorteil", "")
@@ -82,73 +80,72 @@ and cleaning up the instance when it's done.`,
 
 		pkgBuilder, err := getPackageBuilder("BUILDABLE", buildablePath)
 		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
+			SetError(err, 2)
+			return
 		}
 		defer pkgBuilder.Close()
 
 		err = modifyPackageBuilder(pkgBuilder)
 		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
+			SetError(err, 3)
+			return
 		}
 
 		pkgReader, err := vpkg.ReaderFromBuilder(pkgBuilder)
 		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
+			SetError(err, 4)
+			return
 		}
 		defer pkgReader.Close()
 
 		pkgReader, err = vpkg.PeekVCFG(pkgReader)
 		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
+			SetError(err, 5)
+			return
 		}
 
 		cfgf := pkgReader.VCFG()
 		cfg, err := vcfg.LoadFile(cfgf)
 		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
+			SetError(err, 6)
+			return
 		}
 		err = initKernels()
 		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
+			SetError(err, 7)
+			return
 		}
 		switch flagPlatform {
 		case platformQEMU:
 			err = runQEMU(pkgReader, cfg, name)
 			if err != nil {
-				log.Errorf("%v", err)
-				os.Exit(1)
+				SetError(err, 8)
+				return
 			}
 		case platformVirtualBox:
 			err = runVirtualBox(pkgReader, cfg, name)
 			if err != nil {
-				log.Errorf("%v", err)
-				os.Exit(1)
+				SetError(err, 9)
+				return
 			}
 		case platformHyperV:
 			err = runHyperV(pkgReader, cfg, name)
 			if err != nil {
-				log.Errorf("%v", err)
-				os.Exit(1)
+				SetError(err, 10)
+				return
 			}
 		case platformFirecracker:
 			err = runFirecracker(pkgReader, cfg, name)
 			if err != nil {
-				log.Errorf("%v", err)
-				os.Exit(1)
+				SetError(err, 11)
+				return
 			}
 		default:
 			if flagPlatform == "not installed" {
-				log.Errorf("no virtualizers are currently installed")
+				SetError((fmt.Errorf("no virtualizers are currently installed")), 12)
 			} else {
-				log.Errorf("%v", fmt.Errorf("platform '%s' not supported", flagPlatform).Error())
+				SetError((fmt.Errorf("platform '%s' not supported", flagPlatform)), 12)
 			}
-			os.Exit(1)
 		}
 
 	},
@@ -252,8 +249,8 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG, name st
 			decompileSpinner := log.NewProgress("Decompiling Disk", "", 0)
 			defer decompileSpinner.Finish(true)
 			if err := runDecompile(diskpath, flagRecord, flagTouched); err != nil {
-				log.Errorf("%v", err)
-				os.Exit(1)
+				SetError(err, 1)
+				return
 			}
 			decompileSpinner.Finish(true)
 			log.Printf("Decompile Completed")

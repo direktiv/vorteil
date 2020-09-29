@@ -26,14 +26,28 @@ var (
 	date    = "Thu, 01 Jan 1970 00:00:00 +0000"
 )
 
+// Each command executed may have a error message and status code
+var errorStatusCode int
+var errorStatusMessage error
+
+// SetError sets the global variables for when the process exits to display accordingly
+func SetError(err error, code int) {
+	errorStatusCode = code
+	errorStatusMessage = err
+}
+
 func main() {
 
 	commandInit()
 
 	err := rootCmd.Execute()
-
 	if err != nil {
-		os.Exit(1)
+		SetError(err, 1)
+	}
+
+	// If the global status code for errors has been set os.Exit with non-zero number
+	if errorStatusCode != 0 {
+		handleCommandError()
 	}
 }
 
@@ -125,40 +139,42 @@ func getSourceType(src string) (sourceType, error) {
 	return sourceINVALID, err
 }
 
-func getBuilderURL(argName, src string) (vpkg.Builder, error) {
-
-	p := log.NewProgress(fmt.Sprintf("Downloading %s", src), "%", 0)
+func getReaderURL(src string) (vpkg.Reader, error) {
 
 	resp, err := http.Get(src)
 	if err != nil {
 		resp.Body.Close()
-		p.Finish(false)
 		return nil, err
 	}
-	p.Finish(true)
+	p := log.NewProgress("Downloading package", "KiB", resp.ContentLength)
 
-	pkgr, err := vpkg.Load(resp.Body)
+	pkgr, err := vpkg.Load(p.ProxyReader(resp.Body))
 	if err != nil {
-		resp.Body.Close()
 		return nil, err
 	}
+	return pkgr, nil
+}
 
+func getBuilderURL(argName, src string) (vpkg.Builder, error) {
+	pkgr, err := getReaderURL(src)
+	if err != nil {
+		return nil, err
+	}
 	pkgb, err := vpkg.NewBuilderFromReader(pkgr)
 	if err != nil {
-		resp.Body.Close()
 		pkgr.Close()
 		return nil, err
 	}
 	return pkgb, nil
 }
 
-func getBuilderFile(argName, src string) (vpkg.Builder, error) {
+func getReaderFile(src string) (vpkg.Reader, error) {
 	f, err := os.Open(src)
 	if err != nil {
 		if !os.IsNotExist(err) {
 			return nil, err
 		}
-		return nil, fmt.Errorf("failed to resolve %s '%s'", argName, src)
+		return nil, fmt.Errorf("failed to resolve %s ", src)
 	}
 
 	pkgr, err := vpkg.Load(f)
@@ -166,11 +182,19 @@ func getBuilderFile(argName, src string) (vpkg.Builder, error) {
 		f.Close()
 		return nil, err
 	}
+	return pkgr, nil
+}
+func getBuilderFile(argName, src string) (vpkg.Builder, error) {
 
+	pkgr, err := getReaderFile(src)
+	if err != nil {
+		pkgr.Close()
+		return nil, err
+	}
 	pkgb, err := vpkg.NewBuilderFromReader(pkgr)
 	if err != nil {
 		pkgr.Close()
-		f.Close()
+		return nil, err
 	}
 	return pkgb, err
 }
@@ -195,6 +219,27 @@ func getBuilderDir(argName, src string) (vpkg.Builder, error) {
 	return pkgb, err
 }
 
+func getPackageReader(argName, src string) (vpkg.Reader, error) {
+	var err error
+	var pkgR vpkg.Reader
+	sType, err := getSourceType(src)
+	if err != nil {
+		return nil, err
+	}
+
+	switch sType {
+	case sourceURL:
+		pkgR, err = getReaderURL(src)
+	case sourceFile:
+		pkgR, err = getReaderFile(src)
+	case sourceINVALID:
+		fallthrough
+	default:
+		err = fmt.Errorf("failed to resolve %s '%s'", argName, src)
+	}
+
+	return pkgR, err
+}
 func getPackageBuilder(argName, src string) (vpkg.Builder, error) {
 	var err error
 	var pkgB vpkg.Builder
@@ -328,15 +373,6 @@ func SetNumberModeFlagCMD(cmd *cobra.Command) error {
 	}
 
 	return nil
-}
-
-// genericErrCheck : Very simple helper command to reduce duplication of err checks in the main package.
-//	Exits program with given exit code and error if error is not nil
-func genericErrCheck(err error, exitCode int) {
-	if err != nil {
-		log.Errorf("%v", err)
-		os.Exit(exitCode)
-	}
 }
 
 // PrintableSize is a wrapper around int to alter its string formatting behaviour.

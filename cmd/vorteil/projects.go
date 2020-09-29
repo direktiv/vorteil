@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 
@@ -98,26 +97,25 @@ var newProjectCmd = &cobra.Command{
 		if len(args) != 0 {
 			err = vcfgFlags.Validate()
 			if err != nil {
-				log.Errorf("%v", err)
-				os.Exit(1)
+				SetError(err, 1)
+				return
 			}
 			projectPath, err = filepath.Abs(args[0])
 			if err != nil {
-				log.Errorf("%v", err)
-				os.Exit(1)
+				SetError(err, 2)
+				return
 			}
 			// make sure directory is created
 			err = os.MkdirAll(projectPath, os.ModePerm)
 			if err != nil {
-				log.Errorf("%v", err)
-				os.Exit(1)
+				SetError(err, 3)
+				return
 			}
 
-			fmt.Printf("Override VCFG: %+v\n", overrideVCFG)
 			err = vproj.NewProject(projectPath, &overrideVCFG, log)
 			if err != nil {
-				log.Errorf("%v", err)
-				os.Exit(1)
+				SetError(err, 4)
+				return
 			}
 		}
 	},
@@ -135,8 +133,8 @@ var importSharedObjectsCmd = &cobra.Command{
 		if len(args) != 0 {
 			projectPath, err = filepath.Abs(args[0])
 			if err != nil {
-				log.Errorf("%v", err)
-				os.Exit(1)
+				SetError(err, 1)
+				return
 			}
 		}
 
@@ -144,14 +142,14 @@ var importSharedObjectsCmd = &cobra.Command{
 		importOperation, err := vproj.NewImportSharedObject(projectPath, flagExcludeDefault, log)
 
 		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(2)
+			SetError(err, 2)
+			return
 		}
 
 		// Start Import Operation
 		if err = importOperation.Start(); err != nil {
-			log.Errorf("%v", err)
-			os.Exit(3)
+			SetError(err, 3)
+			return
 		}
 	},
 }

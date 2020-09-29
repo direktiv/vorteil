@@ -55,60 +55,42 @@ identify it and explain its purpose and its use.`,
 
 		err := checkValidNewFileOutput(outputPath, flagForce, "output", "-f")
 		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
+			SetError(err, 1)
+			return
 		}
 
-		// TODO: other packable type & project targets
-		proj, err := vproj.LoadProject(packablePath)
+		builder, err := getPackageBuilder("PACKABLE", packablePath)
 		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
+			SetError(err, 2)
+			return
 		}
 
-		tgt, err := proj.Target("")
+		err = modifyPackageBuilder(builder)
 		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
+			SetError(err, 3)
+			return
 		}
-
-		// TODO: project & vcfg flags
-
-		builder, err := tgt.NewBuilder()
-		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
-		}
-		defer builder.Close()
 
 		builder.SetCompressionLevel(int(flagCompressionLevel))
 
 		f, err := os.Create(outputPath)
 		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
+			SetError(err, 5)
+			return
 		}
 		defer f.Close()
 
 		err = builder.Pack(f)
 		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
+			SetError(err, 6)
+			return
 		}
 
 		err = f.Close()
 		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
+			SetError(err, 7)
+			return
 		}
-
-		err = builder.Close()
-		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
-		}
-
-		// TODO: progress tracking
 
 		log.Printf("created package: %s", outputPath)
 	},
@@ -150,24 +132,32 @@ other files. If the DEST argument is omitted it will default to ".".`,
 
 		err := checkValidNewDirOutput(prjPath, flagForce, "DEST", "-f")
 		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
-		}
+			SetError(err, 1)
 
-		pkg, err := vpkg.Open(pkgPath)
+			return
+		}
+		pkg, err := getPackageBuilder("PACKABLE", pkgPath)
 		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
+			SetError(err, 2)
+			return
 		}
 		defer pkg.Close()
-
-		err = vproj.CreateFromPackage(prjPath, pkg)
+		err = modifyPackageBuilder(pkg)
 		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
+			SetError(err, 3)
+			return
 		}
-
-		// TODO: progress tracking
+		pkgr, err := vpkg.ReaderFromBuilder(pkg)
+		if err != nil {
+			SetError(err, 4)
+			return
+		}
+		defer pkgr.Close()
+		err = vproj.CreateFromPackage(prjPath, pkgr)
+		if err != nil {
+			SetError(err, 5)
+			return
+		}
 
 		log.Printf("unpacked to: %s", prjPath)
 	},

@@ -13,6 +13,17 @@ import (
 	"github.com/vorteil/vorteil/pkg/vpkg"
 )
 
+func handleCommandError() {
+	if errorStatusMessage != nil {
+		// Pretty sure this only happens when invalid flags.
+		// Which the error gets printed before this
+		if log != nil {
+			log.Errorf(errorStatusMessage.Error())
+		}
+	}
+	os.Exit(errorStatusCode)
+}
+
 func handleDirectory(src string, dst string, builder vpkg.Builder) error {
 	// create subtree
 	tree, err := vio.FileTreeFromDirectory(src)

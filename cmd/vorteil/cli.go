@@ -45,7 +45,9 @@ func commandInit() {
 	// the order Go runs init functions this is the safest place to do this.
 	addModifyFlags(buildCmd.Flags())
 	addModifyFlags(runCmd.Flags())
-
+	addModifyFlags(provisionCmd.Flags())
+	addModifyFlags(unpackCmd.Flags())
+	addModifyFlags(packCmd.Flags())
 	// setup logging across all commands
 	rootCmd.PersistentFlags().BoolVarP(&flagVerbose, "verbose", "v", false, "enable verbose output")
 	rootCmd.PersistentFlags().BoolVarP(&flagDebug, "debug", "d", false, "enable debug output")

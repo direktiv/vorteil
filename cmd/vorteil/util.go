@@ -13,6 +13,13 @@ import (
 	"github.com/vorteil/vorteil/pkg/vpkg"
 )
 
+func handleCommandError(err error, code int) {
+	if err != nil {
+		log.Errorf(err.Error())
+	}
+	os.Exit(code)
+}
+
 func handleDirectory(src string, dst string, builder vpkg.Builder) error {
 	// create subtree
 	tree, err := vio.FileTreeFromDirectory(src)

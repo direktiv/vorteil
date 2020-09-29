@@ -27,35 +27,43 @@ var provisionCmd = &cobra.Command{
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 
+		var returnErr error
+		var statusCode int
+		defer handleCommandError(returnErr, statusCode)
 		// Load the provided provisioner file
 		if _, err := os.Stat(provisionProvisionerFile); err != nil {
-			log.Errorf(err.Error())
-			os.Exit(1)
+			statusCode = 1
+			returnErr = err
+			return
 		}
 
 		b, err := ioutil.ReadFile(provisionProvisionerFile)
 		if err != nil {
-			log.Errorf(err.Error())
-			os.Exit(2)
+			statusCode = 2
+			returnErr = err
+			return
 		}
 
 		data, err := provisioners.Decrypt(b, provisionPassPhrase)
 		if err != nil {
-			log.Errorf(err.Error())
-			os.Exit(3)
+			statusCode = 3
+			returnErr = err
+			return
 		}
 
 		m := make(map[string]interface{})
 		err = json.Unmarshal(data, &m)
 		if err != nil {
-			log.Errorf(err.Error())
-			os.Exit(4)
+			statusCode = 4
+			returnErr = err
+			return
 		}
 
 		ptype, ok := m[provisioners.MapKey]
 		if !ok {
-			log.Errorf(err.Error())
-			os.Exit(5)
+			statusCode = 5
+			returnErr = err
+			return
 		}
 
 		var prov provisioners.Provisioner
@@ -66,8 +74,9 @@ var provisionCmd = &cobra.Command{
 			p := &google.Provisioner{}
 			err = p.Initialize(data)
 			if err != nil {
-				log.Errorf(err.Error())
-				os.Exit(6)
+				statusCode = 6
+				returnErr = err
+				return
 			}
 
 			prov = p
@@ -77,8 +86,9 @@ var provisionCmd = &cobra.Command{
 			p := &amazon.Provisioner{}
 			err = p.Initialize(data)
 			if err != nil {
-				log.Errorf(err.Error())
-				os.Exit(6)
+				statusCode = 7
+				returnErr = err
+				return
 			}
 
 			prov = p
@@ -88,8 +98,9 @@ var provisionCmd = &cobra.Command{
 			p := &azure.Provisioner{}
 			err = p.Initialize(data)
 			if err != nil {
-				log.Errorf(err.Error())
-				os.Exit(6)
+				statusCode = 8
+				returnErr = err
+				return
 			}
 
 			prov = p
@@ -102,39 +113,45 @@ var provisionCmd = &cobra.Command{
 
 		pkgBuilder, err := getPackageBuilder("BUILDABLE", buildablePath)
 		if err != nil {
-			log.Errorf(err.Error())
-			os.Exit(9)
+			statusCode = 9
+			returnErr = err
+			return
 		}
 
 		err = modifyPackageBuilder(pkgBuilder)
 		if err != nil {
-			log.Errorf(err.Error())
-			os.Exit(10)
+			statusCode = 10
+			returnErr = err
+			return
 		}
 
 		pkgReader, err := vpkg.ReaderFromBuilder(pkgBuilder)
 		if err != nil {
-			log.Errorf(err.Error())
-			os.Exit(11)
+			statusCode = 11
+			returnErr = err
+			return
 		}
 		defer pkgReader.Close()
 
 		pkgReader, err = vpkg.PeekVCFG(pkgReader)
 		if err != nil {
-			log.Errorf(err.Error())
-			os.Exit(12)
+			statusCode = 12
+			returnErr = err
+			return
 		}
 
 		err = initKernels()
 		if err != nil {
-			log.Errorf(err.Error())
-			os.Exit(13)
+			statusCode = 13
+			returnErr = err
+			return
 		}
 
 		f, err := ioutil.TempFile(os.TempDir(), "vorteil.disk")
 		if err != nil {
-			log.Errorf(err.Error())
-			os.Exit(14)
+			statusCode = 14
+			returnErr = err
+			return
 		}
 		defer os.Remove(f.Name())
 		defer f.Close()
@@ -149,26 +166,30 @@ var provisionCmd = &cobra.Command{
 			Logger: log,
 		})
 		if err != nil {
-			log.Errorf(err.Error())
-			os.Exit(15)
+			statusCode = 15
+			returnErr = err
+			return
 		}
 
 		err = f.Close()
 		if err != nil {
-			log.Errorf(err.Error())
-			os.Exit(16)
+			statusCode = 16
+			returnErr = err
+			return
 		}
 
 		err = pkgReader.Close()
 		if err != nil {
-			log.Errorf(err.Error())
-			os.Exit(17)
+			statusCode = 17
+			returnErr = err
+			return
 		}
 
 		image, err := vio.LazyOpen(f.Name())
 		if err != nil {
-			log.Errorf(err.Error())
-			os.Exit(18)
+			statusCode = 18
+			returnErr = err
+			return
 		}
 
 		if provisionName == "" {
@@ -186,8 +207,9 @@ var provisionCmd = &cobra.Command{
 			ReadyWhenUsable: provisionReadyWhenUsable,
 		})
 		if err != nil {
-			log.Errorf(err.Error())
-			os.Exit(19)
+			statusCode = 19
+			returnErr = err
+			return
 		}
 
 		fmt.Printf("Finished creating image.\n")
@@ -252,10 +274,14 @@ var provisionersNewAmazonEC2Cmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 
+		var returnErr error
+		var statusCode int
+		defer handleCommandError(returnErr, statusCode)
 		f, err := os.OpenFile(args[0], os.O_RDWR|os.O_CREATE, 0644)
 		if err != nil {
-			log.Errorf(err.Error())
-			os.Exit(1)
+			statusCode = 1
+			returnErr = err
+			return
 		}
 		defer f.Close()
 
@@ -265,21 +291,24 @@ var provisionersNewAmazonEC2Cmd = &cobra.Command{
 			Region: provisionersNewAmazonRegion,
 		})
 		if err != nil {
-			log.Errorf(err.Error())
-			os.Exit(2)
+			statusCode = 2
+			returnErr = err
+			return
 		}
 
 		data, err := p.Marshal()
 		if err != nil {
-			log.Errorf(err.Error())
-			os.Exit(3)
+			statusCode = 3
+			returnErr = err
+			return
 		}
 
 		out := provisioners.Encrypt(data, provisionersNewPassphrase)
 		_, err = io.Copy(f, bytes.NewReader(out))
 		if err != nil {
-			log.Errorf(err.Error())
-			os.Exit(4)
+			statusCode = 4
+			returnErr = err
+			return
 		}
 
 	},
@@ -298,25 +327,30 @@ var provisionersNewAzureCmd = &cobra.Command{
 	Short: "Add a new Microsoft Azure Provisioner.",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-
+		var returnErr error
+		var statusCode int
+		defer handleCommandError(returnErr, statusCode)
 		f, err := os.OpenFile(args[0], os.O_RDWR|os.O_CREATE, 0644)
 		if err != nil {
-			log.Errorf(err.Error())
-			os.Exit(1)
+			statusCode = 1
+			returnErr = err
+			return
 		}
 		defer f.Close()
 
 		path := provisionersNewAzureKeyFile
 		_, err = os.Stat(path)
 		if err != nil {
-			log.Errorf(err.Error())
-			os.Exit(2)
+			statusCode = 2
+			returnErr = err
+			return
 		}
 
 		b, err := ioutil.ReadFile(path)
 		if err != nil {
-			log.Errorf(err.Error())
-			os.Exit(3)
+			statusCode = 3
+			returnErr = err
+			return
 		}
 
 		p, err := azure.Create(&azure.Config{
@@ -328,21 +362,24 @@ var provisionersNewAzureCmd = &cobra.Command{
 			StorageAccountName: provisionersNewAzureStorageAccountName,
 		})
 		if err != nil {
-			log.Errorf(err.Error())
-			os.Exit(4)
+			statusCode = 4
+			returnErr = err
+			return
 		}
 
 		data, err := p.Marshal()
 		if err != nil {
-			log.Errorf(err.Error())
-			os.Exit(5)
+			statusCode = 5
+			returnErr = err
+			return
 		}
 
 		out := provisioners.Encrypt(data, provisionersNewPassphrase)
 		_, err = io.Copy(f, bytes.NewReader(out))
 		if err != nil {
-			log.Errorf(err.Error())
-			os.Exit(6)
+			statusCode = 6
+			returnErr = err
+			return
 		}
 
 	},
@@ -363,25 +400,30 @@ var provisionersNewGoogleCmd = &cobra.Command{
 	Short: "Add a new Google Cloud (Compute Engine) Provisioner.",
 	Args:  cobra.ExactArgs(1), // Single arg, points to output file
 	Run: func(cmd *cobra.Command, args []string) {
-
+		var returnErr error
+		var statusCode int
+		defer handleCommandError(returnErr, statusCode)
 		f, err := os.OpenFile(args[0], os.O_RDWR|os.O_CREATE, 0644)
 		if err != nil {
-			log.Errorf(err.Error())
-			os.Exit(1)
+			statusCode = 1
+			returnErr = err
+			return
 		}
 		defer f.Close()
 
 		path := provisionersNewGoogleKeyFile
 		_, err = os.Stat(path)
 		if err != nil {
-			log.Errorf(err.Error())
-			os.Exit(2)
+			statusCode = 2
+			returnErr = err
+			return
 		}
 
 		b, err := ioutil.ReadFile(path)
 		if err != nil {
-			log.Errorf(err.Error())
-			os.Exit(3)
+			statusCode = 3
+			returnErr = err
+			return
 		}
 
 		p, err := google.Create(&google.Config{
@@ -389,21 +431,24 @@ var provisionersNewGoogleCmd = &cobra.Command{
 			Key:    base64.StdEncoding.EncodeToString(b),
 		})
 		if err != nil {
-			log.Errorf(err.Error())
-			os.Exit(4)
+			statusCode = 4
+			returnErr = err
+			return
 		}
 
 		data, err := p.Marshal()
 		if err != nil {
-			log.Errorf(err.Error())
-			os.Exit(5)
+			statusCode = 5
+			returnErr = err
+			return
 		}
 
 		out := provisioners.Encrypt(data, provisionersNewPassphrase)
 		_, err = io.Copy(f, bytes.NewReader(out))
 		if err != nil {
-			log.Errorf(err.Error())
-			os.Exit(6)
+			statusCode = 6
+			returnErr = err
+			return
 		}
 	},
 }

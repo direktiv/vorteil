@@ -1,7 +1,6 @@
 package main
 
 import (
-	"os"
 	"path/filepath"
 
 	"github.com/spf13/cobra"
@@ -94,13 +93,16 @@ var importSharedObjectsCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		var projectPath string = "."
 		var err error
-
+		var returnErr error
+		var statusCode int
+		defer handleCommandError(returnErr, statusCode)
 		// Get Project Path
 		if len(args) != 0 {
 			projectPath, err = filepath.Abs(args[0])
 			if err != nil {
-				log.Errorf("%v", err)
-				os.Exit(1)
+				statusCode = 1
+				returnErr = err
+				return
 			}
 		}
 
@@ -108,14 +110,16 @@ var importSharedObjectsCmd = &cobra.Command{
 		importOperation, err := vproj.NewImportSharedObject(projectPath, flagExcludeDefault, log)
 
 		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(2)
+			statusCode = 2
+			returnErr = err
+			return
 		}
 
 		// Start Import Operation
 		if err = importOperation.Start(); err != nil {
-			log.Errorf("%v", err)
-			os.Exit(3)
+			statusCode = 3
+			returnErr = err
+			return
 		}
 	},
 }

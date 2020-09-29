@@ -33,9 +33,8 @@ func main() {
 	commandInit()
 
 	err := rootCmd.Execute()
-
 	if err != nil {
-		os.Exit(1)
+		handleCommandError(err, 1)
 	}
 }
 
@@ -140,7 +139,6 @@ func getReaderURL(src string) (vpkg.Reader, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	return pkgr, nil
 }
 
@@ -460,15 +458,13 @@ func decompile(srcPath, outPath string) {
 
 	iio, err := vdecompiler.Open(srcPath)
 	if err != nil {
-		log.Errorf("%v", err)
-		os.Exit(1)
+		handleCommandError(err, 1)
 	}
 	defer iio.Close()
 
 	fi, err := os.Stat(outPath)
 	if err != nil && !os.IsNotExist(err) {
-		log.Errorf("%v", err)
-		os.Exit(1)
+		handleCommandError(err, 2)
 	}
 	var into bool
 	if !os.IsNotExist(err) && fi.IsDir() {
@@ -547,20 +543,17 @@ func decompile(srcPath, outPath string) {
 
 	ino, err := iio.ResolvePathToInodeNo(fpath)
 	if err != nil {
-		log.Errorf("%v", err)
-		os.Exit(1)
+		handleCommandError(err, 3)
 	}
 	err = recurse(ino, filepath.ToSlash(filepath.Base(fpath)), dpath)
 	if err != nil {
-		log.Errorf("%v", err)
-		os.Exit(1)
+		handleCommandError(err, 4)
 	}
 
 	for _, fn := range symlinkCallbacks {
 		err = fn()
 		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
+			handleCommandError(err, 5)
 		}
 	}
 

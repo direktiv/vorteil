@@ -45,7 +45,6 @@ func commandInit() {
 	// the order Go runs init functions this is the safest place to do this.
 	addModifyFlags(buildCmd.Flags())
 	addModifyFlags(runCmd.Flags())
-
 	addModifyFlags(provisionCmd.Flags())
 
 	// setup logging across all commands

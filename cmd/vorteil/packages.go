@@ -37,6 +37,10 @@ identify it and explain its purpose and its use.`,
 	Args: cobra.RangeArgs(0, 1),
 	Run: func(cmd *cobra.Command, args []string) {
 
+		// Used so we can print the error message and handle defers
+		var returnErr error
+		var statusCode int
+		defer handleCommandError(returnErr, statusCode)
 		packablePath := "."
 		if len(args) >= 1 {
 			packablePath = args[0]
@@ -54,29 +58,33 @@ identify it and explain its purpose and its use.`,
 
 		err := checkValidNewFileOutput(outputPath, flagForce, "output", "-f")
 		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
+			returnErr = err
+			statusCode = 1
+			return
 		}
 
 		// TODO: other packable type & project targets
 		proj, err := vproj.LoadProject(packablePath)
 		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
+			returnErr = err
+			statusCode = 2
+			return
 		}
 
 		tgt, err := proj.Target("")
 		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
+			returnErr = err
+			statusCode = 3
+			return
 		}
 
 		// TODO: project & vcfg flags
 
 		builder, err := tgt.NewBuilder()
 		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
+			returnErr = err
+			statusCode = 4
+			return
 		}
 		defer builder.Close()
 
@@ -84,27 +92,31 @@ identify it and explain its purpose and its use.`,
 
 		f, err := os.Create(outputPath)
 		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
+			returnErr = err
+			statusCode = 5
+			return
 		}
 		defer f.Close()
 
 		err = builder.Pack(f)
 		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
+			returnErr = err
+			statusCode = 6
+			return
 		}
 
 		err = f.Close()
 		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
+			returnErr = err
+			statusCode = 7
+			return
 		}
 
 		err = builder.Close()
 		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
+			returnErr = err
+			statusCode = 8
+			return
 		}
 
 		// TODO: progress tracking
@@ -135,6 +147,9 @@ other files. If the DEST argument is omitted it will default to ".".`,
 	Args: cobra.ExactArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
 
+		var returnErr error
+		var statusCode int
+		defer handleCommandError(returnErr, statusCode)
 		pkgPath := args[0]
 		prjPath := args[1]
 
@@ -149,22 +164,25 @@ other files. If the DEST argument is omitted it will default to ".".`,
 
 		err := checkValidNewDirOutput(prjPath, flagForce, "DEST", "-f")
 		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
+			returnErr = err
+			statusCode = 1
+			return
 		}
 
 		pkg, err := getReaderURL(pkgPath)
 		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
+			statusCode = 2
+			returnErr = err
+			return
 		}
 
 		defer pkg.Close()
 
 		err = vproj.CreateFromPackage(prjPath, pkg)
 		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
+			statusCode = 3
+			returnErr = err
+			return
 		}
 
 		log.Printf("unpacked to: %s", prjPath)

@@ -74,14 +74,12 @@ func runFirecracker(pkgReader vpkg.Reader, cfg *vcfg.VCFG, name string) error {
 	// Create parent directory as it doesn't exist
 	err = os.MkdirAll(parent, os.ModePerm)
 	if err != nil {
-		log.Errorf("%v", err)
-		os.Exit(1)
+		return err
 	}
 
 	f, err := ioutil.TempFile(parent, "vorteil.disk")
 	if err != nil {
-		log.Errorf("%v", err)
-		os.Exit(1)
+		return err
 	}
 	defer os.Remove(f.Name())
 	defer f.Close()
@@ -97,8 +95,7 @@ func runFirecracker(pkgReader vpkg.Reader, cfg *vcfg.VCFG, name string) error {
 		Logger: log,
 	})
 	if err != nil {
-		log.Errorf("%v", err)
-		os.Exit(1)
+		return err
 	}
 
 	// assign kernel version that was built with vcfg
@@ -106,14 +103,12 @@ func runFirecracker(pkgReader vpkg.Reader, cfg *vcfg.VCFG, name string) error {
 
 	err = f.Close()
 	if err != nil {
-		log.Errorf("%v", err)
-		os.Exit(1)
+		return err
 	}
 
 	err = pkgReader.Close()
 	if err != nil {
-		log.Errorf("%v", err)
-		os.Exit(1)
+		return err
 	}
 
 	alloc := firecracker.Allocator
@@ -147,15 +142,13 @@ func runHyperV(pkgReader vpkg.Reader, cfg *vcfg.VCFG, name string) error {
 	// Create parent directory as it doesn't exist
 	err := os.MkdirAll(parent, os.ModePerm)
 	if err != nil {
-		log.Errorf("%v", err)
-		os.Exit(1)
+		return err
 	}
 
 	// need to create a tempfile rather than use the function to as hyper-v complains if the extension doesn't exist
 	f, err := os.Create(filepath.Join(parent, "disk.vhd"))
 	if err != nil {
-		log.Errorf("%v", err)
-		os.Exit(1)
+		return err
 	}
 
 	defer os.Remove(f.Name())
@@ -172,20 +165,17 @@ func runHyperV(pkgReader vpkg.Reader, cfg *vcfg.VCFG, name string) error {
 		Logger: log,
 	})
 	if err != nil {
-		log.Errorf("%v", err)
-		os.Exit(1)
+		return err
 	}
 
 	err = f.Close()
 	if err != nil {
-		log.Errorf("%v", err)
-		os.Exit(1)
+		return err
 	}
 
 	err = pkgReader.Close()
 	if err != nil {
-		log.Errorf("%v", err)
-		os.Exit(1)
+		return err
 	}
 
 	alloc := hyperv.Allocator
@@ -216,14 +206,12 @@ func runVirtualBox(pkgReader vpkg.Reader, cfg *vcfg.VCFG, name string) error {
 	// Create parent directory as it doesn't exist
 	err := os.MkdirAll(parent, os.ModePerm)
 	if err != nil {
-		log.Errorf("%v", err)
-		os.Exit(1)
+		return err
 	}
 
 	f, err := ioutil.TempFile(parent, "vorteil.disk")
 	if err != nil {
-		log.Errorf("%v", err)
-		os.Exit(1)
+		return err
 	}
 	defer os.Remove(f.Name())
 	defer f.Close()
@@ -239,20 +227,17 @@ func runVirtualBox(pkgReader vpkg.Reader, cfg *vcfg.VCFG, name string) error {
 		Logger: log,
 	})
 	if err != nil {
-		log.Errorf("%v", err)
-		os.Exit(1)
+		return err
 	}
 
 	err = f.Close()
 	if err != nil {
-		log.Errorf("%v", err)
-		os.Exit(1)
+		return err
 	}
 
 	err = pkgReader.Close()
 	if err != nil {
-		log.Errorf("%v", err)
-		os.Exit(1)
+		return err
 	}
 
 	alloc := virtualbox.Allocator
@@ -283,13 +268,11 @@ func runQEMU(pkgReader vpkg.Reader, cfg *vcfg.VCFG, name string) error {
 	// Create parent directory as it doesn't exist
 	err := os.MkdirAll(parent, os.ModePerm)
 	if err != nil {
-		log.Errorf("%v", err)
-		os.Exit(1)
+		return err
 	}
 	f, err := ioutil.TempFile(parent, "vorteil.disk")
 	if err != nil {
-		log.Errorf("%v", err)
-		os.Exit(1)
+		return err
 	}
 	defer os.Remove(f.Name())
 	defer f.Close()
@@ -304,20 +287,17 @@ func runQEMU(pkgReader vpkg.Reader, cfg *vcfg.VCFG, name string) error {
 		Logger: log,
 	})
 	if err != nil {
-		log.Errorf("%v", err)
-		os.Exit(1)
+		return err
 	}
 
 	err = f.Close()
 	if err != nil {
-		log.Errorf("%v", err)
-		os.Exit(1)
+		return err
 	}
 
 	err = pkgReader.Close()
 	if err != nil {
-		log.Errorf("%v", err)
-		os.Exit(1)
+		return err
 	}
 
 	alloc := qemu.Allocator

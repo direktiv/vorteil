@@ -421,15 +421,6 @@ var vmRAMFlagValidator = func(f flag.StringFlag) error {
 	return overwriteSizeFieldFromString(f, &overrideVCFG.VM.RAM)
 }
 
-var initRequiredProgramsWithoutFlag = func(l, i int) {
-	if l == 0 {
-		return
-	}
-	for len(overrideVCFG.Networks) < i+1 {
-		overrideVCFG.Networks = append(overrideVCFG.Networks, vcfg.NetworkInterface{IP: "dhcp"})
-	}
-}
-
 var initFromNStringFlag = func(f flag.NStringFlag, fn func(i int, s string)) error {
 	for i := 0; i < *f.Total; i++ {
 		s := f.Value[i]

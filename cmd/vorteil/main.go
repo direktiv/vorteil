@@ -375,15 +375,6 @@ func SetNumberModeFlagCMD(cmd *cobra.Command) error {
 	return nil
 }
 
-// genericErrCheck : Very simple helper command to reduce duplication of err checks in the main package.
-//	Exits program with given exit code and error if error is not nil
-func genericErrCheck(err error, exitCode int) {
-	if err != nil {
-		log.Errorf("%v", err)
-		os.Exit(exitCode)
-	}
-}
-
 // PrintableSize is a wrapper around int to alter its string formatting behaviour.
 type PrintableSize int
 

@@ -184,8 +184,8 @@ func defaultVirtualizer() string {
 func runDecompile(diskpath string, outpath string, skipUnTouched bool) error {
 	iio, err := vdecompiler.Open(diskpath)
 	if err != nil {
-		log.Errorf("%v", err)
-		os.Exit(1)
+		setError(err, 1)
+		return
 	}
 
 	defer iio.Close()
@@ -249,8 +249,8 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG, name st
 
 		if flagRecord != "" {
 			if err := runDecompile(diskpath, flagRecord, flagTouched); err != nil {
-				log.Errorf("%v", err)
-				os.Exit(1)
+				setError(err, 1)
+				return
 			}
 		}
 	}()

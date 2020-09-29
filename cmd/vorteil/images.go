@@ -57,7 +57,10 @@ Supported disk formats include:
 		}
 
 		format, err := parseImageFormat(flagFormat)
-		genericErrCheck(err, 1)
+		if err != nil {
+			setError(err, 1)
+			return
+		}
 		suffix := format.Suffix()
 
 		_, base := filepath.Split(strings.TrimSuffix(filepath.ToSlash(buildablePath), "/"))
@@ -70,24 +73,42 @@ Supported disk formats include:
 		}
 
 		err = checkValidNewFileOutput(outputPath, flagForce, "output", "-f")
-		genericErrCheck(err, 1)
+		if err != nil {
+			setError(err, 2)
+			return
+		}
 
 		pkgBuilder, err := getPackageBuilder("BUILDABLE", buildablePath)
-		genericErrCheck(err, 1)
+		if err != nil {
+			setError(err, 3)
+			return
+		}
 		defer pkgBuilder.Close()
 
 		err = modifyPackageBuilder(pkgBuilder)
-		genericErrCheck(err, 1)
+		if err != nil {
+			setError(err, 4)
+			return
+		}
 
 		pkgReader, err := vpkg.ReaderFromBuilder(pkgBuilder)
-		genericErrCheck(err, 1)
+		if err != nil {
+			setError(err, 5)
+			return
+		}
 		defer pkgReader.Close()
 
 		err = initKernels()
-		genericErrCheck(err, 1)
+		if err != nil {
+			setError(err, 6)
+			return
+		}
 
 		f, err := os.Create(outputPath)
-		genericErrCheck(err, 1)
+		if err != nil {
+			setError(err, 7)
+			return
+		}
 		defer f.Close()
 
 		err = vdisk.Build(context.Background(), f, &vdisk.BuildArgs{
@@ -98,13 +119,22 @@ Supported disk formats include:
 			},
 			Logger: log,
 		})
-		genericErrCheck(err, 1)
+		if err != nil {
+			setError(err, 8)
+			return
+		}
 
 		err = f.Close()
-		genericErrCheck(err, 1)
+		if err != nil {
+			setError(err, 9)
+			return
+		}
 
 		err = pkgReader.Close()
-		genericErrCheck(err, 1)
+		if err != nil {
+			setError(err, 10)
+			return
+		}
 
 		// TODO: progress tracking
 		log.Printf("created image: %s", outputPath)
@@ -129,8 +159,7 @@ var decompileCmd = &cobra.Command{
 		srcPath := args[0]
 		outPath := args[1]
 		if err := runDecompile(srcPath, outPath, flagTouched); err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
+			setError(err, 1)
 		}
 	},
 }
@@ -149,7 +178,10 @@ var catCmd = &cobra.Command{
 
 		// Create Vorteil Image Object From Image
 		vImageIO, err := vdecompiler.Open(img)
-		genericErrCheck(err, 1)
+		if err != nil {
+			setError(err, 1)
+			return
+		}
 		defer vImageIO.Close()
 
 		for i := 1; i < len(args); i++ {
@@ -158,15 +190,15 @@ var catCmd = &cobra.Command{
 			// Get Reader
 			rdr, err := imagetools.CatImageFile(vImageIO, fpath, flagOS)
 			if err != nil {
-				log.Errorf("%v", err)
-				os.Exit(1)
+				setError(err, 2)
+				return
 			}
 
 			// Copy Contents
 			_, err = io.Copy(os.Stdout, rdr)
 			if err != nil {
-				log.Errorf("%v", err)
-				os.Exit(1)
+				setError(err, 3)
+				return
 			}
 
 		}
@@ -187,7 +219,10 @@ var cpCmd = &cobra.Command{
 		img := args[0]
 
 		iio, err := vdecompiler.Open(img)
-		genericErrCheck(err, 1)
+		if err != nil {
+			setError(err, 1)
+			return
+		}
 		defer iio.Close()
 
 		dest := args[2]
@@ -210,21 +245,37 @@ var duCmd = &cobra.Command{
 	Short: "Calculate file space usage.",
 	Args:  cobra.RangeArgs(1, 2),
 	Run: func(cmd *cobra.Command, args []string) {
-		genericErrCheck(SetNumberModeFlagCMD(cmd), 1)
+		err := SetNumberModeFlagCMD(cmd)
+		if err != nil {
+			setError(err, 1)
+			return
+		}
 		img := args[0]
 
 		iio, err := vdecompiler.Open(img)
-		genericErrCheck(err, 1)
+		if err != nil {
+			setError(err, 2)
+			return
+		}
 		defer iio.Close()
 
 		all, err := cmd.Flags().GetBool("all")
-		genericErrCheck(err, 1)
+		if err != nil {
+			setError(err, 3)
+			return
+		}
 
 		free, err := cmd.Flags().GetBool("free")
-		genericErrCheck(err, 1)
+		if err != nil {
+			setError(err, 4)
+			return
+		}
 
 		maxDepth, err := cmd.Flags().GetInt("max-depth")
-		genericErrCheck(err, 1)
+		if err != nil {
+			setError(err, 5)
+			return
+		}
 
 		table := [][]string{{"", ""}}
 
@@ -234,7 +285,10 @@ var duCmd = &cobra.Command{
 		}
 
 		duOut, err := imagetools.DUImageFile(iio, fpath, free, maxDepth, all)
-		genericErrCheck(err, 1)
+		if err != nil {
+			setError(err, 6)
+			return
+		}
 
 		for i := range duOut.ImageFiles {
 			table = append(table, []string{duOut.ImageFiles[i].FilePath, fmt.Sprintf("%s", PrintableSize(duOut.ImageFiles[i].FileSize))})
@@ -263,11 +317,17 @@ var formatCmd = &cobra.Command{
 		img := args[0]
 
 		iio, err := vdecompiler.Open(img)
-		genericErrCheck(err, 1)
+		if err != nil {
+			setError(err, 1)
+			return
+		}
 		defer iio.Close()
 
 		format, err := iio.ImageFormat()
-		genericErrCheck(err, 1)
+		if err != nil {
+			setError(err, 2)
+			return
+		}
 
 		log.Printf("Image file format: %s", format)
 	},
@@ -278,14 +338,23 @@ var fsCmd = &cobra.Command{
 	Short: "Summarize the information in the main file-system's metadata.",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		genericErrCheck(SetNumberModeFlagCMD(cmd), 1)
-
+	err := SetNumberModeFlagCMD(cmd)
+		if err != nil {
+			setError(err, 2)
+			return
+		}
 		iio, err := vdecompiler.Open(args[0])
-		genericErrCheck(err, 1)
+		if err != nil {
+			setError(err, 2)
+			return
+		}
 		defer iio.Close()
 
 		fsReport, err := imagetools.FSImageFile(iio)
-		genericErrCheck(err, 1)
+		if err != nil {
+			setError(err, 3)
+			return
+		}
 
 		log.Printf("First LBA:        \t%s", PrintableSize(fsReport.FirstLBA))
 		log.Printf("Last LBA:         \t%s", PrintableSize(fsReport.LastLBA))
@@ -322,12 +391,15 @@ var fsimgCmd = &cobra.Command{
 		dst := args[1]
 
 		iio, err := vdecompiler.Open(img)
-		genericErrCheck(err, 1)
+		if err != nil {
+			setError(err,1)
+			return
+		}
 		defer iio.Close()
 
 		if err := imagetools.FSIMGImage(iio, dst); err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
+			setError(err, 2)
+
 		}
 	},
 }
@@ -337,16 +409,25 @@ var gptCmd = &cobra.Command{
 	Short: "Summarize the information in the GUID Partition Table.",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		genericErrCheck(SetNumberModeFlagCMD(cmd), 1)
-
+		err := SetNumberModeFlagCMD(cmd)
+		if err != nil {
+			setError(err,1)
+			return
+		}
 		img := args[0]
 
 		iio, err := vdecompiler.Open(img)
-		genericErrCheck(err, 1)
+		if err != nil {
+			setError(err, 2)
+			return
+		}
 		defer iio.Close()
 
 		gptOut, err := imagetools.ImageGPT(iio)
-		genericErrCheck(err, 1)
+		if err != nil {
+			setError(err, 3)
+			return
+		}
 
 		log.Printf("GPT Header LBA:   \t%s", PrintableSize(gptOut.HeaderLBA))
 		log.Printf("Backup LBA:       \t%s", PrintableSize(gptOut.BackupLBA))
@@ -372,8 +453,11 @@ var lsCmd = &cobra.Command{
 	Short: "List directory contents.",
 	Args:  cobra.RangeArgs(1, 2),
 	Run: func(cmd *cobra.Command, args []string) {
-		genericErrCheck(SetNumberModeFlagCMD(cmd), 1)
-
+		err: = SetNumberModeFlagCMD(cmd)
+		if err != nil {
+			setError(err, 1)
+			return
+		}
 		var reiterating bool
 
 		all, err := cmd.Flags().GetBool("all")
@@ -399,7 +483,10 @@ var lsCmd = &cobra.Command{
 		img := args[0]
 
 		iio, err := vdecompiler.Open(img)
-		genericErrCheck(err, 1)
+		if err != nil {
+			setError(err, 2)
+			return
+		}
 		defer iio.Close()
 
 		var fpaths []string
@@ -415,14 +502,14 @@ var lsCmd = &cobra.Command{
 
 		if flagOS {
 			if fpath != "/" && fpath != "" && fpath != "." {
-				log.Errorf("bad FILE_PATH for vorteil partition: %s", fpath)
-				os.Exit(1)
+				setError(fmt.Errorf("bad FILE_PATH for vorteil partition: %s", fpath), 3)
+				return
 			}
 
 			kfiles, err := iio.KernelFiles()
 			if err != nil {
-				log.Errorf("%v", err)
-				os.Exit(1)
+				setError(err,4)
+				return
 			}
 
 			if long {
@@ -441,11 +528,17 @@ var lsCmd = &cobra.Command{
 		}
 
 		ino, err := iio.ResolvePathToInodeNo(fpath)
-		genericErrCheck(err, 1)
+		if err != nil {
+			setError(err,5)
+			return
+		}
 
 	inoEntry:
 		inode, err := iio.ResolveInode(ino)
-		genericErrCheck(err, 1)
+		if err != nil {
+			setError(err,6)
+			return
+		}
 
 	inodeEntry:
 		if !vdecompiler.InodeIsDirectory(inode) {
@@ -462,7 +555,10 @@ var lsCmd = &cobra.Command{
 		}
 
 		entries, err = iio.Readdir(inode)
-		genericErrCheck(err, 1)
+		if err != nil {
+			setError(err,7)
+			return
+		}
 
 		if recursive {
 			log.Printf("%s:", fpath)
@@ -487,8 +583,8 @@ var lsCmd = &cobra.Command{
 			if long {
 				child, err := iio.ResolveInode(entry.Inode)
 				if err != nil {
-					log.Errorf("%v", err)
-					os.Exit(1)
+					setErr(err,8)
+					return
 				}
 				links := "?"
 
@@ -562,7 +658,10 @@ var md5Cmd = &cobra.Command{
 
 		fpath := args[1]
 		imageFileMD5, err := imagetools.MDSumImageFile(img, fpath, flagOS)
-		genericErrCheck(err, 1)
+		if err != nil {
+			setError(err,1)
+			return
+		}
 
 		log.Printf("%s", imageFileMD5)
 	},
@@ -579,8 +678,11 @@ var statCmd = &cobra.Command{
 	Short: "Print detailed metadata relating to the file at FILE_PATH.",
 	Args:  cobra.RangeArgs(1, 2),
 	Run: func(cmd *cobra.Command, args []string) {
-		genericErrCheck(SetNumberModeFlagCMD(cmd), 1)
-
+		err:= SetNumberModeFlagCMD(cmd)
+		if err != nil {
+			setError(err, 2)
+			return
+		}
 		img := args[0]
 
 		var fpath string = "/"
@@ -589,7 +691,10 @@ var statCmd = &cobra.Command{
 		}
 
 		fileStat, err := imagetools.StatImageFile(img, fpath, flagOS)
-		genericErrCheck(err, 1)
+		if err != nil {
+			setError(err, 2)
+			return
+		}
 
 		log.Printf("File: %s", fileStat.FileName)
 		log.Printf("Size: %s", PrintableSize(fileStat.Size))
@@ -622,7 +727,10 @@ var treeCmd = &cobra.Command{
 		}
 
 		treeResults, err := imagetools.TreeImageFile(img, fpath, flagOS)
-		genericErrCheck(err, 1)
+		if err != nil {
+			setError(err, 1)
+			return
+		}
 
 		log.Printf(treeResults.String())
 

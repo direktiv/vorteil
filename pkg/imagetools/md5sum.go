@@ -34,7 +34,7 @@ func MDSumImageFile(vorteilImagePath string, imageFilePath string, seekOS bool) 
 
 		inode, err := vorteilImage.ResolveInode(ino)
 		if err == nil {
-			if inode.IsDirectory() {
+			if vdecompiler.InodeIsDirectory(inode) {
 				err = fmt.Errorf("\"%s\" is not a regular file", imageFilePath)
 			} else {
 				rdr, err = vorteilImage.InodeReader(inode)
@@ -45,7 +45,7 @@ func MDSumImageFile(vorteilImagePath string, imageFilePath string, seekOS bool) 
 			return md5sumOut, err
 		}
 
-		rdr = io.LimitReader(rdr, int64(inode.Fullsize()))
+		rdr = io.LimitReader(rdr, int64(vdecompiler.InodeSize(inode)))
 	}
 
 	hasher := md5.New()

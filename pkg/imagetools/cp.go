@@ -99,17 +99,17 @@ func copyImageFileRecursive(vorteilImage *vdecompiler.IO, ino int, rpath string,
 		return err
 	}
 
-	if inode.IsRegularFile() {
+	if vdecompiler.InodeIsRegularFile(inode) {
 		if f, err = os.Create(destFilePath); err == nil {
 			defer f.Close()
 			if rdr, err = vorteilImage.InodeReader(inode); err == nil {
-				_, err = io.CopyN(f, rdr, int64(inode.Fullsize()))
+				_, err = io.CopyN(f, rdr, int64(vdecompiler.InodeSize(inode)))
 			}
 		}
 		goto DONE
 	}
 
-	if inode.IsSymlink() {
+	if vdecompiler.InodeIsSymlink(inode) {
 		var data []byte
 
 		if rdr, err = vorteilImage.InodeReader(inode); err == nil {
@@ -120,7 +120,7 @@ func copyImageFileRecursive(vorteilImage *vdecompiler.IO, ino int, rpath string,
 		goto DONE
 	}
 
-	if !inode.IsDirectory() {
+	if !vdecompiler.InodeIsDirectory(inode) {
 		goto SKIP
 	}
 

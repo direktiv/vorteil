@@ -3,6 +3,7 @@ package imagetools
 import (
 	"path/filepath"
 
+	"github.com/vorteil/vorteil/pkg/ext"
 	"github.com/vorteil/vorteil/pkg/vdecompiler"
 )
 
@@ -22,8 +23,8 @@ func DUImageFile(vorteilImage *vdecompiler.IO, imageFilePath string, calcFreeSpa
 	var duOut DUImageReport
 	var depth = 0
 
-	var recurse func(*vdecompiler.Inode, string) (int, error)
-	recurse = func(inode *vdecompiler.Inode, name string) (int, error) {
+	var recurse func(*ext.Inode, string) (int, error)
+	recurse = func(inode *ext.Inode, name string) (int, error) {
 
 		depth++
 		defer func() {
@@ -31,9 +32,9 @@ func DUImageFile(vorteilImage *vdecompiler.IO, imageFilePath string, calcFreeSpa
 		}()
 
 		var size int
-		size = int(inode.Sectors) * vdecompiler.SectorSize
+		size = int(inode.Sectors) * ext.SectorSize
 
-		if !inode.IsDirectory() {
+		if !vdecompiler.InodeIsDirectory(inode) {
 			return size, nil
 		}
 
@@ -56,7 +57,7 @@ func DUImageFile(vorteilImage *vdecompiler.IO, imageFilePath string, calcFreeSpa
 			if err != nil {
 				return 0, err
 			}
-			if all || inode.IsDirectory() {
+			if all || vdecompiler.InodeIsDirectory(inode) {
 				if (maxDepth >= 0 && depth <= maxDepth) || maxDepth < 0 {
 					duOut.ImageFiles = append(duOut.ImageFiles, duImageInfo{
 						FilePath: child,

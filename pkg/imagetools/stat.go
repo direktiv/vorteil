@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/vorteil/vorteil/pkg/ext"
 	"github.com/vorteil/vorteil/pkg/vdecompiler"
 )
 
@@ -70,7 +71,7 @@ func StatImageFile(vorteilImagePath string, imageFilePath string, seekOS bool) (
 		statOut.FileType = ftype
 		statOut.Size = size
 	} else {
-		var inode *vdecompiler.Inode
+		var inode *ext.Inode
 		ino, err := vorteilImage.ResolvePathToInodeNo(imageFilePath)
 		if err == nil {
 			inode, err = vorteilImage.ResolveInode(ino)
@@ -83,20 +84,14 @@ func StatImageFile(vorteilImagePath string, imageFilePath string, seekOS bool) (
 		var ftype string
 
 		var user, group string
-		user = "?"
-		group = "?"
-		if inode.UID == vdecompiler.VorteilUserID {
-			user = vdecompiler.VorteilUserName
-		}
-		if inode.GID == vdecompiler.VorteilGroupID {
-			group = vdecompiler.VorteilGroupName
-		}
+		user = "?"  // TODO
+		group = "?" // TODO
 
 		statOut.FileName = filepath.Base(imageFilePath)
 		statOut.FileType = ftype
-		statOut.Size = inode.Fullsize()
+		statOut.Size = int(vdecompiler.InodeSize(inode))
 		statOut.Inode = ino
-		statOut.Permissions = fmt.Sprintf("%#o/%s", inode.Mode&vdecompiler.InodePermissionsMask, inode.Permissions())
+		statOut.Permissions = fmt.Sprintf("%#o/%s", inode.Permissions&ext.InodePermissionsMask, vdecompiler.InodePermissionsString(inode))
 		statOut.UID = inode.UID
 		statOut.User = user
 		statOut.GID = inode.GID

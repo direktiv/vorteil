@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/vorteil/vorteil/pkg/vdecompiler"
+	"github.com/vorteil/vorteil/pkg/vimg"
 )
 
 // FSFileReport ...
@@ -27,7 +28,7 @@ type FSFileReport struct {
 func FSImageFile(vorteilImage *vdecompiler.IO) (FSFileReport, error) {
 	var fsOut FSFileReport
 
-	entry, err := vorteilImage.GPTEntry(vdecompiler.FilesystemPartitionName)
+	entry, err := vorteilImage.GPTEntry(vdecompiler.UTF16toString(vimg.RootPartitionName))
 	if err != nil {
 		return fsOut, err
 	}

@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/vorteil/vorteil/pkg/vdecompiler"
+	"github.com/vorteil/vorteil/pkg/vimg"
 )
 
 // FSIMGImage ...
@@ -16,7 +17,7 @@ func FSIMGImage(vorteilImage *vdecompiler.IO, destPath string) error {
 	}
 	defer f.Close()
 
-	rdr, err := vorteilImage.PartitionReader(vdecompiler.FilesystemPartitionName)
+	rdr, err := vorteilImage.PartitionReader(vdecompiler.UTF16toString(vimg.RootPartitionName))
 	if err != nil {
 		_ = os.Remove(f.Name())
 		return err

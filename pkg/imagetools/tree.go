@@ -128,7 +128,7 @@ func treeImageFileRecurse(vorteilImage *vdecompiler.IO, ino int, name string) (T
 
 		var entries []*vdecompiler.DirectoryEntry
 
-		if inode.IsDirectory() {
+		if vdecompiler.InodeIsDirectory(inode) {
 			entries, err = vorteilImage.Readdir(inode)
 			if err != nil {
 				return treeOut, err

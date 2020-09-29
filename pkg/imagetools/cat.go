@@ -24,7 +24,7 @@ func CatImageFile(vorteilImage *vdecompiler.IO, imageFilePath string, os bool) (
 
 		inode, err := vorteilImage.ResolveInode(ino)
 		if err == nil {
-			if !inode.IsRegularFile() {
+			if !vdecompiler.InodeIsRegularFile(inode) {
 				err = fmt.Errorf("\"%s\" is not a regular file", imageFilePath)
 			}
 		}
@@ -38,7 +38,7 @@ func CatImageFile(vorteilImage *vdecompiler.IO, imageFilePath string, os bool) (
 			return nil, err
 		}
 
-		rdr = io.LimitReader(rdr, int64(inode.Fullsize()))
+		rdr = io.LimitReader(rdr, int64(vdecompiler.InodeSize(inode)))
 	}
 
 	return rdr, err

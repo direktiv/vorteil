@@ -134,7 +134,6 @@ var importSharedObjectsCmd = &cobra.Command{
 			projectPath, err = filepath.Abs(args[0])
 			if err != nil {
 				SetError(err, 1)
-
 				return
 			}
 		}
@@ -144,14 +143,12 @@ var importSharedObjectsCmd = &cobra.Command{
 
 		if err != nil {
 			SetError(err, 2)
-
 			return
 		}
 
 		// Start Import Operation
 		if err = importOperation.Start(); err != nil {
 			SetError(err, 3)
-
 			return
 		}
 	},

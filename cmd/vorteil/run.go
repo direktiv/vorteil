@@ -36,7 +36,6 @@ var initFirecrackerCmd = &cobra.Command{
 		err := firecracker.SetupBridgeAndDHCPServer(log)
 		if err != nil {
 			SetError(err, 1)
-
 		}
 	},
 }

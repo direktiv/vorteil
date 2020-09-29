@@ -30,21 +30,18 @@ var provisionCmd = &cobra.Command{
 		// Load the provided provisioner file
 		if _, err := os.Stat(provisionProvisionerFile); err != nil {
 			SetError(err, 1)
-
 			return
 		}
 
 		b, err := ioutil.ReadFile(provisionProvisionerFile)
 		if err != nil {
 			SetError(err, 2)
-
 			return
 		}
 
 		data, err := provisioners.Decrypt(b, provisionPassPhrase)
 		if err != nil {
 			SetError(err, 3)
-
 			return
 		}
 
@@ -52,14 +49,12 @@ var provisionCmd = &cobra.Command{
 		err = json.Unmarshal(data, &m)
 		if err != nil {
 			SetError(err, 4)
-
 			return
 		}
 
 		ptype, ok := m[provisioners.MapKey]
 		if !ok {
 			SetError(err, 5)
-
 			return
 		}
 
@@ -72,7 +67,6 @@ var provisionCmd = &cobra.Command{
 			err = p.Initialize(data)
 			if err != nil {
 				SetError(err, 6)
-
 				return
 			}
 
@@ -84,7 +78,6 @@ var provisionCmd = &cobra.Command{
 			err = p.Initialize(data)
 			if err != nil {
 				SetError(err, 7)
-
 				return
 			}
 
@@ -96,7 +89,6 @@ var provisionCmd = &cobra.Command{
 			err = p.Initialize(data)
 			if err != nil {
 				SetError(err, 8)
-
 				return
 			}
 
@@ -118,14 +110,12 @@ var provisionCmd = &cobra.Command{
 		err = modifyPackageBuilder(pkgBuilder)
 		if err != nil {
 			SetError(err, 10)
-
 			return
 		}
 
 		pkgReader, err := vpkg.ReaderFromBuilder(pkgBuilder)
 		if err != nil {
 			SetError(err, 11)
-
 			return
 		}
 		defer pkgReader.Close()
@@ -133,21 +123,18 @@ var provisionCmd = &cobra.Command{
 		pkgReader, err = vpkg.PeekVCFG(pkgReader)
 		if err != nil {
 			SetError(err, 12)
-
 			return
 		}
 
 		err = initKernels()
 		if err != nil {
 			SetError(err, 13)
-
 			return
 		}
 
 		f, err := ioutil.TempFile(os.TempDir(), "vorteil.disk")
 		if err != nil {
 			SetError(err, 14)
-
 			return
 		}
 		defer os.Remove(f.Name())
@@ -164,28 +151,24 @@ var provisionCmd = &cobra.Command{
 		})
 		if err != nil {
 			SetError(err, 15)
-
 			return
 		}
 
 		err = f.Close()
 		if err != nil {
 			SetError(err, 16)
-
 			return
 		}
 
 		err = pkgReader.Close()
 		if err != nil {
 			SetError(err, 17)
-
 			return
 		}
 
 		image, err := vio.LazyOpen(f.Name())
 		if err != nil {
 			SetError(err, 18)
-
 			return
 		}
 
@@ -205,7 +188,6 @@ var provisionCmd = &cobra.Command{
 		})
 		if err != nil {
 			SetError(err, 19)
-
 			return
 		}
 
@@ -275,7 +257,6 @@ var provisionersNewAmazonEC2Cmd = &cobra.Command{
 		f, err := os.OpenFile(args[0], os.O_RDWR|os.O_CREATE, 0644)
 		if err != nil {
 			SetError(err, 1)
-
 			return
 		}
 		defer f.Close()
@@ -287,14 +268,12 @@ var provisionersNewAmazonEC2Cmd = &cobra.Command{
 		})
 		if err != nil {
 			SetError(err, 2)
-
 			return
 		}
 
 		data, err := p.Marshal()
 		if err != nil {
 			SetError(err, 3)
-
 			return
 		}
 
@@ -302,7 +281,6 @@ var provisionersNewAmazonEC2Cmd = &cobra.Command{
 		_, err = io.Copy(f, bytes.NewReader(out))
 		if err != nil {
 			SetError(err, 4)
-
 			return
 		}
 
@@ -326,7 +304,6 @@ var provisionersNewAzureCmd = &cobra.Command{
 		f, err := os.OpenFile(args[0], os.O_RDWR|os.O_CREATE, 0644)
 		if err != nil {
 			SetError(err, 1)
-
 			return
 		}
 		defer f.Close()
@@ -335,14 +312,12 @@ var provisionersNewAzureCmd = &cobra.Command{
 		_, err = os.Stat(path)
 		if err != nil {
 			SetError(err, 2)
-
 			return
 		}
 
 		b, err := ioutil.ReadFile(path)
 		if err != nil {
 			SetError(err, 3)
-
 			return
 		}
 
@@ -356,14 +331,12 @@ var provisionersNewAzureCmd = &cobra.Command{
 		})
 		if err != nil {
 			SetError(err, 4)
-
 			return
 		}
 
 		data, err := p.Marshal()
 		if err != nil {
 			SetError(err,5)
-
 			return
 		}
 
@@ -371,7 +344,6 @@ var provisionersNewAzureCmd = &cobra.Command{
 		_, err = io.Copy(f, bytes.NewReader(out))
 		if err != nil {
 			SetError(err, 6)
-
 			return
 		}
 
@@ -397,7 +369,6 @@ var provisionersNewGoogleCmd = &cobra.Command{
 		f, err := os.OpenFile(args[0], os.O_RDWR|os.O_CREATE, 0644)
 		if err != nil {
 			SetError(err, 1)
-
 			return
 		}
 		defer f.Close()
@@ -406,14 +377,12 @@ var provisionersNewGoogleCmd = &cobra.Command{
 		_, err = os.Stat(path)
 		if err != nil {
 			SetError(err, 2)
-
 			return
 		}
 
 		b, err := ioutil.ReadFile(path)
 		if err != nil {
 			SetError(err, 3)
-
 			return
 		}
 
@@ -423,14 +392,12 @@ var provisionersNewGoogleCmd = &cobra.Command{
 		})
 		if err != nil {
 			SetError(err, 4)
-
 			return
 		}
 
 		data, err := p.Marshal()
 		if err != nil {
 			SetError(err, 5)
-
 			return
 		}
 
@@ -438,7 +405,6 @@ var provisionersNewGoogleCmd = &cobra.Command{
 		_, err = io.Copy(f, bytes.NewReader(out))
 		if err != nil {
 			SetError(err, 6)
-
 			return
 		}
 	},

@@ -26,11 +26,11 @@ var (
 	date    = "Thu, 01 Jan 1970 00:00:00 +0000"
 )
 
-// Each command sets a code so we can capture the exit if an error has been encountered.
+// Each command executed may have a error message and status code
 var errorStatusCode int
 var errorStatusMessage error
 
-// setError for the command to exit with a certain status and message
+// setError sets the global variables when the process exits accordingly
 func setError(err error, code int) {
 	errorStatusCode = code
 	errorStatusMessage = err
@@ -45,7 +45,7 @@ func main() {
 		setError(err, 1)
 	}
 
-	// If the global status code for errors hasn't been set os.exit with non-zero number
+	// If the global status code for errors has been set os.Exit with non-zero number
 	if errorStatusCode != 0 {
 		handleCommandError()
 	}

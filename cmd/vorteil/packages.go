@@ -62,14 +62,12 @@ identify it and explain its purpose and its use.`,
 		proj, err := vproj.LoadProject(packablePath)
 		if err != nil {
 			setError(err, 2)
-
 			return
 		}
 
 		tgt, err := proj.Target("")
 		if err != nil {
 			setError(err, 3)
-
 			return
 		}
 
@@ -78,7 +76,6 @@ identify it and explain its purpose and its use.`,
 		builder, err := tgt.NewBuilder()
 		if err != nil {
 			setError(err, 4)
-
 			return
 		}
 		defer builder.Close()
@@ -88,7 +85,6 @@ identify it and explain its purpose and its use.`,
 		f, err := os.Create(outputPath)
 		if err != nil {
 			setError(err, 5)
-
 			return
 		}
 		defer f.Close()
@@ -96,21 +92,18 @@ identify it and explain its purpose and its use.`,
 		err = builder.Pack(f)
 		if err != nil {
 			setError(err, 6)
-
 			return
 		}
 
 		err = f.Close()
 		if err != nil {
 			setError(err, 7)
-
 			return
 		}
 
 		err = builder.Close()
 		if err != nil {
 			setError(err, 8)
-
 			return
 		}
 

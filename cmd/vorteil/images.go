@@ -338,7 +338,7 @@ var fsCmd = &cobra.Command{
 	Short: "Summarize the information in the main file-system's metadata.",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-	err := SetNumberModeFlagCMD(cmd)
+		err := SetNumberModeFlagCMD(cmd)
 		if err != nil {
 			setError(err, 2)
 			return
@@ -392,7 +392,7 @@ var fsimgCmd = &cobra.Command{
 
 		iio, err := vdecompiler.Open(img)
 		if err != nil {
-			setError(err,1)
+			setError(err, 1)
 			return
 		}
 		defer iio.Close()
@@ -411,7 +411,7 @@ var gptCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		err := SetNumberModeFlagCMD(cmd)
 		if err != nil {
-			setError(err,1)
+			setError(err, 1)
 			return
 		}
 		img := args[0]
@@ -453,7 +453,7 @@ var lsCmd = &cobra.Command{
 	Short: "List directory contents.",
 	Args:  cobra.RangeArgs(1, 2),
 	Run: func(cmd *cobra.Command, args []string) {
-		err: = SetNumberModeFlagCMD(cmd)
+		err := SetNumberModeFlagCMD(cmd)
 		if err != nil {
 			setError(err, 1)
 			return
@@ -508,7 +508,7 @@ var lsCmd = &cobra.Command{
 
 			kfiles, err := iio.KernelFiles()
 			if err != nil {
-				setError(err,4)
+				setError(err, 4)
 				return
 			}
 
@@ -529,14 +529,14 @@ var lsCmd = &cobra.Command{
 
 		ino, err := iio.ResolvePathToInodeNo(fpath)
 		if err != nil {
-			setError(err,5)
+			setError(err, 5)
 			return
 		}
 
 	inoEntry:
 		inode, err := iio.ResolveInode(ino)
 		if err != nil {
-			setError(err,6)
+			setError(err, 6)
 			return
 		}
 
@@ -556,7 +556,7 @@ var lsCmd = &cobra.Command{
 
 		entries, err = iio.Readdir(inode)
 		if err != nil {
-			setError(err,7)
+			setError(err, 7)
 			return
 		}
 
@@ -583,7 +583,7 @@ var lsCmd = &cobra.Command{
 			if long {
 				child, err := iio.ResolveInode(entry.Inode)
 				if err != nil {
-					setErr(err,8)
+					setError(err, 8)
 					return
 				}
 				links := "?"
@@ -659,7 +659,7 @@ var md5Cmd = &cobra.Command{
 		fpath := args[1]
 		imageFileMD5, err := imagetools.MDSumImageFile(img, fpath, flagOS)
 		if err != nil {
-			setError(err,1)
+			setError(err, 1)
 			return
 		}
 
@@ -678,7 +678,7 @@ var statCmd = &cobra.Command{
 	Short: "Print detailed metadata relating to the file at FILE_PATH.",
 	Args:  cobra.RangeArgs(1, 2),
 	Run: func(cmd *cobra.Command, args []string) {
-		err:= SetNumberModeFlagCMD(cmd)
+		err := SetNumberModeFlagCMD(cmd)
 		if err != nil {
 			setError(err, 2)
 			return

@@ -184,8 +184,7 @@ func defaultVirtualizer() string {
 func runDecompile(diskpath string, outpath string, skipUnTouched bool) error {
 	iio, err := vdecompiler.Open(diskpath)
 	if err != nil {
-		setError(err, 1)
-		return
+		return err
 	}
 
 	defer iio.Close()

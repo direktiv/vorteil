@@ -13,11 +13,11 @@ import (
 	"github.com/vorteil/vorteil/pkg/vpkg"
 )
 
-func handleCommandError(err error, code int) {
-	if err != nil {
-		log.Errorf(err.Error())
+func handleCommandError() {
+	if errorStatusMessage != nil {
+		log.Errorf(errorStatusMessage.Error())
 	}
-	os.Exit(code)
+	os.Exit(errorStatusCode)
 }
 
 func handleDirectory(src string, dst string, builder vpkg.Builder) error {

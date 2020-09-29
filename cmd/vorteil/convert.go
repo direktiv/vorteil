@@ -38,11 +38,6 @@ repositories:
    url: https://myurl
 `,
 	Run: func(cmd *cobra.Command, args []string) {
-
-		// defer os exit to allow for cleanup properly
-		var returnErr error
-		var statusCode int
-		defer handleCommandError(returnErr, statusCode)
 		// in case of an error we pass empty user/pwd/config in
 		user, _ := cmd.Flags().GetString("user")
 		pwd, _ := cmd.Flags().GetString("password")
@@ -50,15 +45,13 @@ repositories:
 
 		cc, err := vconvert.NewContainerConverter(args[0], config, log)
 		if err != nil {
-			returnErr = err
-			statusCode = 1
+			setError(err, 1)
 			return
 		}
 
 		err = cc.ConvertToProject(args[1], user, pwd)
 		if err != nil {
-			returnErr = err
-			statusCode = 2
+			setError(err, 2)
 			return
 		}
 	},

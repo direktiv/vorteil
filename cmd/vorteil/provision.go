@@ -27,42 +27,39 @@ var provisionCmd = &cobra.Command{
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 
-		var returnErr error
-		var statusCode int
-		defer handleCommandError(returnErr, statusCode)
 		// Load the provided provisioner file
 		if _, err := os.Stat(provisionProvisionerFile); err != nil {
-			statusCode = 1
-			returnErr = err
+			setError(err, 1)
+
 			return
 		}
 
 		b, err := ioutil.ReadFile(provisionProvisionerFile)
 		if err != nil {
-			statusCode = 2
-			returnErr = err
+			setError(err, 2)
+
 			return
 		}
 
 		data, err := provisioners.Decrypt(b, provisionPassPhrase)
 		if err != nil {
-			statusCode = 3
-			returnErr = err
+			setError(err, 3)
+
 			return
 		}
 
 		m := make(map[string]interface{})
 		err = json.Unmarshal(data, &m)
 		if err != nil {
-			statusCode = 4
-			returnErr = err
+			setError(err, 4)
+
 			return
 		}
 
 		ptype, ok := m[provisioners.MapKey]
 		if !ok {
-			statusCode = 5
-			returnErr = err
+			setError(err, 5)
+
 			return
 		}
 
@@ -74,8 +71,8 @@ var provisionCmd = &cobra.Command{
 			p := &google.Provisioner{}
 			err = p.Initialize(data)
 			if err != nil {
-				statusCode = 6
-				returnErr = err
+				setError(err, 6)
+
 				return
 			}
 
@@ -86,8 +83,8 @@ var provisionCmd = &cobra.Command{
 			p := &amazon.Provisioner{}
 			err = p.Initialize(data)
 			if err != nil {
-				statusCode = 7
-				returnErr = err
+				setError(err, 7)
+
 				return
 			}
 
@@ -98,8 +95,8 @@ var provisionCmd = &cobra.Command{
 			p := &azure.Provisioner{}
 			err = p.Initialize(data)
 			if err != nil {
-				statusCode = 8
-				returnErr = err
+				setError(err, 8)
+
 				return
 			}
 
@@ -113,44 +110,44 @@ var provisionCmd = &cobra.Command{
 
 		pkgBuilder, err := getPackageBuilder("BUILDABLE", buildablePath)
 		if err != nil {
-			statusCode = 9
-			returnErr = err
+			setError(err, 9)
+
 			return
 		}
 
 		err = modifyPackageBuilder(pkgBuilder)
 		if err != nil {
-			statusCode = 10
-			returnErr = err
+			setError(err, 10)
+
 			return
 		}
 
 		pkgReader, err := vpkg.ReaderFromBuilder(pkgBuilder)
 		if err != nil {
-			statusCode = 11
-			returnErr = err
+			setError(err, 11)
+
 			return
 		}
 		defer pkgReader.Close()
 
 		pkgReader, err = vpkg.PeekVCFG(pkgReader)
 		if err != nil {
-			statusCode = 12
-			returnErr = err
+			setError(err, 12)
+
 			return
 		}
 
 		err = initKernels()
 		if err != nil {
-			statusCode = 13
-			returnErr = err
+			setError(err, 13)
+
 			return
 		}
 
 		f, err := ioutil.TempFile(os.TempDir(), "vorteil.disk")
 		if err != nil {
-			statusCode = 14
-			returnErr = err
+			setError(err, 14)
+
 			return
 		}
 		defer os.Remove(f.Name())
@@ -166,29 +163,29 @@ var provisionCmd = &cobra.Command{
 			Logger: log,
 		})
 		if err != nil {
-			statusCode = 15
-			returnErr = err
+			setError(err, 15)
+
 			return
 		}
 
 		err = f.Close()
 		if err != nil {
-			statusCode = 16
-			returnErr = err
+			setError(err, 16)
+
 			return
 		}
 
 		err = pkgReader.Close()
 		if err != nil {
-			statusCode = 17
-			returnErr = err
+			setError(err, 17)
+
 			return
 		}
 
 		image, err := vio.LazyOpen(f.Name())
 		if err != nil {
-			statusCode = 18
-			returnErr = err
+			setError(err, 18)
+
 			return
 		}
 
@@ -207,8 +204,8 @@ var provisionCmd = &cobra.Command{
 			ReadyWhenUsable: provisionReadyWhenUsable,
 		})
 		if err != nil {
-			statusCode = 19
-			returnErr = err
+			setError(err, 19)
+
 			return
 		}
 
@@ -274,13 +271,11 @@ var provisionersNewAmazonEC2Cmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 
-		var returnErr error
-		var statusCode int
-		defer handleCommandError(returnErr, statusCode)
+
 		f, err := os.OpenFile(args[0], os.O_RDWR|os.O_CREATE, 0644)
 		if err != nil {
-			statusCode = 1
-			returnErr = err
+			setError(err, 1)
+
 			return
 		}
 		defer f.Close()
@@ -291,23 +286,23 @@ var provisionersNewAmazonEC2Cmd = &cobra.Command{
 			Region: provisionersNewAmazonRegion,
 		})
 		if err != nil {
-			statusCode = 2
-			returnErr = err
+			setError(err, 2)
+
 			return
 		}
 
 		data, err := p.Marshal()
 		if err != nil {
-			statusCode = 3
-			returnErr = err
+			setError(err, 3)
+
 			return
 		}
 
 		out := provisioners.Encrypt(data, provisionersNewPassphrase)
 		_, err = io.Copy(f, bytes.NewReader(out))
 		if err != nil {
-			statusCode = 4
-			returnErr = err
+			setError(err, 4)
+
 			return
 		}
 
@@ -327,13 +322,11 @@ var provisionersNewAzureCmd = &cobra.Command{
 	Short: "Add a new Microsoft Azure Provisioner.",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		var returnErr error
-		var statusCode int
-		defer handleCommandError(returnErr, statusCode)
+	
 		f, err := os.OpenFile(args[0], os.O_RDWR|os.O_CREATE, 0644)
 		if err != nil {
-			statusCode = 1
-			returnErr = err
+			setError(err, 1)
+
 			return
 		}
 		defer f.Close()
@@ -341,15 +334,15 @@ var provisionersNewAzureCmd = &cobra.Command{
 		path := provisionersNewAzureKeyFile
 		_, err = os.Stat(path)
 		if err != nil {
-			statusCode = 2
-			returnErr = err
+			setError(err, 2)
+
 			return
 		}
 
 		b, err := ioutil.ReadFile(path)
 		if err != nil {
-			statusCode = 3
-			returnErr = err
+			setError(err, 3)
+
 			return
 		}
 
@@ -362,23 +355,23 @@ var provisionersNewAzureCmd = &cobra.Command{
 			StorageAccountName: provisionersNewAzureStorageAccountName,
 		})
 		if err != nil {
-			statusCode = 4
-			returnErr = err
+			setError(err, 4)
+
 			return
 		}
 
 		data, err := p.Marshal()
 		if err != nil {
-			statusCode = 5
-			returnErr = err
+			setError(err,5)
+
 			return
 		}
 
 		out := provisioners.Encrypt(data, provisionersNewPassphrase)
 		_, err = io.Copy(f, bytes.NewReader(out))
 		if err != nil {
-			statusCode = 6
-			returnErr = err
+			setError(err, 6)
+
 			return
 		}
 
@@ -400,13 +393,11 @@ var provisionersNewGoogleCmd = &cobra.Command{
 	Short: "Add a new Google Cloud (Compute Engine) Provisioner.",
 	Args:  cobra.ExactArgs(1), // Single arg, points to output file
 	Run: func(cmd *cobra.Command, args []string) {
-		var returnErr error
-		var statusCode int
-		defer handleCommandError(returnErr, statusCode)
+	
 		f, err := os.OpenFile(args[0], os.O_RDWR|os.O_CREATE, 0644)
 		if err != nil {
-			statusCode = 1
-			returnErr = err
+			setError(err, 1)
+
 			return
 		}
 		defer f.Close()
@@ -414,15 +405,15 @@ var provisionersNewGoogleCmd = &cobra.Command{
 		path := provisionersNewGoogleKeyFile
 		_, err = os.Stat(path)
 		if err != nil {
-			statusCode = 2
-			returnErr = err
+			setError(err, 2)
+
 			return
 		}
 
 		b, err := ioutil.ReadFile(path)
 		if err != nil {
-			statusCode = 3
-			returnErr = err
+			setError(err, 3)
+
 			return
 		}
 
@@ -431,23 +422,23 @@ var provisionersNewGoogleCmd = &cobra.Command{
 			Key:    base64.StdEncoding.EncodeToString(b),
 		})
 		if err != nil {
-			statusCode = 4
-			returnErr = err
+			setError(err, 4)
+
 			return
 		}
 
 		data, err := p.Marshal()
 		if err != nil {
-			statusCode = 5
-			returnErr = err
+			setError(err, 5)
+
 			return
 		}
 
 		out := provisioners.Encrypt(data, provisionersNewPassphrase)
 		_, err = io.Copy(f, bytes.NewReader(out))
 		if err != nil {
-			statusCode = 6
-			returnErr = err
+			setError(err, 6)
+
 			return
 		}
 	},

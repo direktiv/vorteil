@@ -93,15 +93,13 @@ var importSharedObjectsCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		var projectPath string = "."
 		var err error
-		var returnErr error
-		var statusCode int
-		defer handleCommandError(returnErr, statusCode)
+
 		// Get Project Path
 		if len(args) != 0 {
 			projectPath, err = filepath.Abs(args[0])
 			if err != nil {
-				statusCode = 1
-				returnErr = err
+				setError(err, 1)
+
 				return
 			}
 		}
@@ -110,15 +108,15 @@ var importSharedObjectsCmd = &cobra.Command{
 		importOperation, err := vproj.NewImportSharedObject(projectPath, flagExcludeDefault, log)
 
 		if err != nil {
-			statusCode = 2
-			returnErr = err
+			setError(err, 2)
+
 			return
 		}
 
 		// Start Import Operation
 		if err = importOperation.Start(); err != nil {
-			statusCode = 3
-			returnErr = err
+			setError(err, 3)
+
 			return
 		}
 	},

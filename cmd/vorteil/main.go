@@ -28,13 +28,28 @@ var (
 	date    = "Thu, 01 Jan 1970 00:00:00 +0000"
 )
 
+// Each command sets a code so we can capture the exit if an error has been encountered.
+var errorStatusCode int
+var errorStatusMessage error
+
+// setError for the command to exit with a certain status and message
+func setError(err error, code int) {
+	errorStatusCode = code
+	errorStatusMessage = err
+}
+
 func main() {
 
 	commandInit()
 
 	err := rootCmd.Execute()
 	if err != nil {
-		handleCommandError(err, 1)
+		setError(err, 1)
+	}
+
+	// If the global status code for errors hasn't been set os.exit with non-zero number
+	if errorStatusCode != 0 {
+		handleCommandError()
 	}
 }
 
@@ -458,13 +473,15 @@ func decompile(srcPath, outPath string) {
 
 	iio, err := vdecompiler.Open(srcPath)
 	if err != nil {
-		handleCommandError(err, 1)
+		setError(err, 1)
+		return
 	}
 	defer iio.Close()
 
 	fi, err := os.Stat(outPath)
 	if err != nil && !os.IsNotExist(err) {
-		handleCommandError(err, 2)
+		setError(err, 2)
+		return
 	}
 	var into bool
 	if !os.IsNotExist(err) && fi.IsDir() {
@@ -543,17 +560,20 @@ func decompile(srcPath, outPath string) {
 
 	ino, err := iio.ResolvePathToInodeNo(fpath)
 	if err != nil {
-		handleCommandError(err, 3)
+		setError(err, 3)
+		return
 	}
 	err = recurse(ino, filepath.ToSlash(filepath.Base(fpath)), dpath)
 	if err != nil {
-		handleCommandError(err, 4)
+		setError(err, 4)
+		return
 	}
 
 	for _, fn := range symlinkCallbacks {
 		err = fn()
 		if err != nil {
-			handleCommandError(err, 5)
+			setError(err, 5)
+			return
 		}
 	}
 

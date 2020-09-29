@@ -14,6 +14,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/vbauerster/mpb/v5"
 	"github.com/vbauerster/mpb/v5/decor"
+	"github.com/vorteil/vorteil/pkg/vio"
 )
 
 // Logger is an interface that has the ability to hide debug/info
@@ -305,7 +306,21 @@ func (pb *pb) Seek(offset int64, whence int) (int64, error) {
 
 // ProxyReader returns the ready of the progress bar
 func (pb *pb) ProxyReader(r io.Reader) io.ReadCloser {
-	return pb.p.ProxyReader(r)
+
+	rc := pb.p.ProxyReader(r)
+
+	return vio.LazyReadCloser(func() (io.Reader, error) {
+		return rc, nil
+	},
+		func() error {
+			_ = rc.Close()
+			pb.Finish(pb.bar == pb.total)
+			if closer, ok := r.(io.Closer); ok {
+				_ = closer.Close()
+			}
+			return nil
+		})
+
 }
 
 type mws struct {

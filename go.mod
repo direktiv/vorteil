@@ -57,6 +57,7 @@ require (
 	github.com/opencontainers/runc v0.1.1 // indirect
 	github.com/opencontainers/selinux v1.6.0 // indirect
 	github.com/pkg/errors v0.9.1
+	github.com/prometheus/common v0.4.1
 	github.com/sirupsen/logrus v1.6.0
 	github.com/sisatech/goapi v0.0.0-20200218003521-8dcdab8c7a5e
 	github.com/sisatech/tablewriter v0.0.0-20161130023222-815eceb01ee6

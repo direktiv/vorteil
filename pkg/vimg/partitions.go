@@ -27,12 +27,12 @@ const (
 )
 
 var (
-	// RootPartitionName is the hardcoded name for the Vorteil OS partition in the GPT.
-	RootPartitionName = []byte{0x76, 0x0, 0x6f, 0x0, 0x72, 0x0, 0x74, 0x0, 0x65, 0x0,
+	// OSPartitionName is the hardcoded name for the Vorteil OS partition in the GPT.
+	OSPartitionName = []byte{0x76, 0x0, 0x6f, 0x0, 0x72, 0x0, 0x74, 0x0, 0x65, 0x0,
 		0x69, 0x0, 0x6c, 0x0, 0x2d, 0x0, 0x6f, 0x0, 0x73, 0x0} // "vorteil-os" in utf16
 
-	// DataPartitionName is the hardcoded name for the Vorteil root file-system partition in the GPT.
-	DataPartitionName = []byte{0x76, 0x0, 0x6f, 0x0, 0x72, 0x0, 0x74, 0x0, 0x65, 0x0, 0x69, 0x0,
+	// RootPartitionName is the hardcoded name for the Vorteil root file-system partition in the GPT.
+	RootPartitionName = []byte{0x76, 0x0, 0x6f, 0x0, 0x72, 0x0, 0x74, 0x0, 0x65, 0x0, 0x69, 0x0,
 		0x6c, 0x0, 0x2d, 0x0, 0x72, 0x0, 0x6f, 0x0, 0x6f, 0x0, 0x74, 0x0} // "vorteil-root" in utf16
 
 	// Part2UUID for second partition. used to define rooot partition in kernel args
@@ -361,7 +361,7 @@ func (b *Builder) generateGPTEntries() error {
 	}
 
 	copy(p0.PartitionGUID[:], uid0)
-	copy(p0.Name[:], RootPartitionName)
+	copy(p0.Name[:], OSPartitionName)
 
 	p1 := GPTEntry{
 		TypeGUID: [16]byte{0xE3, 0xBC, 0x68, 0x4F, 0xCD, 0xE8,
@@ -371,7 +371,7 @@ func (b *Builder) generateGPTEntries() error {
 	}
 
 	copy(p1.PartitionGUID[:], Part2UUID)
-	copy(p1.Name[:], DataPartitionName)
+	copy(p1.Name[:], RootPartitionName)
 
 	entriesBuffer := new(bytes.Buffer)
 	_ = binary.Write(entriesBuffer, binary.LittleEndian, p0)

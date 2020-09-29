@@ -442,6 +442,10 @@ func CLI(args CLIArgs, logger elog.View) (Manager, error) {
 
 	var mgrs []Manager
 
+	if logger == nil {
+		return nil, fmt.Errorf("no logger provided")
+	}
+
 	if args.DropPath != "" {
 		m, err := NewLocalManager(args.DropPath)
 		if err != nil {

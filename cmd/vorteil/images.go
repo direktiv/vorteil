@@ -122,7 +122,7 @@ func init() {
 
 var decompileCmd = &cobra.Command{
 	Use:   "decompile IMAGE OUTPUT",
-	Short: "Creatsse a usable project directory from a Vorteil disk vdecompiler.",
+	Short: "Create a usable project directory from a Vorteil disk vdecompiler.",
 	Args:  cobra.ExactArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
 

@@ -92,7 +92,7 @@ func (c *compiler) setPrecompileConstants(size, minDataBlocks, minInodes, minIno
 	c.unallocatedBlocks = c.blocks - c.filledDataBlocks - c.groups*c.overheadBlocksPerGroup
 	c.unallocatedInodes = c.groups*c.inodesPerGroup - int64(len(c.inodeBlocks)-1)
 
-	c.inodeBlocks[2].node.Parent = c.inodeBlocks[2].node
+	c.inodeBlocks[RootDirInode].node.Parent = c.inodeBlocks[RootDirInode].node
 
 	groupsNeededToContainData := divide(minDataBlocks, c.dataBlocksPerGroup)
 	if groupsNeededToContainData > c.groups {
@@ -108,7 +108,7 @@ func (c *compiler) initSuperblock() {
 	c.superblock.LastMountTime = uint32(now.Unix())
 	c.superblock.LastWrittenTime = uint32(now.Unix())
 	c.superblock.MountsCheckInterval = 20
-	c.superblock.Signature = 0xEF53
+	c.superblock.Signature = Signature
 	c.superblock.State = 1
 	c.superblock.TimeLastCheck = uint32(now.Unix())
 	c.superblock.SuperUser = SuperUID
@@ -153,13 +153,16 @@ func (c *compiler) generateBGDT() error {
 			inodes = ipb - claimedInodes%ipb
 		}
 
-		_ = binary.Write(buf, binary.LittleEndian, uint32(i*c.blocksPerGroup+blocksPerSuperblock+c.blocksPerBGDT))                                           // block usage bitmap
-		_ = binary.Write(buf, binary.LittleEndian, uint32(i*c.blocksPerGroup+blocksPerSuperblock+c.blocksPerBGDT+blocksPerBlockBitmap))                      // inode usage bitmap
-		_ = binary.Write(buf, binary.LittleEndian, uint32(i*c.blocksPerGroup+blocksPerSuperblock+c.blocksPerBGDT+blocksPerBlockBitmap+blocksPerInodeBitmap)) // inode table
-		_ = binary.Write(buf, binary.LittleEndian, uint16(blocks))                                                                                           // unallocated blocks
-		_ = binary.Write(buf, binary.LittleEndian, uint16(inodes))
-		_ = binary.Write(buf, binary.LittleEndian, uint16(c.dirsInGroup[i])) // directories
-		_, _ = buf.Write(bytes.Repeat([]byte{0}, 14))
+		bgdte := &BlockGroupDescriptorTableEntry{
+			BlockBitmapBlockAddr: uint32(i*c.blocksPerGroup + blocksPerSuperblock + c.blocksPerBGDT),
+			InodeBitmapBlockAddr: uint32(i*c.blocksPerGroup + blocksPerSuperblock + c.blocksPerBGDT + blocksPerBlockBitmap),
+			InodeTableBlockAddr:  uint32(i*c.blocksPerGroup + blocksPerSuperblock + c.blocksPerBGDT + blocksPerBlockBitmap + blocksPerInodeBitmap),
+			UnallocatedBlocks:    uint16(blocks),
+			UnallocatedInodes:    uint16(inodes),
+			Directories:          uint16(c.dirsInGroup[i]),
+		}
+
+		_ = binary.Write(buf, binary.LittleEndian, bgdte)
 	}
 
 	c.bgdt = buf.Bytes()

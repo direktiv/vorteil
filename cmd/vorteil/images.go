@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/vorteil/vorteil/pkg/ext"
 	"github.com/vorteil/vorteil/pkg/imagetools"
 	"github.com/vorteil/vorteil/pkg/vdecompiler"
 	"github.com/vorteil/vorteil/pkg/vdisk"
@@ -403,7 +404,7 @@ var lsCmd = &cobra.Command{
 
 		var fpaths []string
 		var inos []int
-		var inodes []*vdecompiler.Inode
+		var inodes []*ext.Inode
 		var table [][]string
 		var entries []*vdecompiler.DirectoryEntry
 
@@ -447,7 +448,7 @@ var lsCmd = &cobra.Command{
 		genericErrCheck(err, 1)
 
 	inodeEntry:
-		if !inode.IsDirectory() {
+		if !vdecompiler.InodeIsDirectory(inode) {
 			if reiterating {
 				goto skip
 			}
@@ -492,22 +493,13 @@ var lsCmd = &cobra.Command{
 				links := "?"
 
 				var uid, gid string
-				if child.UID == vdecompiler.VorteilUserID {
-					uid = vdecompiler.VorteilUserName
-				} else {
-					uid = fmt.Sprintf("%d", child.UID)
-				}
-
-				if child.GID == vdecompiler.VorteilGroupID {
-					gid = vdecompiler.VorteilGroupName
-				} else {
-					gid = fmt.Sprintf("%d", child.GID)
-				}
+				uid = fmt.Sprintf("%d", child.UID)
+				gid = fmt.Sprintf("%d", child.GID)
 
 				ts := fmt.Sprintf("%s", time.Unix(int64(child.ModificationTime), 0))
-				size := fmt.Sprintf("%s", PrintableSize(child.Fullsize()))
+				size := fmt.Sprintf("%s", PrintableSize(vdecompiler.InodeSize(inode)))
 
-				table = append(table, []string{child.Permissions(), links, uid, gid, ts, size, entry.Name})
+				table = append(table, []string{vdecompiler.InodePermissionsString(child), links, uid, gid, ts, size, entry.Name})
 
 				if recursive && !(entry.Name == "." || entry.Name == "..") {
 					inodes = append(inodes, child)

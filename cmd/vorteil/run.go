@@ -35,7 +35,7 @@ var initFirecrackerCmd = &cobra.Command{
 
 		err := firecracker.SetupBridgeAndDHCPServer(log)
 		if err != nil {
-			setError(err, 1)
+			SetError(err, 1)
 
 		}
 	},
@@ -72,7 +72,7 @@ and cleaning up the instance when it's done.`,
 					name = "vorteil-vm"
 				}
 			} else {
-				setError(err, 1)
+				SetError(err, 1)
 				return
 			}
 		} else {
@@ -81,71 +81,71 @@ and cleaning up the instance when it's done.`,
 
 		pkgBuilder, err := getPackageBuilder("BUILDABLE", buildablePath)
 		if err != nil {
-			setError(err, 2)
+			SetError(err, 2)
 			return
 		}
 		defer pkgBuilder.Close()
 
 		err = modifyPackageBuilder(pkgBuilder)
 		if err != nil {
-			setError(err, 3)
+			SetError(err, 3)
 			return
 		}
 
 		pkgReader, err := vpkg.ReaderFromBuilder(pkgBuilder)
 		if err != nil {
-			setError(err, 4)
+			SetError(err, 4)
 			return
 		}
 		defer pkgReader.Close()
 
 		pkgReader, err = vpkg.PeekVCFG(pkgReader)
 		if err != nil {
-			setError(err, 5)
+			SetError(err, 5)
 			return
 		}
 
 		cfgf := pkgReader.VCFG()
 		cfg, err := vcfg.LoadFile(cfgf)
 		if err != nil {
-			setError(err, 6)
+			SetError(err, 6)
 			return
 		}
 		err = initKernels()
 		if err != nil {
-			setError(err, 7)
+			SetError(err, 7)
 			return
 		}
 		switch flagPlatform {
 		case platformQEMU:
 			err = runQEMU(pkgReader, cfg, name)
 			if err != nil {
-				setError(err, 8)
+				SetError(err, 8)
 				return
 			}
 		case platformVirtualBox:
 			err = runVirtualBox(pkgReader, cfg, name)
 			if err != nil {
-				setError(err, 9)
+				SetError(err, 9)
 				return
 			}
 		case platformHyperV:
 			err = runHyperV(pkgReader, cfg, name)
 			if err != nil {
-				setError(err, 10)
+				SetError(err, 10)
 				return
 			}
 		case platformFirecracker:
 			err = runFirecracker(pkgReader, cfg, name)
 			if err != nil {
-				setError(err, 11)
+				SetError(err, 11)
 				return
 			}
 		default:
 			if flagPlatform == "not installed" {
-				setError((fmt.Errorf("no virtualizers are currently installed")), 12)
+				SetError((fmt.Errorf("no virtualizers are currently installed")), 12)
 			} else {
-				setError((fmt.Errorf("platform '%s' not supported", flagPlatform)), 12)
+				SetError((fmt.Errorf("platform '%s' not supported", flagPlatform)), 12)
 			}
 		}
 
@@ -248,7 +248,7 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG, name st
 
 		if flagRecord != "" {
 			if err := runDecompile(diskpath, flagRecord, flagTouched); err != nil {
-				setError(err, 1)
+				SetError(err, 1)
 				return
 			}
 		}

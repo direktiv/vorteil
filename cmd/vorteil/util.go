@@ -15,7 +15,11 @@ import (
 
 func handleCommandError() {
 	if errorStatusMessage != nil {
-		log.Errorf(errorStatusMessage.Error())
+		// Pretty sure this only happens when invalid flags.
+		// Which the error gets printed before this
+		if log != nil {
+			log.Errorf(errorStatusMessage.Error())
+		}
 	}
 	os.Exit(errorStatusCode)
 }

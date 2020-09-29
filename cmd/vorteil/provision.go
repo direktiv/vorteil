@@ -29,21 +29,21 @@ var provisionCmd = &cobra.Command{
 
 		// Load the provided provisioner file
 		if _, err := os.Stat(provisionProvisionerFile); err != nil {
-			setError(err, 1)
+			SetError(err, 1)
 
 			return
 		}
 
 		b, err := ioutil.ReadFile(provisionProvisionerFile)
 		if err != nil {
-			setError(err, 2)
+			SetError(err, 2)
 
 			return
 		}
 
 		data, err := provisioners.Decrypt(b, provisionPassPhrase)
 		if err != nil {
-			setError(err, 3)
+			SetError(err, 3)
 
 			return
 		}
@@ -51,14 +51,14 @@ var provisionCmd = &cobra.Command{
 		m := make(map[string]interface{})
 		err = json.Unmarshal(data, &m)
 		if err != nil {
-			setError(err, 4)
+			SetError(err, 4)
 
 			return
 		}
 
 		ptype, ok := m[provisioners.MapKey]
 		if !ok {
-			setError(err, 5)
+			SetError(err, 5)
 
 			return
 		}
@@ -71,7 +71,7 @@ var provisionCmd = &cobra.Command{
 			p := &google.Provisioner{}
 			err = p.Initialize(data)
 			if err != nil {
-				setError(err, 6)
+				SetError(err, 6)
 
 				return
 			}
@@ -83,7 +83,7 @@ var provisionCmd = &cobra.Command{
 			p := &amazon.Provisioner{}
 			err = p.Initialize(data)
 			if err != nil {
-				setError(err, 7)
+				SetError(err, 7)
 
 				return
 			}
@@ -95,7 +95,7 @@ var provisionCmd = &cobra.Command{
 			p := &azure.Provisioner{}
 			err = p.Initialize(data)
 			if err != nil {
-				setError(err, 8)
+				SetError(err, 8)
 
 				return
 			}
@@ -110,21 +110,21 @@ var provisionCmd = &cobra.Command{
 
 		pkgBuilder, err := getPackageBuilder("BUILDABLE", buildablePath)
 		if err != nil {
-			setError(err, 9)
+			SetError(err, 9)
 
 			return
 		}
 
 		err = modifyPackageBuilder(pkgBuilder)
 		if err != nil {
-			setError(err, 10)
+			SetError(err, 10)
 
 			return
 		}
 
 		pkgReader, err := vpkg.ReaderFromBuilder(pkgBuilder)
 		if err != nil {
-			setError(err, 11)
+			SetError(err, 11)
 
 			return
 		}
@@ -132,21 +132,21 @@ var provisionCmd = &cobra.Command{
 
 		pkgReader, err = vpkg.PeekVCFG(pkgReader)
 		if err != nil {
-			setError(err, 12)
+			SetError(err, 12)
 
 			return
 		}
 
 		err = initKernels()
 		if err != nil {
-			setError(err, 13)
+			SetError(err, 13)
 
 			return
 		}
 
 		f, err := ioutil.TempFile(os.TempDir(), "vorteil.disk")
 		if err != nil {
-			setError(err, 14)
+			SetError(err, 14)
 
 			return
 		}
@@ -163,28 +163,28 @@ var provisionCmd = &cobra.Command{
 			Logger: log,
 		})
 		if err != nil {
-			setError(err, 15)
+			SetError(err, 15)
 
 			return
 		}
 
 		err = f.Close()
 		if err != nil {
-			setError(err, 16)
+			SetError(err, 16)
 
 			return
 		}
 
 		err = pkgReader.Close()
 		if err != nil {
-			setError(err, 17)
+			SetError(err, 17)
 
 			return
 		}
 
 		image, err := vio.LazyOpen(f.Name())
 		if err != nil {
-			setError(err, 18)
+			SetError(err, 18)
 
 			return
 		}
@@ -204,7 +204,7 @@ var provisionCmd = &cobra.Command{
 			ReadyWhenUsable: provisionReadyWhenUsable,
 		})
 		if err != nil {
-			setError(err, 19)
+			SetError(err, 19)
 
 			return
 		}
@@ -274,7 +274,7 @@ var provisionersNewAmazonEC2Cmd = &cobra.Command{
 
 		f, err := os.OpenFile(args[0], os.O_RDWR|os.O_CREATE, 0644)
 		if err != nil {
-			setError(err, 1)
+			SetError(err, 1)
 
 			return
 		}
@@ -286,14 +286,14 @@ var provisionersNewAmazonEC2Cmd = &cobra.Command{
 			Region: provisionersNewAmazonRegion,
 		})
 		if err != nil {
-			setError(err, 2)
+			SetError(err, 2)
 
 			return
 		}
 
 		data, err := p.Marshal()
 		if err != nil {
-			setError(err, 3)
+			SetError(err, 3)
 
 			return
 		}
@@ -301,7 +301,7 @@ var provisionersNewAmazonEC2Cmd = &cobra.Command{
 		out := provisioners.Encrypt(data, provisionersNewPassphrase)
 		_, err = io.Copy(f, bytes.NewReader(out))
 		if err != nil {
-			setError(err, 4)
+			SetError(err, 4)
 
 			return
 		}
@@ -325,7 +325,7 @@ var provisionersNewAzureCmd = &cobra.Command{
 	
 		f, err := os.OpenFile(args[0], os.O_RDWR|os.O_CREATE, 0644)
 		if err != nil {
-			setError(err, 1)
+			SetError(err, 1)
 
 			return
 		}
@@ -334,14 +334,14 @@ var provisionersNewAzureCmd = &cobra.Command{
 		path := provisionersNewAzureKeyFile
 		_, err = os.Stat(path)
 		if err != nil {
-			setError(err, 2)
+			SetError(err, 2)
 
 			return
 		}
 
 		b, err := ioutil.ReadFile(path)
 		if err != nil {
-			setError(err, 3)
+			SetError(err, 3)
 
 			return
 		}
@@ -355,14 +355,14 @@ var provisionersNewAzureCmd = &cobra.Command{
 			StorageAccountName: provisionersNewAzureStorageAccountName,
 		})
 		if err != nil {
-			setError(err, 4)
+			SetError(err, 4)
 
 			return
 		}
 
 		data, err := p.Marshal()
 		if err != nil {
-			setError(err,5)
+			SetError(err,5)
 
 			return
 		}
@@ -370,7 +370,7 @@ var provisionersNewAzureCmd = &cobra.Command{
 		out := provisioners.Encrypt(data, provisionersNewPassphrase)
 		_, err = io.Copy(f, bytes.NewReader(out))
 		if err != nil {
-			setError(err, 6)
+			SetError(err, 6)
 
 			return
 		}
@@ -396,7 +396,7 @@ var provisionersNewGoogleCmd = &cobra.Command{
 	
 		f, err := os.OpenFile(args[0], os.O_RDWR|os.O_CREATE, 0644)
 		if err != nil {
-			setError(err, 1)
+			SetError(err, 1)
 
 			return
 		}
@@ -405,14 +405,14 @@ var provisionersNewGoogleCmd = &cobra.Command{
 		path := provisionersNewGoogleKeyFile
 		_, err = os.Stat(path)
 		if err != nil {
-			setError(err, 2)
+			SetError(err, 2)
 
 			return
 		}
 
 		b, err := ioutil.ReadFile(path)
 		if err != nil {
-			setError(err, 3)
+			SetError(err, 3)
 
 			return
 		}
@@ -422,14 +422,14 @@ var provisionersNewGoogleCmd = &cobra.Command{
 			Key:    base64.StdEncoding.EncodeToString(b),
 		})
 		if err != nil {
-			setError(err, 4)
+			SetError(err, 4)
 
 			return
 		}
 
 		data, err := p.Marshal()
 		if err != nil {
-			setError(err, 5)
+			SetError(err, 5)
 
 			return
 		}
@@ -437,7 +437,7 @@ var provisionersNewGoogleCmd = &cobra.Command{
 		out := provisioners.Encrypt(data, provisionersNewPassphrase)
 		_, err = io.Copy(f, bytes.NewReader(out))
 		if err != nil {
-			setError(err, 6)
+			SetError(err, 6)
 
 			return
 		}

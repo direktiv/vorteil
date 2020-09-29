@@ -30,8 +30,8 @@ var (
 var errorStatusCode int
 var errorStatusMessage error
 
-// setError sets the global variables when the process exits accordingly
-func setError(err error, code int) {
+// SetError sets the global variables for when the process exits to display accordingly
+func SetError(err error, code int) {
 	errorStatusCode = code
 	errorStatusMessage = err
 }
@@ -42,7 +42,7 @@ func main() {
 
 	err := rootCmd.Execute()
 	if err != nil {
-		setError(err, 1)
+		SetError(err, 1)
 	}
 
 	// If the global status code for errors has been set os.Exit with non-zero number
@@ -219,7 +219,7 @@ func getBuilderDir(argName, src string) (vpkg.Builder, error) {
 	return pkgb, err
 }
 
-func getPackagerReader(argName, src string) (vpkg.Reader, error) {
+func getPackageReader(argName, src string) (vpkg.Reader, error) {
 	var err error
 	var pkgR vpkg.Reader
 	sType, err := getSourceType(src)

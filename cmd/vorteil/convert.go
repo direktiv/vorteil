@@ -45,13 +45,13 @@ repositories:
 
 		cc, err := vconvert.NewContainerConverter(args[0], config, log)
 		if err != nil {
-			setError(err, 1)
+			SetError(err, 1)
 			return
 		}
 
 		err = cc.ConvertToProject(args[1], user, pwd)
 		if err != nil {
-			setError(err, 2)
+			SetError(err, 2)
 			return
 		}
 	},

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/vorteil/vorteil/pkg/vpkg"
 	"github.com/vorteil/vorteil/pkg/vproj"
 )
 
@@ -54,60 +55,42 @@ identify it and explain its purpose and its use.`,
 
 		err := checkValidNewFileOutput(outputPath, flagForce, "output", "-f")
 		if err != nil {
-			setError(err, 1)
+			SetError(err, 1)
 			return
 		}
 
-		// TODO: other packable type & project targets
-		proj, err := vproj.LoadProject(packablePath)
+		builder, err := getPackageBuilder("PACKABLE", packablePath)
 		if err != nil {
-			setError(err, 2)
+			SetError(err, 2)
 			return
 		}
 
-		tgt, err := proj.Target("")
+		err = modifyPackageBuilder(builder)
 		if err != nil {
-			setError(err, 3)
+			SetError(err, 3)
 			return
 		}
-
-		// TODO: project & vcfg flags
-
-		builder, err := tgt.NewBuilder()
-		if err != nil {
-			setError(err, 4)
-			return
-		}
-		defer builder.Close()
 
 		builder.SetCompressionLevel(int(flagCompressionLevel))
 
 		f, err := os.Create(outputPath)
 		if err != nil {
-			setError(err, 5)
+			SetError(err, 5)
 			return
 		}
 		defer f.Close()
 
 		err = builder.Pack(f)
 		if err != nil {
-			setError(err, 6)
+			SetError(err, 6)
 			return
 		}
 
 		err = f.Close()
 		if err != nil {
-			setError(err, 7)
+			SetError(err, 7)
 			return
 		}
-
-		err = builder.Close()
-		if err != nil {
-			setError(err, 8)
-			return
-		}
-
-		// TODO: progress tracking
 
 		log.Printf("created package: %s", outputPath)
 	},
@@ -149,24 +132,30 @@ other files. If the DEST argument is omitted it will default to ".".`,
 
 		err := checkValidNewDirOutput(prjPath, flagForce, "DEST", "-f")
 		if err != nil {
-			setError(err, 1)
+			SetError(err, 1)
 
 			return
 		}
-
-		pkg, err := getReaderURL(pkgPath)
+		pkg, err := getPackageBuilder("PACKABLE", pkgPath)
 		if err != nil {
-			setError(err, 2)
-
+			SetError(err, 2)
 			return
 		}
-
 		defer pkg.Close()
-
-		err = vproj.CreateFromPackage(prjPath, pkg)
+		err = modifyPackageBuilder(pkg)
 		if err != nil {
-			setError(err, 3)
-
+			SetError(err, 3)
+			return
+		}
+		pkgr, err := vpkg.ReaderFromBuilder(pkg)
+		if err != nil {
+			SetError(err, 4)
+			return
+		}
+		defer pkgr.Close()
+		err = vproj.CreateFromPackage(prjPath, pkgr)
+		if err != nil {
+			SetError(err, 5)
 			return
 		}
 

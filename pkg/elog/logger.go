@@ -10,6 +10,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/vorteil/vorteil/pkg/vio"
+
 	"github.com/fatih/color"
 	"github.com/sirupsen/logrus"
 	"github.com/vbauerster/mpb/v5"
@@ -305,7 +307,20 @@ func (pb *pb) Seek(offset int64, whence int) (int64, error) {
 
 // ProxyReader returns the ready of the progress bar
 func (pb *pb) ProxyReader(r io.Reader) io.ReadCloser {
-	return pb.p.ProxyReader(r)
+
+	pr := pb.p.ProxyReader(r)
+
+	return vio.LazyReadCloser(
+		func() (io.Reader, error) {
+			return pr, nil
+		},
+		func() error {
+			pb.flush()
+			pb.Finish(pb.total == pb.bar)
+			return pr.Close()
+		},
+	)
+
 }
 
 type mws struct {

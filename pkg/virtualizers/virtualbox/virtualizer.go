@@ -146,6 +146,7 @@ func (v *Virtualizer) Start() error {
 			cmd := exec.Command("VBoxManage", "startvm", v.name, "--type", args)
 			err := v.execute(cmd)
 			if err != nil {
+				// Return function to retry as the machine is not ready yet
 				if strings.Contains(err.Error(), "is already locked by a session (or being locked or unlocked)") {
 					return startVM()
 				}
@@ -423,6 +424,7 @@ func (v *Virtualizer) checkState() {
 	for {
 		state, err := v.getState()
 		if err != nil {
+			// Supressing errors that don't affect getting the state of the machine / errors that may error out because the virtual machine is gone.
 			if !strings.Contains(err.Error(), "signal: interrupt") && !strings.Contains(err.Error(), "Could not find a registered machine") && !strings.Contains(err.Error(), "exit status 3221225786") && !strings.Contains(err.Error(), "The object is not ready") {
 				v.logger.Errorf("Getting VM State: %s", err.Error())
 			}

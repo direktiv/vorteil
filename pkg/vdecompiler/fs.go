@@ -101,12 +101,13 @@ func (iio *IO) readBGDT(index int) ([]*ext.BlockGroupDescriptorTableEntry, error
 
 	bgs := (sb.TotalBlocks + sb.BlocksPerGroup - 1) / sb.BlocksPerGroup
 	bgdt := make([]*ext.BlockGroupDescriptorTableEntry, bgs)
-
 	for i := 0; i < int(bgs); i++ {
-		err = binary.Read(iio.img, binary.LittleEndian, &bgdt[i])
+		bgdte := new(ext.BlockGroupDescriptorTableEntry)
+		err = binary.Read(iio.img, binary.LittleEndian, bgdte)
 		if err != nil {
 			return nil, err
 		}
+		bgdt[i] = bgdte
 	}
 
 	return bgdt, nil

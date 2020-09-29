@@ -423,7 +423,7 @@ func (v *Virtualizer) checkState() {
 	for {
 		state, err := v.getState()
 		if err != nil {
-			if !strings.Contains(err.Error(), "signal: interrupt") || !strings.Contains(err.Error(), "Could not find a registered machine") || !strings.Contains(err.Error(), "exit status 3221225786") || !strings.Contains(err.Error(), "The object is not ready") {
+			if !strings.Contains(err.Error(), "signal: interrupt") && !strings.Contains(err.Error(), "Could not find a registered machine") && !strings.Contains(err.Error(), "exit status 3221225786") && !strings.Contains(err.Error(), "The object is not ready") {
 				v.logger.Errorf("Getting VM State: %s", err.Error())
 			}
 		}

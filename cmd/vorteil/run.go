@@ -16,7 +16,9 @@ import (
 	"github.com/mitchellh/go-homedir"
 	"github.com/spf13/cobra"
 	"github.com/thanhpk/randstr"
+	"github.com/vorteil/vorteil/pkg/imagetools"
 	"github.com/vorteil/vorteil/pkg/vcfg"
+	"github.com/vorteil/vorteil/pkg/vdecompiler"
 	"github.com/vorteil/vorteil/pkg/virtualizers"
 	"github.com/vorteil/vorteil/pkg/virtualizers/firecracker"
 	"github.com/vorteil/vorteil/pkg/virtualizers/util"
@@ -181,6 +183,37 @@ func defaultVirtualizer() string {
 	return defaultP
 }
 
+func runDecompile(diskpath string, outpath string, skipUnTouched bool) error {
+	iio, err := vdecompiler.Open(diskpath)
+	if err != nil {
+		log.Errorf("%v", err)
+		os.Exit(1)
+	}
+
+	defer iio.Close()
+
+	report, err := imagetools.DecompileImage(iio, outpath, skipUnTouched)
+	if err != nil {
+		return err
+	}
+
+	for _, dFile := range report.ImageFiles {
+		switch dFile.Result {
+		case imagetools.CopiedMkDir:
+			log.Printf("Creating Dir > %s", dFile.Path)
+		case imagetools.CopiedRegularFile:
+			log.Printf("Copied File  > %s", dFile.Path)
+		case imagetools.CopiedSymlink:
+			log.Printf("Created Symlink > %s", dFile.Path)
+		case imagetools.SkippedAbnormalFile:
+			log.Printf("Skipped Abnormal > %s", dFile.Path)
+		case imagetools.SkippedNotTouched:
+			log.Printf("Skipped Untouched File > %s", dFile.Path)
+		}
+	}
+
+	return nil
+}
 func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG, name string) error {
 
 	// Gather home directory for firecracker storage path
@@ -217,7 +250,10 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG, name st
 		virt.Close(false)
 
 		if flagRecord != "" {
-			decompile(diskpath, flagRecord)
+			if err := runDecompile(diskpath, flagRecord, flagTouched); err != nil {
+				log.Errorf("%v", err)
+				os.Exit(1)
+			}
 		}
 	}()
 

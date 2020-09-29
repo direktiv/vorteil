@@ -2,11 +2,8 @@ package main
 
 import (
 	"context"
-	"crypto/md5"
-	"encoding/hex"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,9 +11,9 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/vorteil/vorteil/pkg/ext"
+	"github.com/vorteil/vorteil/pkg/imagetools"
 	"github.com/vorteil/vorteil/pkg/vdecompiler"
 	"github.com/vorteil/vorteil/pkg/vdisk"
-	"github.com/vorteil/vorteil/pkg/vimg"
 	"github.com/vorteil/vorteil/pkg/vpkg"
 )
 
@@ -60,10 +57,7 @@ Supported disk formats include:
 		}
 
 		format, err := parseImageFormat(flagFormat)
-		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
-		}
+		genericErrCheck(err, 1)
 		suffix := format.Suffix()
 
 		_, base := filepath.Split(strings.TrimSuffix(filepath.ToSlash(buildablePath), "/"))
@@ -76,42 +70,24 @@ Supported disk formats include:
 		}
 
 		err = checkValidNewFileOutput(outputPath, flagForce, "output", "-f")
-		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
-		}
+		genericErrCheck(err, 1)
 
 		pkgBuilder, err := getPackageBuilder("BUILDABLE", buildablePath)
-		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
-		}
+		genericErrCheck(err, 1)
 		defer pkgBuilder.Close()
 
 		err = modifyPackageBuilder(pkgBuilder)
-		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
-		}
+		genericErrCheck(err, 1)
 
 		pkgReader, err := vpkg.ReaderFromBuilder(pkgBuilder)
-		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
-		}
+		genericErrCheck(err, 1)
 		defer pkgReader.Close()
 
 		err = initKernels()
-		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
-		}
+		genericErrCheck(err, 1)
 
 		f, err := os.Create(outputPath)
-		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
-		}
+		genericErrCheck(err, 1)
 		defer f.Close()
 
 		err = vdisk.Build(context.Background(), f, &vdisk.BuildArgs{
@@ -122,22 +98,13 @@ Supported disk formats include:
 			},
 			Logger: log,
 		})
-		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
-		}
+		genericErrCheck(err, 1)
 
 		err = f.Close()
-		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
-		}
+		genericErrCheck(err, 1)
 
 		err = pkgReader.Close()
-		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
-		}
+		genericErrCheck(err, 1)
 
 		// TODO: progress tracking
 		log.Printf("created image: %s", outputPath)
@@ -161,8 +128,10 @@ var decompileCmd = &cobra.Command{
 
 		srcPath := args[0]
 		outPath := args[1]
-		decompile(srcPath, outPath)
-
+		if err := runDecompile(srcPath, outPath, flagTouched); err != nil {
+			log.Errorf("%v", err)
+			os.Exit(1)
+		}
 	},
 }
 
@@ -178,52 +147,23 @@ var catCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		img := args[0]
 
-		iio, err := vdecompiler.Open(img)
-		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
-		}
-		defer iio.Close()
+		// Create Vorteil Image Object From Image
+		vImageIO, err := vdecompiler.Open(img)
+		genericErrCheck(err, 1)
+		defer vImageIO.Close()
 
 		for i := 1; i < len(args); i++ {
 			fpath := args[i]
-			var rdr io.Reader
 
-			if flagOS {
-				fpath = strings.TrimPrefix(fpath, "/")
-				rdr, err = iio.KernelFile(fpath)
-				if err != nil {
-					log.Errorf("%v", err)
-					os.Exit(1)
-				}
-			} else {
-				ino, err := iio.ResolvePathToInodeNo(fpath)
-				if err != nil {
-					log.Errorf("%v", err)
-					os.Exit(1)
-				}
-
-				inode, err := iio.ResolveInode(ino)
-				if err != nil {
-					log.Errorf("%v", err)
-					os.Exit(1)
-				}
-
-				if !vdecompiler.InodeIsRegularFile(inode) {
-					log.Errorf("\"%s\" is not a regular file", fpath)
-					os.Exit(1)
-				}
-
-				rdr, err = iio.InodeReader(inode)
-				if err != nil {
-					log.Errorf("%v", err)
-					os.Exit(1)
-				}
-
-				rdr = io.LimitReader(rdr, int64(vdecompiler.InodeSize(inode)))
+			// Get Reader
+			rdr, err := imagetools.CatImageFile(vImageIO, fpath, flagOS)
+			if err != nil {
+				log.Errorf("%v", err)
+				os.Exit(1)
 			}
 
-			_, err := io.Copy(os.Stdout, rdr)
+			// Copy Contents
+			_, err = io.Copy(os.Stdout, rdr)
 			if err != nil {
 				log.Errorf("%v", err)
 				os.Exit(1)
@@ -247,166 +187,15 @@ var cpCmd = &cobra.Command{
 		img := args[0]
 
 		iio, err := vdecompiler.Open(img)
-		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
-		}
+		genericErrCheck(err, 1)
 		defer iio.Close()
 
 		dest := args[2]
-		fi, err := os.Stat(dest)
-		if err != nil && !os.IsNotExist(err) {
-			log.Errorf("%v", err)
-			os.Exit(1)
-		}
-		var into bool
-		if !os.IsNotExist(err) && fi.IsDir() {
-			into = true
-		}
-
 		fpath := args[1]
-		dpath := dest
-		if into {
-			dpath = filepath.Join(dest, filepath.Base(fpath))
-		}
 
-		if flagOS {
-			if fpath != "" && fpath != "/" && fpath != "." {
-				// single file
-				fpath = strings.TrimPrefix(fpath, "/")
-				r, err := iio.KernelFile(fpath)
-				f, err := os.Create(dpath)
-				defer f.Close()
-				_, err = io.Copy(f, r)
-				if err != nil {
-					log.Errorf("%v", err)
-					os.Exit(1)
-				}
-			} else {
-				// entire folder
-				kfiles, err := iio.KernelFiles()
-				if err != nil {
-					log.Errorf("%v", err)
-					os.Exit(1)
-				}
-
-				err = os.MkdirAll(dpath, 077)
-				if err != nil {
-					log.Errorf("%v", err)
-					os.Exit(1)
-				}
-
-				for _, kf := range kfiles {
-					r, err := iio.KernelFile(kf.Name)
-					if err != nil {
-						log.Errorf("%v", err)
-						os.Exit(1)
-					}
-
-					f, err := os.Create(filepath.Join(dpath, kf.Name))
-					if err != nil {
-						log.Errorf("%v", err)
-						os.Exit(1)
-					}
-					defer f.Close()
-
-					_, err = io.Copy(f, r)
-					if err != nil {
-						log.Errorf("%v", err)
-						os.Exit(1)
-					}
-
-					err = f.Close()
-					if err != nil {
-						log.Errorf("%v", err)
-						os.Exit(1)
-					}
-				}
-			}
-			return
-		}
-
-		var recurse func(int, string, string) error
-		recurse = func(ino int, rpath string, dpath string) error {
-
-			inode, err := iio.ResolveInode(ino)
-			if err != nil {
-				return err
-			}
-
-			if vdecompiler.InodeIsRegularFile(inode) {
-				f, err := os.Create(dpath)
-				if err != nil {
-					return err
-				}
-				defer f.Close()
-
-				rdr, err := iio.InodeReader(inode)
-				if err != nil {
-					return err
-				}
-
-				_, err = io.CopyN(f, rdr, int64(vdecompiler.InodeSize(inode)))
-				if err != nil {
-					return err
-				}
-				return nil
-			}
-
-			if vdecompiler.InodeIsSymlink(inode) {
-
-				rdr, err := iio.InodeReader(inode)
-				if err != nil {
-					return err
-				}
-				data, err := ioutil.ReadAll(rdr)
-				if err != nil {
-					return err
-				}
-				err = os.Symlink(string(data), dpath)
-				if err != nil {
-					return err
-				}
-				return nil
-			}
-
-			if !vdecompiler.InodeIsDirectory(inode) {
-				log.Warnf("skipping abnormal file: %s", rpath)
-				return nil
-			}
-
-			err = os.MkdirAll(dpath, 0777)
-			if err != nil {
-				return err
-			}
-
-			entries, err := iio.Readdir(inode)
-			if err != nil {
-				return err
-			}
-
-			for _, entry := range entries {
-				if entry.Name == "." || entry.Name == ".." {
-					continue
-				}
-				err = recurse(entry.Inode, filepath.ToSlash(filepath.Join(rpath, entry.Name)), filepath.Join(dpath, entry.Name))
-				if err != nil {
-					return err
-				}
-			}
-
-			return nil
-		}
-
-		ino, err := iio.ResolvePathToInodeNo(fpath)
+		err = imagetools.CopyImageFile(iio, fpath, dest, flagOS)
 		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
-		}
-		err = recurse(ino, filepath.Base(fpath), dpath)
-		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
+			panic(err)
 		}
 	},
 }
@@ -421,129 +210,39 @@ var duCmd = &cobra.Command{
 	Short: "Calculate file space usage.",
 	Args:  cobra.RangeArgs(1, 2),
 	Run: func(cmd *cobra.Command, args []string) {
-		numbers, err := cmd.Flags().GetString("numbers")
-		if err != nil {
-			panic(err)
-		}
-
-		err = SetNumbersMode(numbers)
-		if err != nil {
-			log.Errorf("couldn't parse value of --numbers: %v", err)
-			os.Exit(1)
-		}
-
+		genericErrCheck(SetNumberModeFlagCMD(cmd), 1)
 		img := args[0]
 
 		iio, err := vdecompiler.Open(img)
-		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
-		}
+		genericErrCheck(err, 1)
 		defer iio.Close()
 
 		all, err := cmd.Flags().GetBool("all")
-		if err != nil {
-			panic(err)
-		}
+		genericErrCheck(err, 1)
 
 		free, err := cmd.Flags().GetBool("free")
-		if err != nil {
-			panic(err)
-		}
+		genericErrCheck(err, 1)
 
 		maxDepth, err := cmd.Flags().GetInt("max-depth")
-		if err != nil {
-			panic(err)
-		}
+		genericErrCheck(err, 1)
 
-		var table [][]string
-		table = [][]string{{"", ""}}
+		table := [][]string{{"", ""}}
 
-		var depth = 0
-
-		var recurse func(*ext.Inode, string) (int, error)
-		recurse = func(inode *ext.Inode, name string) (int, error) {
-
-			depth++
-			defer func() {
-				depth--
-			}()
-
-			var size int
-			size = int(inode.Sectors) * ext.SectorSize
-
-			if !vdecompiler.InodeIsDirectory(inode) {
-				return size, nil
-			}
-
-			entries, err := iio.Readdir(inode)
-			if err != nil {
-				return 0, err
-			}
-
-			var delta int
-			for i := 2; i < len(entries); i++ {
-				entry := entries[i]
-				child := filepath.ToSlash(filepath.Join(name, entry.Name))
-
-				cinode, err := iio.ResolveInode(entry.Inode)
-				if err != nil {
-					return 0, err
-				}
-
-				delta, err = recurse(cinode, child)
-				if err != nil {
-					return 0, err
-				}
-				if all || vdecompiler.InodeIsDirectory(inode) {
-					if (maxDepth >= 0 && depth <= maxDepth) || maxDepth < 0 {
-						table = append(table, []string{child, fmt.Sprintf("%s", PrintableSize(delta))})
-					}
-				}
-				size += delta
-			}
-
-			return size, nil
-		}
-
-		var fpath string
+		var fpath string = "/"
 		if len(args) > 1 {
 			fpath = args[1]
-		} else {
-			fpath = "/"
 		}
 
-		ino, err := iio.ResolvePathToInodeNo(fpath)
-		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
-		}
+		duOut, err := imagetools.DUImageFile(iio, fpath, free, maxDepth, all)
+		genericErrCheck(err, 1)
 
-		inode, err := iio.ResolveInode(ino)
-		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
+		for i := range duOut.ImageFiles {
+			table = append(table, []string{duOut.ImageFiles[i].FilePath, fmt.Sprintf("%s", PrintableSize(duOut.ImageFiles[i].FileSize))})
 		}
-
-		size, err := recurse(inode, fpath)
-		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
-		}
-
-		table = append(table, []string{fpath, fmt.Sprintf("%s", PrintableSize(size))})
 
 		PlainTable(table)
-
 		if free {
-			sb, err := iio.Superblock(0)
-			if err != nil {
-				log.Errorf("%v", err)
-				os.Exit(1)
-			}
-
-			leftover := int(sb.UnallocatedBlocks) * int(1024<<sb.BlockSize)
-			log.Printf("Free space: %s", PrintableSize(leftover))
+			log.Printf("Free space: %s", PrintableSize(duOut.FreeSpace))
 		}
 	},
 }
@@ -564,17 +263,11 @@ var formatCmd = &cobra.Command{
 		img := args[0]
 
 		iio, err := vdecompiler.Open(img)
-		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
-		}
+		genericErrCheck(err, 1)
 		defer iio.Close()
 
 		format, err := iio.ImageFormat()
-		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
-		}
+		genericErrCheck(err, 1)
 
 		log.Printf("Image file format: %s", format)
 	},
@@ -585,54 +278,29 @@ var fsCmd = &cobra.Command{
 	Short: "Summarize the information in the main file-system's metadata.",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		numbers, err := cmd.Flags().GetString("numbers")
-		if err != nil {
-			panic(err)
-		}
+		genericErrCheck(SetNumberModeFlagCMD(cmd), 1)
 
-		err = SetNumbersMode(numbers)
-		if err != nil {
-			log.Errorf("couldn't parse value of --numbers: %v", err)
-			os.Exit(1)
-		}
-
-		img := args[0]
-
-		iio, err := vdecompiler.Open(img)
-		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
-		}
+		iio, err := vdecompiler.Open(args[0])
+		genericErrCheck(err, 1)
 		defer iio.Close()
 
-		entry, err := iio.GPTEntry(vdecompiler.UTF16toString(vimg.RootPartitionName))
-		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
-		}
+		fsReport, err := imagetools.FSImageFile(iio)
+		genericErrCheck(err, 1)
 
-		sb, err := iio.Superblock(0)
-		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
-		}
+		log.Printf("First LBA:        \t%s", PrintableSize(fsReport.FirstLBA))
+		log.Printf("Last LBA:         \t%s", PrintableSize(fsReport.LastLBA))
+		log.Printf("Type:             \t%s", fsReport.Type)
+		log.Printf("Block size:       \t%s", PrintableSize(fsReport.BlockSize))
+		log.Printf("Blocks allocated: \t%s / %s", PrintableSize(fsReport.BlocksAllocated), PrintableSize(fsReport.BlocksAvaliable))
+		log.Printf("Inodes allocated: \t%s / %s", PrintableSize(fsReport.InodesAllocated), PrintableSize(fsReport.InodesAvaliable))
 
-		log.Printf("First LBA:        \t%s", PrintableSize(int(entry.FirstLBA)))
-		log.Printf("Last LBA:         \t%s", PrintableSize(int(entry.LastLBA)))
-		log.Printf("Type:             \text2")
-
-		blocksize := 1024 << int(sb.BlockSize)
-		log.Printf("Block size:       \t%s", PrintableSize(blocksize))
-		log.Printf("Blocks allocated: \t%s / %s", PrintableSize(int(sb.TotalBlocks-sb.UnallocatedBlocks)), PrintableSize(int(sb.TotalBlocks)))
-		log.Printf("Inodes allocated: \t%s / %s", PrintableSize(int(sb.TotalInodes-sb.UnallocatedInodes)), PrintableSize(int(sb.TotalInodes)))
-
-		log.Printf("Block groups:     \t%s", PrintableSize(int((sb.TotalBlocks+sb.BlocksPerGroup-1)/sb.BlocksPerGroup)))
-		log.Printf("  Max blocks each:\t%s", PrintableSize(int(sb.BlocksPerGroup)))
-		log.Printf("  Max inodes each:\t%s", PrintableSize(int(sb.InodesPerGroup)))
+		log.Printf("Block groups:     \t%s", PrintableSize(fsReport.BlockGroups))
+		log.Printf("  Max blocks each:\t%s", PrintableSize(fsReport.MaxBlock))
+		log.Printf("  Max inodes each:\t%s", PrintableSize(fsReport.MaxInodes))
 
 		// TODO: log.Printf("Expansion ceiling: %s")
-		log.Printf("Last mount time:  \t%s", time.Unix(int64(sb.LastMountTime), 0))
-		log.Printf("Last written time:\t%s", time.Unix(int64(sb.LastWrittenTime), 0))
+		log.Printf("Last mount time:  \t%s", fsReport.LastMountTime)
+		log.Printf("Last written time:\t%s", fsReport.LastWriteTime)
 
 		// TODO: files
 		// TODO: dirs
@@ -653,31 +321,11 @@ var fsimgCmd = &cobra.Command{
 		img := args[0]
 		dst := args[1]
 
-		f, err := os.Create(dst)
-		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
-		}
-		defer f.Close()
-
 		iio, err := vdecompiler.Open(img)
-		if err != nil {
-			_ = os.Remove(f.Name())
-			log.Errorf("%v", err)
-			os.Exit(1)
-		}
+		genericErrCheck(err, 1)
 		defer iio.Close()
 
-		rdr, err := iio.PartitionReader(vdecompiler.UTF16toString(vimg.RootPartitionName))
-		if err != nil {
-			_ = os.Remove(f.Name())
-			log.Errorf("%v", err)
-			os.Exit(1)
-		}
-
-		_, err = io.Copy(f, rdr)
-		if err != nil {
-			_ = os.Remove(f.Name())
+		if err := imagetools.FSIMGImage(iio, dst); err != nil {
 			log.Errorf("%v", err)
 			os.Exit(1)
 		}
@@ -685,55 +333,31 @@ var fsimgCmd = &cobra.Command{
 }
 
 var gptCmd = &cobra.Command{
-	Use:   "cat IMAGE",
+	Use:   "gpt IMAGE",
 	Short: "Summarize the information in the GUID Partition Table.",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		numbers, err := cmd.Flags().GetString("numbers")
-		if err != nil {
-			panic(err)
-		}
-
-		err = SetNumbersMode(numbers)
-		if err != nil {
-			log.Errorf("couldn't parse value of --numbers: %v", err)
-			os.Exit(1)
-		}
+		genericErrCheck(SetNumberModeFlagCMD(cmd), 1)
 
 		img := args[0]
 
 		iio, err := vdecompiler.Open(img)
-		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
-		}
+		genericErrCheck(err, 1)
 		defer iio.Close()
 
-		header, err := iio.GPTHeader()
-		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
-		}
+		gptOut, err := imagetools.ImageGPT(iio)
+		genericErrCheck(err, 1)
 
-		entries, err := iio.GPTEntries()
-		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
-		}
-
-		log.Printf("GPT Header LBA:   \t%s", PrintableSize(int(header.CurrentLBA)))
-		log.Printf("Backup LBA:       \t%s", PrintableSize(int(header.BackupLBA)))
-		log.Printf("First usable LBA: \t%s", PrintableSize(int(header.FirstUsableLBA)))
-		log.Printf("Last usable LBA:  \t%s", PrintableSize(int(header.LastUsableLBA)))
-		log.Printf("First entries LBA:\t%s", PrintableSize(int(header.StartLBAParts)))
+		log.Printf("GPT Header LBA:   \t%s", PrintableSize(gptOut.HeaderLBA))
+		log.Printf("Backup LBA:       \t%s", PrintableSize(gptOut.BackupLBA))
+		log.Printf("First usable LBA: \t%s", PrintableSize(gptOut.FirstUsableLBA))
+		log.Printf("Last usable LBA:  \t%s", PrintableSize(gptOut.LastUsableLBA))
+		log.Printf("First entries LBA:\t%s", PrintableSize(gptOut.FirstEntriesLBA))
 		log.Printf("Entries:")
-		for i, entry := range entries {
-			name := vdecompiler.UTF16toString(entry.Name[:])
-			if name != "" {
-				log.Printf("  %d: %s", i, name)
-				log.Printf("     First LBA:\t%s", PrintableSize(int(entry.FirstLBA)))
-				log.Printf("     Last LBA: \t%s", PrintableSize(int(entry.LastLBA)))
-			}
+		for i, entry := range gptOut.Entries {
+			log.Printf("  %d: %s", i, entry.Name)
+			log.Printf("     First LBA:\t%s", PrintableSize(int(entry.FirstLBA)))
+			log.Printf("     Last LBA: \t%s", PrintableSize(int(entry.LastLBA)))
 		}
 	},
 }
@@ -748,16 +372,7 @@ var lsCmd = &cobra.Command{
 	Short: "List directory contents.",
 	Args:  cobra.RangeArgs(1, 2),
 	Run: func(cmd *cobra.Command, args []string) {
-		numbers, err := cmd.Flags().GetString("numbers")
-		if err != nil {
-			panic(err)
-		}
-
-		err = SetNumbersMode(numbers)
-		if err != nil {
-			log.Errorf("couldn't parse value of --numbers: %v", err)
-			return
-		}
+		genericErrCheck(SetNumberModeFlagCMD(cmd), 1)
 
 		var reiterating bool
 
@@ -784,10 +399,7 @@ var lsCmd = &cobra.Command{
 		img := args[0]
 
 		iio, err := vdecompiler.Open(img)
-		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
-		}
+		genericErrCheck(err, 1)
 		defer iio.Close()
 
 		var fpaths []string
@@ -796,11 +408,9 @@ var lsCmd = &cobra.Command{
 		var table [][]string
 		var entries []*vdecompiler.DirectoryEntry
 
-		var fpath string
+		var fpath string = "/"
 		if len(args) > 1 {
 			fpath = args[1]
-		} else {
-			fpath = "/"
 		}
 
 		if flagOS {
@@ -831,17 +441,11 @@ var lsCmd = &cobra.Command{
 		}
 
 		ino, err := iio.ResolvePathToInodeNo(fpath)
-		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
-		}
+		genericErrCheck(err, 1)
 
 	inoEntry:
 		inode, err := iio.ResolveInode(ino)
-		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
-		}
+		genericErrCheck(err, 1)
 
 	inodeEntry:
 		if !vdecompiler.InodeIsDirectory(inode) {
@@ -858,10 +462,7 @@ var lsCmd = &cobra.Command{
 		}
 
 		entries, err = iio.Readdir(inode)
-		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
-		}
+		genericErrCheck(err, 1)
 
 		if recursive {
 			log.Printf("%s:", fpath)
@@ -959,58 +560,11 @@ var md5Cmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		img := args[0]
 
-		iio, err := vdecompiler.Open(img)
-		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
-		}
-		defer iio.Close()
-
 		fpath := args[1]
-		var rdr io.Reader
+		imageFileMD5, err := imagetools.MDSumImageFile(img, fpath, flagOS)
+		genericErrCheck(err, 1)
 
-		if flagOS {
-			fpath = strings.TrimPrefix(fpath, "/")
-			rdr, err = iio.KernelFile(fpath)
-			if err != nil {
-				log.Errorf("%v", err)
-				os.Exit(1)
-			}
-		} else {
-			ino, err := iio.ResolvePathToInodeNo(fpath)
-			if err != nil {
-				log.Errorf("%v", err)
-				os.Exit(1)
-			}
-
-			inode, err := iio.ResolveInode(ino)
-			if err != nil {
-				log.Errorf("%v", err)
-				os.Exit(1)
-			}
-
-			if vdecompiler.InodeIsDirectory(inode) {
-				log.Errorf("\"%s\" is not a regular file", fpath)
-				os.Exit(1)
-			}
-
-			rdr, err = iio.InodeReader(inode)
-			if err != nil {
-				log.Errorf("%v", err)
-				os.Exit(1)
-			}
-
-			rdr = io.LimitReader(rdr, int64(vdecompiler.InodeSize(inode)))
-		}
-
-		hasher := md5.New()
-		_, err = io.Copy(hasher, rdr)
-		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
-		}
-
-		log.Printf("%s", hex.EncodeToString(hasher.Sum(nil)))
+		log.Printf("%s", imageFileMD5)
 	},
 }
 
@@ -1025,103 +579,27 @@ var statCmd = &cobra.Command{
 	Short: "Print detailed metadata relating to the file at FILE_PATH.",
 	Args:  cobra.RangeArgs(1, 2),
 	Run: func(cmd *cobra.Command, args []string) {
-		numbers, err := cmd.Flags().GetString("numbers")
-		if err != nil {
-			panic(err)
-		}
-
-		err = SetNumbersMode(numbers)
-		if err != nil {
-			log.Errorf("couldn't parse value of --numbers: %v", err)
-			return
-		}
+		genericErrCheck(SetNumberModeFlagCMD(cmd), 1)
 
 		img := args[0]
 
-		iio, err := vdecompiler.Open(img)
-		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
-		}
-		defer iio.Close()
-
-		fpath := "/"
+		var fpath string = "/"
 		if len(args) > 1 {
 			fpath = args[1]
 		}
 
-		if flagOS {
-			var s string
-			var size int
-			ftype := "regular file"
+		fileStat, err := imagetools.StatImageFile(img, fpath, flagOS)
+		genericErrCheck(err, 1)
 
-			fpath = strings.TrimPrefix(fpath, "/")
-			if fpath == "" {
-				s = "/"
-				size = 0
-			} else {
-				kfiles, err := iio.KernelFiles()
-				if err != nil {
-					log.Errorf("%v", err)
-					os.Exit(1)
-				}
-
-				for _, kf := range kfiles {
-					if kf.Name == fpath {
-						s = fpath
-						size = kf.Size
-						break
-					}
-				}
-
-				if s == "" {
-					log.Errorf("kernel file not found: %s", fpath)
-					os.Exit(1)
-				}
-			}
-
-			log.Printf("File: %s\t%s", s, ftype)
-			log.Printf("Size: %s", PrintableSize(size))
-			log.Printf("Inode: -")
-			log.Printf("Access: -")
-			log.Printf("Uid: -")
-			log.Printf("Gid: -")
-			log.Printf("Access: -")
-			log.Printf("Modify: -")
-			log.Printf("Create: -")
-
-		} else {
-			ino, err := iio.ResolvePathToInodeNo(fpath)
-			if err != nil {
-				log.Errorf("%v", err)
-				os.Exit(1)
-			}
-
-			inode, err := iio.ResolveInode(ino)
-			if err != nil {
-				log.Errorf("%v", err)
-				os.Exit(1)
-			}
-
-			var ftype string
-
-			var user, group string
-			user = "?"  // TODO
-			group = "?" // TODO
-
-			log.Printf("File: %s\t%s", filepath.Base(fpath), ftype)
-			log.Printf("Size: %s", PrintableSize(vdecompiler.InodeSize(inode)))
-			// TODO: log.Printf("Blocks: %s", PrintableSize(int()))
-			// TODO: log.Printf("IO Block: %s", PrintableSize())
-			log.Printf("Inode: %d", ino)
-			// TODO: log.Printf("Links: %s")
-			log.Printf("Access: %#o/%s", inode.Permissions&ext.InodePermissionsMask, vdecompiler.InodePermissionsString(inode))
-			log.Printf("Uid: %d (%s)", inode.UID, user)
-			log.Printf("Gid: %d (%s)", inode.GID, group)
-			log.Printf("Access: %s", time.Unix(int64(inode.LastAccessTime), 0))
-			log.Printf("Modify: %s", time.Unix(int64(inode.ModificationTime), 0))
-			log.Printf("Create: %s", time.Unix(int64(inode.CreationTime), 0))
-		}
+		log.Printf("File: %s", fileStat.FileName)
+		log.Printf("Size: %s", PrintableSize(fileStat.Size))
+		log.Printf("Inode: %d", fileStat.Inode)
+		log.Printf("Permissions: %s", fileStat.Permissions)
+		log.Printf("Uid: %d (%s)", fileStat.UID, fileStat.User)
+		log.Printf("Gid: %d (%s)", fileStat.GID, fileStat.Group)
+		log.Printf("Access: %s", fileStat.Access)
+		log.Printf("Modify: %s", fileStat.Modify)
+		log.Printf("Create: %s", fileStat.Create)
 	},
 }
 
@@ -1138,121 +616,16 @@ var treeCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		img := args[0]
 
-		iio, err := vdecompiler.Open(img)
-		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
-		}
-		defer iio.Close()
-
-		var fpath string
+		var fpath string = "/"
 		if len(args) > 1 {
 			fpath = args[1]
-		} else {
-			fpath = "/"
 		}
 
-		if flagOS {
-			if fpath != "" && fpath != "/" && fpath != "." {
-				log.Errorf("bad FILE_PATH for vpartition: %s", fpath)
-				return
-			}
+		treeResults, err := imagetools.TreeImageFile(img, fpath, flagOS)
+		genericErrCheck(err, 1)
 
-			kfiles, err := iio.KernelFiles()
-			if err != nil {
-				log.Errorf("%v", err)
-				os.Exit(1)
-			}
+		log.Printf(treeResults.String())
 
-			log.Printf(fpath)
-
-			for i := 0; i < len(kfiles)-1; i++ {
-				log.Printf("├── %s", kfiles[i].Name)
-			}
-
-			log.Printf("└── %s", kfiles[len(kfiles)-1].Name)
-			return
-		}
-
-		var code []byte
-
-		var recurse func(int, string) error
-		recurse = func(ino int, name string) error {
-			inode, err := iio.ResolveInode(ino)
-			if err != nil {
-				return err
-			}
-
-			prefix := ""
-			idx := len(code) - 1
-
-			for i, c := range code {
-				switch c {
-				case 0:
-					prefix += "    "
-				case 1:
-					prefix += "│   "
-				case 2:
-					if i == idx {
-						prefix += "├── "
-					} else {
-						prefix += "│   "
-					}
-				case 3:
-					if i == idx {
-						prefix += "└── "
-					} else {
-						prefix += "    "
-					}
-				}
-			}
-
-			log.Printf("%s%s", prefix, name)
-
-			if !vdecompiler.InodeIsDirectory(inode) {
-				return nil
-			}
-
-			entries, err := iio.Readdir(inode)
-			if err != nil {
-				return err
-			}
-
-			if len(entries) > 2 {
-				idx++
-				code = append(code, 2)
-
-				for i := 2; i < len(entries)-1; i++ {
-					err = recurse(entries[i].Inode, entries[i].Name)
-					if err != nil {
-						return err
-					}
-				}
-
-				code[idx] = 3
-				err = recurse(entries[len(entries)-1].Inode, entries[len(entries)-1].Name)
-				if err != nil {
-					return err
-				}
-
-				code = code[:idx]
-				idx--
-			}
-
-			return nil
-		}
-
-		ino, err := iio.ResolvePathToInodeNo(fpath)
-		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
-		}
-
-		err = recurse(ino, fpath)
-		if err != nil {
-			log.Errorf("%v", err)
-			os.Exit(1)
-		}
 	},
 }
 

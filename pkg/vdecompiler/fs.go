@@ -25,8 +25,11 @@ func (iio *IO) readSuperblock(index int) (*ext.Superblock, error) {
 		return nil, err
 	}
 
-	bpg := int64(iio.fs.superblock.BlocksPerGroup)
-	bs := int64(1024 << iio.fs.superblock.BlockSize)
+	var bpg, bs int64
+	if index > 0 {
+		bpg = int64(iio.fs.superblock.BlocksPerGroup)
+		bs = int64(1024 << iio.fs.superblock.BlockSize)
+	}
 
 	_, err = iio.img.Seek(int64(int64(entry.FirstLBA)*vimg.SectorSize+ext.SuperblockOffset+(bs*bpg*int64(index))), io.SeekStart)
 	if err != nil {
@@ -98,8 +101,15 @@ func (iio *IO) readBGDT(index int) ([]*ext.BlockGroupDescriptorTableEntry, error
 
 	bgs := (sb.TotalBlocks + sb.BlocksPerGroup - 1) / sb.BlocksPerGroup
 	bgdt := make([]*ext.BlockGroupDescriptorTableEntry, bgs)
-	err = binary.Read(iio.img, binary.LittleEndian, bgdt)
-	return bgdt, err
+
+	for i := 0; i < int(bgs); i++ {
+		err = binary.Read(iio.img, binary.LittleEndian, &bgdt[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return bgdt, nil
 
 }
 

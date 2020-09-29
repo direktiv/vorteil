@@ -240,10 +240,7 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG, name st
 	var routesChecked bool
 
 	defer func() {
-		if err != nil {
-			return
-		}
-		virt.Close(false)
+		virt.Close(true)
 
 		if flagRecord != "" {
 			decompileSpinner := log.NewProgress("Decompiling Disk", "", 0)

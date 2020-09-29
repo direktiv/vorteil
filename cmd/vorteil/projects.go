@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"path/filepath"
 
 	"github.com/spf13/cobra"
@@ -84,6 +85,40 @@ Using a project as the source argument for packaging:
 	$ %s pack .::prod
 
 `,
+}
+
+var newProjectCmd = &cobra.Command{
+	Use:   "new [PROJECT]",
+	Short: "New creates a default.vcfg and a .vorteilproject at a certain directory",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		var err error
+		var projectPath string
+		if len(args) != 0 {
+			err = vcfgFlags.Validate()
+			if err != nil {
+				SetError(err, 1)
+				return
+			}
+			projectPath, err = filepath.Abs(args[0])
+			if err != nil {
+				SetError(err, 2)
+				return
+			}
+			// make sure directory is created
+			err = os.MkdirAll(projectPath, os.ModePerm)
+			if err != nil {
+				SetError(err, 3)
+				return
+			}
+
+			err = vproj.NewProject(projectPath, &overrideVCFG, log)
+			if err != nil {
+				SetError(err, 4)
+				return
+			}
+		}
+	},
 }
 
 var importSharedObjectsCmd = &cobra.Command{

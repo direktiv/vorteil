@@ -101,6 +101,9 @@ func commandInit() {
 	packagesCmd.AddCommand(packCmd)
 	packagesCmd.AddCommand(unpackCmd)
 
+	projectsCmd.AddCommand(newProjectCmd)
+	addModifyFlags(newProjectCmd.Flags())
+
 	projectsCmd.AddCommand(convertContainerCmd)
 	projectsCmd.AddCommand(importSharedObjectsCmd)
 
@@ -126,8 +129,8 @@ func addImagesCmd() {
 	imagesCmd.AddCommand(md5Cmd)
 	imagesCmd.AddCommand(statCmd)
 	imagesCmd.AddCommand(treeCmd)
-
 }
+
 func commandShortcut(cmd *cobra.Command) *cobra.Command {
 	c := *cmd
 	c.Aliases = []string{}

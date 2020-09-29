@@ -158,9 +158,13 @@ var decompileCmd = &cobra.Command{
 
 		srcPath := args[0]
 		outPath := args[1]
+		decompileSpinner := log.NewProgress("Decompiling Disk", "", 0)
+		defer decompileSpinner.Finish(true)
 		if err := runDecompile(srcPath, outPath, flagTouched); err != nil {
 			SetError(err, 1)
 		}
+		decompileSpinner.Finish(true)
+		log.Printf("Decompile Completed")
 	},
 }
 

@@ -197,15 +197,15 @@ func runDecompile(diskpath string, outpath string, skipUnTouched bool) error {
 	for _, dFile := range report.ImageFiles {
 		switch dFile.Result {
 		case imagetools.CopiedMkDir:
-			log.Printf("Creating Dir > %s", dFile.Path)
+			log.Debugf("Creating Dir > %s", dFile.Path)
 		case imagetools.CopiedRegularFile:
-			log.Printf("Copied File  > %s", dFile.Path)
+			log.Debugf("Copied File  > %s", dFile.Path)
 		case imagetools.CopiedSymlink:
-			log.Printf("Created Symlink > %s", dFile.Path)
+			log.Debugf("Created Symlink > %s", dFile.Path)
 		case imagetools.SkippedAbnormalFile:
-			log.Printf("Skipped Abnormal > %s", dFile.Path)
+			log.Debugf("Skipped Abnormal > %s", dFile.Path)
 		case imagetools.SkippedNotTouched:
-			log.Printf("Skipped Untouched File > %s", dFile.Path)
+			log.Debugf("Skipped Untouched File > %s", dFile.Path)
 		}
 	}
 
@@ -247,10 +247,14 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG, name st
 		virt.Close(false)
 
 		if flagRecord != "" {
+			decompileSpinner := log.NewProgress("Decompiling Disk", "", 0)
+			defer decompileSpinner.Finish(true)
 			if err := runDecompile(diskpath, flagRecord, flagTouched); err != nil {
 				SetError(err, 1)
 				return
 			}
+			decompileSpinner.Finish(true)
+			log.Printf("Decompile Completed")
 		}
 	}()
 

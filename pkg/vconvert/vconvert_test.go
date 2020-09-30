@@ -65,6 +65,8 @@ func TestBlobDownloadWorker(t *testing.T) {
 	}
 	defer os.RemoveAll(dir)
 
+	r.jobsCh = make(chan *job, len(r.layers))
+
 	go r.blobDownloadWorker()
 	r.jobsCh <- &j
 	<-r.jobsDoneCh

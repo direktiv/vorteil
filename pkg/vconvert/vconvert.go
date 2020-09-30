@@ -134,7 +134,6 @@ func NewContainerConverter(app, config string, log elog.View) (*ContainerConvert
 	}
 
 	cc.logger = log
-	cc.jobsCh = make(chan *job, workers)
 	cc.jobsDoneCh = make(chan *job, workers)
 
 	return cc, nil
@@ -248,6 +247,8 @@ func (cc *ContainerConverter) downloadBlobs(dir string) error {
 		return fmt.Errorf("directory not provided for downloads")
 	}
 
+	cc.jobsCh = make(chan *job, len(cc.layers))
+
 	// start workers
 	for i := 0; i < workers; i++ {
 		go cc.blobDownloadWorker()
@@ -268,12 +269,12 @@ func (cc *ContainerConverter) downloadBlobs(dir string) error {
 	cc.logger.Debugf("all %d jobs sent", len(cc.layers))
 	r := 0
 	for {
+
 		j := <-cc.jobsDoneCh
 		if j.err != nil {
 			cc.logger.Errorf("error downloading layer: %s", j.err.Error())
 		}
 		r++
-
 		cc.logger.Debugf("received %d from %d jobs finished", r, len(cc.layers))
 
 		// we have received all responses
@@ -344,6 +345,7 @@ func (cc *ContainerConverter) untarLayers(targetDir string) error {
 			r.Close()
 			return err
 		}
+		clog.L.Logger.SetLevel(logrus.InfoLevel)
 		r.Close()
 	}
 
@@ -479,9 +481,6 @@ func (cc *ContainerConverter) blobDownloadWorker() {
 		job.name = fmt.Sprintf(tarExpression, job.dir, job.layer.hash)
 
 		err = writeFile(job.name, pr)
-		if err != nil {
-			goto cont
-		}
 
 	cont:
 		job.err = err

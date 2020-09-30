@@ -20,7 +20,6 @@ type DecompileReport struct {
 // DecompiledFile ...
 type DecompiledFile struct {
 	Path   string
-	Copied bool
 	Result CopyResult
 }
 
@@ -101,7 +100,6 @@ func decompileImageRecursive(vorteilImage *vdecompiler.IO, report DecompileRepor
 
 	if report.SkipNotTouched && inode.LastAccessTime == 0 && !vdecompiler.InodeIsDirectory(inode) && rpath != "/" {
 		report.ImageFiles = append(report.ImageFiles, DecompiledFile{
-			Copied: false,
 			Path:   rpath,
 			Result: SkippedNotTouched,
 		})
@@ -122,7 +120,6 @@ func decompileImageRecursive(vorteilImage *vdecompiler.IO, report DecompileRepor
 		err = copyInodeToRegularFile(vorteilImage, inode, dpath)
 		if err == nil {
 			report.ImageFiles = append(report.ImageFiles, DecompiledFile{
-				Copied: false,
 				Path:   rpath,
 				Result: CopiedRegularFile,
 			})
@@ -130,9 +127,17 @@ func decompileImageRecursive(vorteilImage *vdecompiler.IO, report DecompileRepor
 		goto DONE
 	}
 
+	if vdecompiler.InodeIsSymlink(inode) {
+		symlinkCallbacks = append(symlinkCallbacks, createSymlinkCallback(vorteilImage, inode, dpath))
+		report.ImageFiles = append(report.ImageFiles, DecompiledFile{
+			Path:   rpath,
+			Result: CopiedSymlink,
+		})
+		goto DONE
+	}
+
 	if !vdecompiler.InodeIsDirectory(inode) {
 		report.ImageFiles = append(report.ImageFiles, DecompiledFile{
-			Copied: false,
 			Path:   rpath,
 			Result: SkippedAbnormalFile,
 		})
@@ -145,7 +150,6 @@ func decompileImageRecursive(vorteilImage *vdecompiler.IO, report DecompileRepor
 		err = os.MkdirAll(dpath, 0777)
 		if err == nil {
 			report.ImageFiles = append(report.ImageFiles, DecompiledFile{
-				Copied: false,
 				Path:   rpath,
 				Result: CopiedMkDir,
 			})

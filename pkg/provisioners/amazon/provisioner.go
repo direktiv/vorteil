@@ -135,7 +135,7 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 	var instanceID string
 	var instanceIP string
 
-	provisionProgress := p.args.Logger.NewProgress("Provising to AWS", "", 0)
+	provisionProgress := p.args.Logger.NewProgress("Provisioning to AWS", "", 0)
 	defer provisionProgress.Finish(true)
 
 	// Create EC2 Client

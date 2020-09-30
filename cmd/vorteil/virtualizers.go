@@ -193,6 +193,11 @@ func runHyperV(pkgReader vpkg.Reader, cfg *vcfg.VCFG, name string) error {
 		return err
 	}
 
+	err = vcfg.WithDefaults(cfg, log)
+	if err != nil {
+		return err
+	}
+
 	return run(virt, f.Name(), cfg, name)
 }
 
@@ -252,6 +257,11 @@ func runVirtualBox(pkgReader vpkg.Reader, cfg *vcfg.VCFG, name string) error {
 	}
 
 	err = virt.Initialize(config.Marshal())
+	if err != nil {
+		return err
+	}
+
+	err = vcfg.WithDefaults(cfg, log)
 	if err != nil {
 		return err
 	}
@@ -316,6 +326,10 @@ func runQEMU(pkgReader vpkg.Reader, cfg *vcfg.VCFG, name string) error {
 		return err
 	}
 
-	return run(virt, f.Name(), cfg, name)
+	err = vcfg.WithDefaults(cfg, log)
+	if err != nil {
+		return err
+	}
 
+	return run(virt, f.Name(), cfg, name)
 }

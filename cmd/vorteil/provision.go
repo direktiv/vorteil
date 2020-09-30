@@ -23,20 +23,33 @@ import (
 )
 
 var provisionCmd = &cobra.Command{
-	Use:   "provision BUILDABLE",
-	Short: "Provision a virtual machine",
-	Args:  cobra.ExactArgs(1),
+	Use:   "provision BUILDABLE PROVISIONER",
+	Short: "Provision a vorteil buildable",
+	Long: `Provision a vorteil buildable to a supported provisioner online.
+
+Example Command:
+ - Provisioning python3.vmdk to a aws provisioner:
+ $ vorteil images provision ./python3.vmdk ./awsProvisioner
+
+PROVISIONER is a file that has been created with the 'vorteil provisioners new' command.
+It tells vorteil where to provision your BUILDABLE to.
+
+If your PROVISIONER was created with a passphrase you can input this passphrase with the
+'--passphrase' flag when using the 'provision' command.`,
+	Args: cobra.ExactArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
+		var provisionFile string
+		provisionFile = args[1]
 
 		// Load the provided provisioner file
-		if _, err := os.Stat(provisionProvisionerFile); err != nil {
-			SetError(err, 1)
+		if _, err := os.Stat(provisionFile); err != nil {
+			SetError(fmt.Errorf("Could not read PROVISIONER '%s' , error: %v", provisionFile, err), 1)
 			return
 		}
 
-		b, err := ioutil.ReadFile(provisionProvisionerFile)
+		b, err := ioutil.ReadFile(provisionFile)
 		if err != nil {
-			SetError(err, 2)
+			SetError(fmt.Errorf("Could not read PROVISIONER '%s' , error: %v", provisionFile, err), 2)
 			return
 		}
 
@@ -201,7 +214,6 @@ var (
 	provisionDescription     string
 	provisionForce           bool
 	provisionReadyWhenUsable bool
-	provisionProvisionerFile string
 	provisionPassPhrase      string
 )
 
@@ -211,7 +223,6 @@ func init() {
 	f.StringVarP(&provisionDescription, "description", "D", "", "Description for the resulting image, if supported by the platform.")
 	f.BoolVarP(&provisionForce, "force", "f", false, "Force an overwrite if an existing image conflicts with the new.")
 	f.BoolVarP(&provisionReadyWhenUsable, "ready-when-usable", "r", false, "Return successfully as soon as the operation is complete, regardless of whether or not the platform is still processing the image.")
-	f.StringVarP(&provisionProvisionerFile, "provisioner", "p", "", "Path to file containing provisioner data.")
 	f.StringVarP(&provisionPassPhrase, "passphrase", "s", "", "Passphrase used to decrypt encrypted provisioner data.")
 }
 

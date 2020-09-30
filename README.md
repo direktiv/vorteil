@@ -85,7 +85,7 @@ vorteil run /tmp/hellolocal
 
 ### Deploying an Image
 
-To deploy an image to
+Vorteil can deploy the images to different cloud providers. Please read the [documentation](https://docs.vorteil.io/docs/guides/configure-provisioner/) for examples.
 
 
 ### Modify an Existing Package

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -73,20 +72,6 @@ func mkDirAllSlice(perm os.FileMode, dirs ...string) error {
 	return nil
 }
 
-func constructGetLastestKernelsFunc(ksrc vkern.Manager) func(ctx context.Context) (vkern.CalVer, error) {
-	return func(ctx context.Context) (vkern.CalVer, error) {
-		s, err := ksrc.Latest()
-		if err != nil {
-			return vkern.CalVer(""), err
-		}
-		k, err := vkern.Parse(s)
-		if err != nil {
-			return vkern.CalVer(""), err
-		}
-		return k, nil
-	}
-}
-
 func initKernels() error {
 	vCfg, err := loadVorteilConfig()
 	if err != nil {
@@ -109,7 +94,7 @@ func initKernels() error {
 
 	vkern.Global = ksrc
 	vimg.GetKernel = ksrc.Get
-	vimg.GetLatestKernel = constructGetLastestKernelsFunc(ksrc)
+	vimg.GetLatestKernel = vkern.ConstructGetLastestKernelsFunc(&ksrc)
 
 	return nil
 

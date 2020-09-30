@@ -138,6 +138,21 @@ type Manager interface {
 	Latest() (string, error)
 }
 
+// ConstructGetLastestKernelsFunc : Given a Kernel Manager will construct a function that returns the latest Kernel Version
+func ConstructGetLastestKernelsFunc(ksrc *Manager) func(ctx context.Context) (CalVer, error) {
+	return func(ctx context.Context) (CalVer, error) {
+		s, err := (*ksrc).Latest()
+		if err != nil {
+			return CalVer(""), err
+		}
+		k, err := Parse(s)
+		if err != nil {
+			return CalVer(""), err
+		}
+		return k, nil
+	}
+}
+
 // Utils
 func removeFiles(files ...string) error {
 	for _, fPath := range files {

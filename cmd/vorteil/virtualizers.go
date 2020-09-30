@@ -66,7 +66,7 @@ func runFirecracker(pkgReader vpkg.Reader, cfg *vcfg.VCFG, name string) error {
 		return errors.New("try running 'sudo vorteil firecracker-setup' before using firecracker")
 	}
 
-	// Create base folder to store virtualbox vms so the socket can be grouped
+	// Create base folder to store firecracker vms so the socket can be grouped
 	parent := fmt.Sprintf("%s-%s", firecracker.VirtualizerID, randstr.Hex(5))
 	parent = filepath.Join(os.TempDir(), parent)
 	defer os.RemoveAll(parent)
@@ -135,7 +135,7 @@ func runHyperV(pkgReader vpkg.Reader, cfg *vcfg.VCFG, name string) error {
 	if !hyperv.Allocator.IsAvailable() {
 		return errors.New("hyper-v is not enabled on your system")
 	}
-	// Create base folder to store virtualbox vms so the socket can be grouped
+	// Create base folder to store hyper-v vms so the socket can be grouped
 	parent := fmt.Sprintf("%s-%s", hyperv.VirtualizerID, randstr.Hex(5))
 	parent = filepath.Join(os.TempDir(), parent)
 
@@ -261,7 +261,7 @@ func runQEMU(pkgReader vpkg.Reader, cfg *vcfg.VCFG, name string) error {
 	if !qemu.Allocator.IsAvailable() {
 		return errors.New("qemu not installed on system")
 	}
-	// Create base folder to store virtualbox vms so the socket can be grouped
+	// Create base folder to store qemu vms so the socket can be grouped
 	parent := fmt.Sprintf("%s-%s", qemu.VirtualizerID, randstr.Hex(5))
 	parent = filepath.Join(os.TempDir(), parent)
 	defer os.RemoveAll(parent)

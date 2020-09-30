@@ -23,8 +23,9 @@ import (
 )
 
 var provisionCmd = &cobra.Command{
-	Use:  "provision BUILDABLE",
-	Args: cobra.ExactArgs(1),
+	Use:   "provision BUILDABLE",
+	Short: "Provision a virtual machine",
+	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 
 		// Load the provided provisioner file
@@ -253,7 +254,6 @@ var provisionersNewAmazonEC2Cmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 
-
 		f, err := os.OpenFile(args[0], os.O_RDWR|os.O_CREATE, 0644)
 		if err != nil {
 			SetError(err, 1)
@@ -300,7 +300,7 @@ var provisionersNewAzureCmd = &cobra.Command{
 	Short: "Add a new Microsoft Azure Provisioner.",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-	
+
 		f, err := os.OpenFile(args[0], os.O_RDWR|os.O_CREATE, 0644)
 		if err != nil {
 			SetError(err, 1)
@@ -336,7 +336,7 @@ var provisionersNewAzureCmd = &cobra.Command{
 
 		data, err := p.Marshal()
 		if err != nil {
-			SetError(err,5)
+			SetError(err, 5)
 			return
 		}
 
@@ -365,7 +365,7 @@ var provisionersNewGoogleCmd = &cobra.Command{
 	Short: "Add a new Google Cloud (Compute Engine) Provisioner.",
 	Args:  cobra.ExactArgs(1), // Single arg, points to output file
 	Run: func(cmd *cobra.Command, args []string) {
-	
+
 		f, err := os.OpenFile(args[0], os.O_RDWR|os.O_CREATE, 0644)
 		if err != nil {
 			SetError(err, 1)

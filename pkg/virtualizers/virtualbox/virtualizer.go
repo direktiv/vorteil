@@ -67,7 +67,7 @@ func (v *Virtualizer) getState() (string, error) {
 
 	err := v.execute(cmd)
 	if err != nil {
-		if strings.Contains(err.Error(), "Could not find a registered machine named") {
+		if strings.Contains(err.Error(), "Could not find a registered machine named") || strings.Contains(err.Error(), "The object is not ready") {
 			return "", nil
 		}
 		return "", err
@@ -113,7 +113,6 @@ func (v *Virtualizer) Stop() error {
 			if count > 10 {
 				v.state = virtualizers.Broken
 				v.logger.Errorf("Unable to stop virtual machine within 10 seconds powering off...")
-
 				err = v.ForceStop()
 				if err != nil {
 					return err
@@ -135,42 +134,39 @@ func (v *Virtualizer) Start() error {
 	switch v.State() {
 	case "ready":
 		v.state = virtualizers.Changing
-
-		go func() {
-			args := "gui"
-			if v.headless {
-				args = "headless"
-			}
-			var startVM func() error
-			startVM = func() error {
-				cmd := exec.Command("VBoxManage", "startvm", v.name, "--type", args)
-				err := v.execute(cmd)
-				if err != nil {
-					if strings.Contains(err.Error(), "is already locked by a session (or being locked or unlocked)") {
-						return startVM()
-					}
-					v.logger.Errorf("Error starting vm: %s", err.Error())
-					v.state = virtualizers.Broken
-
-					return err
-				}
-				return nil
-
-			}
-			err := startVM()
+		// This needs to be routined as its waiting for the pipe to start
+		go v.initLogging()
+		// go func() {
+		args := "gui"
+		if v.headless {
+			args = "headless"
+		}
+		var startVM func() error
+		startVM = func() error {
+			cmd := exec.Command("VBoxManage", "startvm", v.name, "--type", args)
+			err := v.execute(cmd)
 			if err != nil {
-				v.logger.Errorf("Error starting vm: %s", err.Error())
-				return
+				// Return function to retry as the machine is not ready yet
+				if strings.Contains(err.Error(), "is already locked by a session (or being locked or unlocked)") {
+					return startVM()
+				}
+				v.state = virtualizers.Broken
+				return err
 			}
-			if v.networkType != "nat" {
-				go func() {
-					v.routes = util.LookForIP(v.serialLogger, v.routes)
-				}()
-			}
+			return nil
 
-			v.state = virtualizers.Alive
-
-		}()
+		}
+		err := startVM()
+		if err != nil {
+			return err
+		}
+		if v.networkType != "nat" {
+			go func() {
+				v.routes = util.LookForIP(v.serialLogger, v.routes)
+			}()
+		}
+		v.state = virtualizers.Alive
+		// }()
 	default:
 		return fmt.Errorf("vm not in a state to be started currently in: %s", v.State())
 	}
@@ -224,11 +220,17 @@ func (v *Virtualizer) Close(force bool) error {
 	}
 	v.state = virtualizers.Deleted
 
-	stopVM := func() error {
+	var stopVM func() error
+	stopVM = func() error {
 		err := v.execute(exec.Command("VBoxManage", "unregistervm", v.name))
 		if err != nil {
 			if !strings.Contains(err.Error(),
 				fmt.Sprintf("Could not find a registered machine named")) {
+				// VM still shutting down
+				if strings.Contains(err.Error(), "is already locked by a session (or being locked or unlocked)") {
+					time.Sleep(time.Millisecond * 500)
+					return stopVM()
+				}
 				return err
 			}
 		}
@@ -240,7 +242,6 @@ func (v *Virtualizer) Close(force bool) error {
 			fmt.Sprintf("Cannot unregister the machine '%s' while it is locked",
 				v.name)) && !strings.Contains(err.Error(),
 			fmt.Sprintf("Could not find a registered machine")) && !strings.Contains(err.Error(), "(MISSING)") {
-
 			return err
 		}
 	}
@@ -423,7 +424,8 @@ func (v *Virtualizer) checkState() {
 	for {
 		state, err := v.getState()
 		if err != nil {
-			if !strings.Contains(err.Error(), "Could not find a registered machine") || !strings.Contains(err.Error(), "exit status 3221225786") || !strings.Contains(err.Error(), "The object is not ready") {
+			// Supressing errors that don't affect getting the state of the machine / errors that may error out because the virtual machine is gone.
+			if !strings.Contains(err.Error(), "signal: interrupt") && !strings.Contains(err.Error(), "Could not find a registered machine") && !strings.Contains(err.Error(), "exit status 3221225786") && !strings.Contains(err.Error(), "The object is not ready") {
 				v.logger.Errorf("Getting VM State: %s", err.Error())
 			}
 		}
@@ -724,8 +726,6 @@ func (o *operation) startupVM(path string, start bool) error {
 
 	o.state = "ready"
 	go o.checkState()
-	// This needs to be routined as its waiting for the pipe to start
-	go o.initLogging()
 
 	if start {
 		err = o.Start()

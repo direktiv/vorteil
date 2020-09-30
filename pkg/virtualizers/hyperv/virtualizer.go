@@ -97,7 +97,10 @@ func (v *Virtualizer) Stop() error {
 			return err
 		}
 		if len(output) != 0 {
-			v.logger.Infof("%s", output)
+			// If hyper-v is not running the cmdlets won't exist
+			if !strings.Contains(output, "is not recognized as the name of a cmdlet") {
+				v.logger.Infof("%s", output)
+			}
 		}
 
 		v.state = virtualizers.Ready
@@ -514,9 +517,6 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 
 	o.updateStatus(fmt.Sprintf("Preparing hyperv files..."))
 	defer func() {
-		if returnErr != nil {
-			o.logger.Errorf("Error Preparing VM: %v", returnErr)
-		}
 		o.finished(returnErr)
 	}()
 
@@ -543,6 +543,11 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 		return
 	}
 	if len(output) != 0 {
+		// If hyper-v is not running the cmdlets won't exist
+		if strings.Contains(output, "is not recognized as the name of a cmdlet") {
+			returnErr = errors.New("Hyper-V is not enabled please enable it via Windows Features")
+			return
+		}
 		o.logger.Infof("%s", output)
 	}
 

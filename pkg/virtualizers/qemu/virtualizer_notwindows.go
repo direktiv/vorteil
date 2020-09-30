@@ -88,7 +88,8 @@ func (v *Virtualizer) Start() error {
 // prepare sets the fields and arguments to spawn the virtual machine
 func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	var returnErr error
-
+	progress := o.logger.NewProgress("Preparing QEMU machine", "", 0)
+	defer progress.Finish(false)
 	o.updateStatus(fmt.Sprintf("Building qemu command..."))
 
 	defer func() {

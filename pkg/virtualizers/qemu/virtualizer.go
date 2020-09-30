@@ -50,7 +50,7 @@ type Virtualizer struct {
 	disk        *os.File    // disk of the machine
 	source      interface{} // details about how the vm was made
 	// loggers
-	logger elog.Logger
+	logger elog.View
 	// virtLogger   *logger.Logger // logs about the provisioning process
 	serialLogger *logger.Logger // logs for the serial of the vm
 	// QEMU Specific
@@ -69,6 +69,9 @@ type Virtualizer struct {
 
 // createArgs create generic qemu arguments for running a VM on QEMU
 func createArgs(cpus uint, memory int, headless bool, diskpath string, diskformat string) string {
+	if cpus == 0 {
+		cpus = 1
+	}
 	argsCommand := fmt.Sprintf("%s -no-reboot -machine q35 -smp %v -m %v -serial stdio", osFlags, cpus, memory)
 
 	if headless {

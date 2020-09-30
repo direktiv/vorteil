@@ -4,13 +4,16 @@ package vconvert
 
 import (
 	"os"
+	"runtime"
 	"syscall"
 )
 
 func fetchUIDandGID() (int, int) {
 
-	// we need to check 3, because on mac it is the only of the std files
-	// with the gid set to the user. the rest is owned by tty
+	if runtime.GOOS == "darwin" {
+		return 501, 20
+	}
+
 	s, err := os.Lstat("/dev/fd/3")
 	if err == nil {
 		if stat, ok := s.Sys().(*syscall.Stat_t); ok {

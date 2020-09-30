@@ -108,6 +108,16 @@ func decompileImageRecursive(vorteilImage *vdecompiler.IO, report DecompileRepor
 		goto DONE
 	}
 
+	if vdecompiler.InodeIsSymlink(inode) {
+		symlinkCallbacks = append(symlinkCallbacks, createSymlinkCallback(vorteilImage, inode, dpath))
+		report.ImageFiles = append(report.ImageFiles, DecompiledFile{
+			Copied: false,
+			Path:   rpath,
+			Result: CopiedSymlink,
+		})
+		goto DONE
+	}
+
 	if vdecompiler.InodeIsRegularFile(inode) {
 		err = copyInodeToRegularFile(vorteilImage, inode, dpath)
 		if err == nil {
@@ -117,16 +127,6 @@ func decompileImageRecursive(vorteilImage *vdecompiler.IO, report DecompileRepor
 				Result: CopiedRegularFile,
 			})
 		}
-		goto DONE
-	}
-
-	if vdecompiler.InodeIsSymlink(inode) {
-		symlinkCallbacks = append(symlinkCallbacks, createSymlinkCallback(vorteilImage, inode, dpath))
-		report.ImageFiles = append(report.ImageFiles, DecompiledFile{
-			Copied: false,
-			Path:   rpath,
-			Result: CopiedSymlink,
-		})
 		goto DONE
 	}
 

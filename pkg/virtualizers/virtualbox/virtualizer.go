@@ -38,7 +38,7 @@ type Virtualizer struct {
 	folder        string         // folder to store vm details
 	disk          *os.File       // disk of the machine
 	serialLogger  *logger.Logger // serial logger for serial output of app
-	logger        elog.Logger    // logger for the CLI
+	logger        elog.View      // logger for the CLI
 	// subServer *graph.Graph
 	routes []virtualizers.NetworkInterface // api network interface that displays ports
 	config *vcfg.VCFG                      // config for the vm
@@ -682,7 +682,8 @@ func (o *operation) checkIfHost() (bool, error) {
 func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	var returnErr error
 	var err error
-
+	progress := o.logger.NewProgress("Preparing VirtualBox machine", "", 0)
+	defer progress.Finish(false)
 	o.updateStatus(fmt.Sprintf("Preparing virtualbox files..."))
 	defer func() {
 		o.finished(returnErr)

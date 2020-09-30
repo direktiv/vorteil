@@ -33,7 +33,7 @@ type Virtualizer struct {
 	switchName   string      // The virtual switch hyper-v will use
 	folder       string      // The folder to store vm details and objects
 	disk         *os.File    // disk of the machine
-	logger       elog.Logger
+	logger       elog.View
 	serialLogger *logger.Logger                  // logs for the serial of the vm
 	routes       []virtualizers.NetworkInterface // api network interface that displays ports and network types
 
@@ -514,7 +514,8 @@ func (o *operation) setVMDetails(size string) error {
 // prepare sets the fields and arguments to spawn the virtual machine
 func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	var returnErr error
-
+	progress := o.logger.NewProgress("Preparing Hyper-v machine", "", 0)
+	defer progress.Finish(false)
 	o.updateStatus(fmt.Sprintf("Preparing hyperv files..."))
 	defer func() {
 		o.finished(returnErr)

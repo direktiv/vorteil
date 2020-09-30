@@ -188,7 +188,6 @@ func getBuilderFile(argName, src string) (vpkg.Builder, error) {
 
 	pkgr, err := getReaderFile(src)
 	if err != nil {
-		pkgr.Close()
 		return nil, err
 	}
 	pkgb, err := vpkg.NewBuilderFromReader(pkgr)

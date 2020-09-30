@@ -28,8 +28,8 @@ var provisionCmd = &cobra.Command{
 	Long: `Provision a vorteil buildable to a supported provisioner online.
 
 Example Command:
- - Provisioning python3.vmdk to a aws provisioner:
- $ vorteil images provision ./python3.vmdk ./awsProvisioner
+ - Provisioning python3 package to an aws provisioner:
+ $ vorteil images provision ./python3.vorteil ./awsProvisioner
 
 PROVISIONER is a file that has been created with the 'vorteil provisioners new' command.
 It tells vorteil where to provision your BUILDABLE to.

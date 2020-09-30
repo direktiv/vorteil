@@ -87,8 +87,9 @@ func runFirecracker(pkgReader vpkg.Reader, cfg *vcfg.VCFG, name string) error {
 	defer os.Remove(parent)
 
 	kernelVer, err := buildFirecracker(context.Background(), f, cfg, &vdisk.BuildArgs{
-		PackageReader: pkgReader,
-		Format:        firecracker.Allocator.DiskFormat(),
+		WithVCFGDefaults: true,
+		PackageReader:    pkgReader,
+		Format:           firecracker.Allocator.DiskFormat(),
 		KernelOptions: vdisk.KernelOptions{
 			Shell: flagShell,
 		},
@@ -157,8 +158,9 @@ func runHyperV(pkgReader vpkg.Reader, cfg *vcfg.VCFG, name string) error {
 	defer os.RemoveAll(parent)
 
 	err = vdisk.Build(context.Background(), f, &vdisk.BuildArgs{
-		PackageReader: pkgReader,
-		Format:        hyperv.Allocator.DiskFormat(),
+		WithVCFGDefaults: true,
+		PackageReader:    pkgReader,
+		Format:           hyperv.Allocator.DiskFormat(),
 		KernelOptions: vdisk.KernelOptions{
 			Shell: flagShell,
 		},
@@ -219,8 +221,9 @@ func runVirtualBox(pkgReader vpkg.Reader, cfg *vcfg.VCFG, name string) error {
 	defer os.Remove(parent)
 
 	err = vdisk.Build(context.Background(), f, &vdisk.BuildArgs{
-		PackageReader: pkgReader,
-		Format:        virtualbox.Allocator.DiskFormat(),
+		WithVCFGDefaults: true,
+		PackageReader:    pkgReader,
+		Format:           virtualbox.Allocator.DiskFormat(),
 		KernelOptions: vdisk.KernelOptions{
 			Shell: flagShell,
 		},
@@ -279,8 +282,9 @@ func runQEMU(pkgReader vpkg.Reader, cfg *vcfg.VCFG, name string) error {
 	defer os.Remove(parent)
 
 	err = vdisk.Build(context.Background(), f, &vdisk.BuildArgs{
-		PackageReader: pkgReader,
-		Format:        qemu.Allocator.DiskFormat(),
+		WithVCFGDefaults: true,
+		PackageReader:    pkgReader,
+		Format:           qemu.Allocator.DiskFormat(),
 		KernelOptions: vdisk.KernelOptions{
 			Shell: flagShell,
 		},

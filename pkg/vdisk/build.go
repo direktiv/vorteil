@@ -24,11 +24,12 @@ type KernelOptions struct {
 // BuildArgs contains all arguments a caller can use to customize the behaviour
 // of the Build function.
 type BuildArgs struct {
-	PackageReader vpkg.Reader
-	Format        Format
-	SizeAlign     int64
-	KernelOptions KernelOptions
-	Logger        elog.View
+	PackageReader    vpkg.Reader
+	Format           Format
+	SizeAlign        int64
+	KernelOptions    KernelOptions
+	Logger           elog.View
+	WithVCFGDefaults bool
 }
 
 // NegotiateSize prebuilds the minimum amount for a disk.
@@ -118,6 +119,14 @@ func Build(ctx context.Context, w io.WriteSeeker, args *BuildArgs) error {
 		return err
 	}
 	_ = vf.Close()
+
+	if args.WithVCFGDefaults {
+		args.Logger.Debugf("Using VCFG defaults for omitted fields")
+		err = vcfg.WithDefaults(cfg, args.Logger)
+		if err != nil {
+			return err
+		}
+	}
 
 	err = build(ctx, w, cfg, args)
 	if err != nil {

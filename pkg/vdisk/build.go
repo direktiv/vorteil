@@ -48,9 +48,7 @@ func NegotiateSize(ctx context.Context, vimgBuilder *vimg.Builder, cfg *vcfg.VCF
 		alignment = 1
 	}
 	alignment = lcm(args.Format.Alignment(), alignment)
-	if size%args.Format.Alignment() != 0 {
-		size = (size/alignment + 1) * alignment
-	}
+	size = ((size + alignment - 1) / alignment) * alignment
 
 	err := vimgBuilder.Prebuild(ctx, size)
 	if err != nil {

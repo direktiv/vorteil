@@ -10,7 +10,8 @@ import (
 	"github.com/vorteil/vorteil/pkg/vdecompiler"
 )
 
-// CopyImageFile ...
+// CopyImageFile copies a the file at imageFilePath from inside the vorteilImage to destFilePath in the system
+//	SeekOS can be set to true, to copy a file from inside of the images Vorteil Os Partition.
 func CopyImageFile(vorteilImage *vdecompiler.IO, imageFilePath string, destFilePath string, seekOS bool) error {
 	fi, err := os.Stat(destFilePath)
 	if err != nil && !os.IsNotExist(err) {

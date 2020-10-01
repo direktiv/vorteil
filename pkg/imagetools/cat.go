@@ -8,7 +8,9 @@ import (
 	"github.com/vorteil/vorteil/pkg/vdecompiler"
 )
 
-// CatImageFile ...
+// CatImageFile returns a io.Reader that reads the contents of the file at the imageFilePath inside
+// 	the passed vorteilImage. If the path does not exist inside vorteilImage the reader is returned
+// 	as nil accompanied by an error.
 func CatImageFile(vorteilImage *vdecompiler.IO, imageFilePath string, os bool) (io.Reader, error) {
 	var rdr io.Reader
 	var err error

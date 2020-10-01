@@ -3,7 +3,6 @@
 package firecracker
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -90,24 +89,24 @@ func createIfc(name string) error {
 
 }
 
-// FetchBridgeDev attempts to retrieve the bridge device
-func FetchBridgeDev() error {
-	// Check if bridge device exists
+// FetchBridgeDevice check if the bridge exists
+func FetchBridgeDevice() error {
 	_, err := tenus.BridgeFromName(vorteilBridge)
 	if err != nil {
-		return errors.New("try running 'vorteil firecracker-setup' before using firecracker")
+		return err
 	}
-	return err
+	return nil
 }
 
 // SetupBridgeAndDHCPServer creates the bridge which provides DHCP addresses todo
 // firecracker instances.
 func SetupBridge(log elog.View, ip string) error {
 
-	log.Printf("creating bridge %s", vorteilBridge)
-	// // Create bridge device
+	bridgeExists := true
+	// Create bridge device
 	bridger, err := tenus.NewBridgeWithName(vorteilBridge)
 	if err != nil {
+		bridgeExists = false
 		if !strings.Contains(err.Error(), "Interface name vorteil-bridge already assigned on the host") {
 			return err
 		}
@@ -117,6 +116,11 @@ func SetupBridge(log elog.View, ip string) error {
 			return err
 		}
 	}
+
+	if !bridgeExists {
+		log.Printf("creating bridge %s", vorteilBridge)
+	}
+
 	// Switch bridge up
 	if err = bridger.SetLinkUp(); err != nil {
 		return err

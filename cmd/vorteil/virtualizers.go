@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"runtime"
 
+	"github.com/beeker1121/goque"
 	"github.com/thanhpk/randstr"
 	"github.com/vorteil/vorteil/pkg/ext"
 	"github.com/vorteil/vorteil/pkg/vcfg"
@@ -23,20 +24,27 @@ import (
 	"github.com/vorteil/vorteil/pkg/vpkg"
 )
 
-var ips *iputil.IPStack
+var ips *goque.Queue
 
 // buildFirecracker does the same thing as vdisk.Build but it returns me a calver of the kernel being used
 func buildFirecracker(ctx context.Context, w io.WriteSeeker, cfg *vcfg.VCFG, args *vdisk.BuildArgs) (string, error) {
+	var err error
 	for i := range cfg.Networks {
-		ip := ips.Pop()
-		if ip == "" {
-			return "", errors.New("no more ips in stack")
-
+		if ips == nil {
+			ips, err = iputil.NewIPStack()
+			if err != nil {
+				return "", err
+			}
 		}
-		cfg.Networks[i].IP = ip
-		cfg.Networks[i].Gateway = "10.26.10.1"
+		ip, err := ips.Dequeue()
+		if err != nil {
+			return "", err
+		}
+		cfg.Networks[i].IP = ip.ToString()
+		cfg.Networks[i].Gateway = iputil.BridgeIP
 		cfg.Networks[i].Mask = "255.255.255.0"
 	}
+	defer ips.Close()
 	vimgBuilder, err := vdisk.CreateBuilder(ctx, &vimg.BuilderArgs{
 		Kernel: vimg.KernelOptions{
 			Shell: args.KernelOptions.Shell,
@@ -67,6 +75,7 @@ func buildFirecracker(ctx context.Context, w io.WriteSeeker, cfg *vcfg.VCFG, arg
 
 // runFirecracker needs a longer build process so we can pull the calver of the kernel used to build the disk
 func runFirecracker(pkgReader vpkg.Reader, cfg *vcfg.VCFG, name string) error {
+	var err error
 	if runtime.GOOS != "linux" {
 		return errors.New("firecracker is only available on linux")
 	}
@@ -74,16 +83,15 @@ func runFirecracker(pkgReader vpkg.Reader, cfg *vcfg.VCFG, name string) error {
 		return errors.New("firecracker is not installed on your system")
 	}
 
-	ips = iputil.NewIPStack()
-	ip := ips.Pop()
-	if ip == "" {
-		return errors.New("no more ips in stack")
+	err = firecracker.FetchBridgeDevice()
+	if err != nil {
+		// Set bridge device to 10.26.10.1
+		err = firecracker.SetupBridge(log, iputil.BridgeIP)
+		if err != nil {
+			return err
+		}
 	}
 
-	err := firecracker.SetupBridge(log, ip)
-	if err != nil {
-		return err
-	}
 	// Create base folder to store firecracker vms so the socket can be grouped
 	parent := fmt.Sprintf("%s-%s", firecracker.VirtualizerID, randstr.Hex(5))
 	parent = filepath.Join(os.TempDir(), parent)

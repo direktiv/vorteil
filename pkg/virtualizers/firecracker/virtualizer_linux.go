@@ -77,152 +77,6 @@ type Virtualizer struct {
 	vmdrive string // store disks in this directory
 }
 
-// Detach ... Potentially Todo i think firecracker detach is alot more complicated because of the tap devices
-// func (v *Virtualizer) Detach(source string) error {
-// 	if v.state != virtualizers.Ready {
-// 		return errors.New("virtual machine must be in ready state to detach")
-// 	}
-// 	name := filepath.Base(v.folder)
-
-// 	err := os.MkdirAll(filepath.Join(source), 0777)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	err = os.Rename(v.folder, filepath.Join(source, name))
-// 	if err != nil {
-// 		return err
-// 	}
-
-// 	v.config.VM.RAM.Align(vcfg.MiB * 2)
-
-// 	// close and cleanup tap devices
-// 	// stopVMM
-// 	err = v.machine.StopVMM()
-// 	if err != nil {
-// 		return err
-// 	}
-
-// 	v.state = virtualizers.Deleted
-
-// 	cleanup, err := os.Create(filepath.Join(source, name, "cleanup.sh"))
-// 	if err != nil {
-// 		return err
-// 	}
-// 	defer cleanup.Close()
-// 	var tapArgs []string
-// 	var tapCreation []string
-// 	type NetworkInterface struct {
-// 		IfaceID     string `json:"iface_id"`
-// 		HostDevName string `json:"host_dev_name"`
-// 	}
-// 	var networkCards []NetworkInterface
-// 	// write script for Tap setup
-// 	if len(v.routes) > 0 {
-// 		for i := 0; i < len(v.routes); i++ {
-// 			ifceName := fmt.Sprintf("%s-%s", v.id, strconv.Itoa(i))
-// 			tapCreation = append(tapCreation, ifceName)
-// 		}
-// 		for _, tap := range tapCreation {
-// 			tapArgs = append(tapArgs, fmt.Sprintf("sudo ip tuntap add dev %s mode tap", tap))
-// 			tapArgs = append(tapArgs, fmt.Sprintf("sudo brctl addif vorteil-bridge %s", tap))
-// 			tapArgs = append(tapArgs, fmt.Sprintf("sudo ip link set dev %s up", tap))
-// 			cleanup.Write([]byte(fmt.Sprintf("sudo ip link delete %s\n", tap)))
-
-// 			networkCards = append(networkCards, NetworkInterface{
-// 				IfaceID:     "vorteil-bridge",
-// 				HostDevName: tap,
-// 			})
-// 		}
-// 	}
-// 	f, err := os.Create(filepath.Join(source, name, "interfaces.sh"))
-// 	if err != nil {
-// 		return err
-// 	}
-// 	f.Write([]byte(strings.Join(tapArgs, "\n")))
-// 	defer f.Close()
-
-// 	type Drive struct {
-// 		DriveID      string `json:"drive_id"`
-// 		PathOnHost   string `json:"path_on_host"`
-// 		IsRootDevice bool   `json:"is_root_device"`
-// 		IsReadOnly   bool   `json:"is_read_only"`
-// 	}
-// 	type BootSource struct {
-// 		KernelImagePath string `json:"kernel_image_path"`
-// 		BootArgs        string `json:"boot_args"`
-// 	}
-// 	type MachineConfig struct {
-// 		VcpuCount  int  `json:"vcpu_count"`
-// 		MemSizeMib int  `json:"mem_size_mib"`
-// 		HtEnabled  bool `json:"ht_enabled"`
-// 	}
-// 	type fcConfig struct {
-// 		BootSource        BootSource         `json:"boot-source"`
-// 		Drives            []Drive            `json:"drives"`
-// 		MachineConfig     MachineConfig      `json:"machine-config"`
-// 		NetworkInterfaces []NetworkInterface `json:"network-interfaces"`
-// 	}
-
-// 	drive := Drive{
-// 		DriveID:      "rootfs",
-// 		PathOnHost:   filepath.Join(source, name, fmt.Sprintf("%s.raw", v.name)),
-// 		IsRootDevice: true,
-// 		IsReadOnly:   false,
-// 	}
-// 	var drives []Drive
-// 	drives = append(drives, drive)
-
-// 	var config fcConfig
-// 	config.Drives = drives
-// 	config.BootSource = BootSource{
-// 		KernelImagePath: v.kip,
-// 		BootArgs:        "init=/vorteil/vinitd reboot=k panic=1 pci=off i8042.noaux i8042.nomux i8042.nopnp i8042.dumbkbd  vt.color=0x00",
-// 	}
-// 	config.MachineConfig = MachineConfig{
-// 		VcpuCount:  int(v.config.VM.CPUs),
-// 		HtEnabled:  false,
-// 		MemSizeMib: v.config.VM.RAM.Units(vcfg.MiB),
-// 	}
-// 	config.NetworkInterfaces = networkCards
-
-// 	data, err := json.Marshal(config)
-// 	if err != nil {
-// 		return err
-// 	}
-
-// 	jf, err := os.Create(filepath.Join(source, name, "config.json"))
-// 	if err != nil {
-// 		return err
-// 	}
-// 	defer jf.Close()
-// 	jf.Write(data)
-
-// 	start, err := os.Create(filepath.Join(source, name, "start.sh"))
-// 	if err != nil {
-// 		return err
-// 	}
-// 	defer start.Close()
-// 	start.Write([]byte("sudo ./interfaces.sh\nfirecracker --api-sock ./firecracker.socket --config-file ./config.json"))
-
-// 	// Chmod scripts
-// 	err = os.Chmod(start.Name(), 0777)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	err = os.Chmod(f.Name(), 0777)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	err = os.Chmod(cleanup.Name(), 0777)
-// 	if err != nil {
-// 		return err
-// 	}
-
-// 	// remove virtualizer from active vms
-// 	virtualizers.ActiveVMs.Delete(v.name)
-// 	return nil
-// }
-
 // Type returns the type of virtualizer
 func (v *Virtualizer) Type() string {
 	return VirtualizerID
@@ -496,28 +350,31 @@ func (o *operation) generateFirecrackerConfig(diskpath string) (firecracker.Conf
 
 func (o *operation) deviceCreation() error {
 
-	ifceName := fmt.Sprintf("eth%s", o.id)
+	for i := range o.config.Networks {
+		ifceName := fmt.Sprintf("eth%s%v", o.id, i)
 
-	// create interface
-	err := createIfc(ifceName)
-	if err != nil {
-		return err
+		// create interface
+		err := createIfc(ifceName)
+		if err != nil {
+			return err
+		}
+
+		// attach to bridge
+		ifc, err := net.InterfaceByName(ifceName)
+		if err != nil {
+			return err
+		}
+
+		// Add tap device to bridge
+		err = o.bridgeDevice.AddSlaveIfc(ifc)
+		if err != nil {
+			return err
+		}
+
+		o.tapDevicesName = append(o.tapDevicesName, ifceName)
+		o.tapDevices = append(o.tapDevices, ifc)
 	}
 
-	// attach to bridge
-	ifc, err := net.InterfaceByName(ifceName)
-	if err != nil {
-		return err
-	}
-
-	// Add tap device to bridge
-	err = o.bridgeDevice.AddSlaveIfc(ifc)
-	if err != nil {
-		return err
-	}
-
-	o.tapDevicesName = append(o.tapDevicesName, ifceName)
-	o.tapDevices = append(o.tapDevices, ifc)
 	return nil
 }
 
@@ -568,3 +425,149 @@ func (v *Virtualizer) Start() error {
 	}
 	return nil
 }
+
+// Detach ... Potentially Todo i think firecracker detach is alot more complicated because of the tap devices
+// func (v *Virtualizer) Detach(source string) error {
+// 	if v.state != virtualizers.Ready {
+// 		return errors.New("virtual machine must be in ready state to detach")
+// 	}
+// 	name := filepath.Base(v.folder)
+
+// 	err := os.MkdirAll(filepath.Join(source), 0777)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	err = os.Rename(v.folder, filepath.Join(source, name))
+// 	if err != nil {
+// 		return err
+// 	}
+
+// 	v.config.VM.RAM.Align(vcfg.MiB * 2)
+
+// 	// close and cleanup tap devices
+// 	// stopVMM
+// 	err = v.machine.StopVMM()
+// 	if err != nil {
+// 		return err
+// 	}
+
+// 	v.state = virtualizers.Deleted
+
+// 	cleanup, err := os.Create(filepath.Join(source, name, "cleanup.sh"))
+// 	if err != nil {
+// 		return err
+// 	}
+// 	defer cleanup.Close()
+// 	var tapArgs []string
+// 	var tapCreation []string
+// 	type NetworkInterface struct {
+// 		IfaceID     string `json:"iface_id"`
+// 		HostDevName string `json:"host_dev_name"`
+// 	}
+// 	var networkCards []NetworkInterface
+// 	// write script for Tap setup
+// 	if len(v.routes) > 0 {
+// 		for i := 0; i < len(v.routes); i++ {
+// 			ifceName := fmt.Sprintf("%s-%s", v.id, strconv.Itoa(i))
+// 			tapCreation = append(tapCreation, ifceName)
+// 		}
+// 		for _, tap := range tapCreation {
+// 			tapArgs = append(tapArgs, fmt.Sprintf("sudo ip tuntap add dev %s mode tap", tap))
+// 			tapArgs = append(tapArgs, fmt.Sprintf("sudo brctl addif vorteil-bridge %s", tap))
+// 			tapArgs = append(tapArgs, fmt.Sprintf("sudo ip link set dev %s up", tap))
+// 			cleanup.Write([]byte(fmt.Sprintf("sudo ip link delete %s\n", tap)))
+
+// 			networkCards = append(networkCards, NetworkInterface{
+// 				IfaceID:     "vorteil-bridge",
+// 				HostDevName: tap,
+// 			})
+// 		}
+// 	}
+// 	f, err := os.Create(filepath.Join(source, name, "interfaces.sh"))
+// 	if err != nil {
+// 		return err
+// 	}
+// 	f.Write([]byte(strings.Join(tapArgs, "\n")))
+// 	defer f.Close()
+
+// 	type Drive struct {
+// 		DriveID      string `json:"drive_id"`
+// 		PathOnHost   string `json:"path_on_host"`
+// 		IsRootDevice bool   `json:"is_root_device"`
+// 		IsReadOnly   bool   `json:"is_read_only"`
+// 	}
+// 	type BootSource struct {
+// 		KernelImagePath string `json:"kernel_image_path"`
+// 		BootArgs        string `json:"boot_args"`
+// 	}
+// 	type MachineConfig struct {
+// 		VcpuCount  int  `json:"vcpu_count"`
+// 		MemSizeMib int  `json:"mem_size_mib"`
+// 		HtEnabled  bool `json:"ht_enabled"`
+// 	}
+// 	type fcConfig struct {
+// 		BootSource        BootSource         `json:"boot-source"`
+// 		Drives            []Drive            `json:"drives"`
+// 		MachineConfig     MachineConfig      `json:"machine-config"`
+// 		NetworkInterfaces []NetworkInterface `json:"network-interfaces"`
+// 	}
+
+// 	drive := Drive{
+// 		DriveID:      "rootfs",
+// 		PathOnHost:   filepath.Join(source, name, fmt.Sprintf("%s.raw", v.name)),
+// 		IsRootDevice: true,
+// 		IsReadOnly:   false,
+// 	}
+// 	var drives []Drive
+// 	drives = append(drives, drive)
+
+// 	var config fcConfig
+// 	config.Drives = drives
+// 	config.BootSource = BootSource{
+// 		KernelImagePath: v.kip,
+// 		BootArgs:        "init=/vorteil/vinitd reboot=k panic=1 pci=off i8042.noaux i8042.nomux i8042.nopnp i8042.dumbkbd  vt.color=0x00",
+// 	}
+// 	config.MachineConfig = MachineConfig{
+// 		VcpuCount:  int(v.config.VM.CPUs),
+// 		HtEnabled:  false,
+// 		MemSizeMib: v.config.VM.RAM.Units(vcfg.MiB),
+// 	}
+// 	config.NetworkInterfaces = networkCards
+
+// 	data, err := json.Marshal(config)
+// 	if err != nil {
+// 		return err
+// 	}
+
+// 	jf, err := os.Create(filepath.Join(source, name, "config.json"))
+// 	if err != nil {
+// 		return err
+// 	}
+// 	defer jf.Close()
+// 	jf.Write(data)
+
+// 	start, err := os.Create(filepath.Join(source, name, "start.sh"))
+// 	if err != nil {
+// 		return err
+// 	}
+// 	defer start.Close()
+// 	start.Write([]byte("sudo ./interfaces.sh\nfirecracker --api-sock ./firecracker.socket --config-file ./config.json"))
+
+// 	// Chmod scripts
+// 	err = os.Chmod(start.Name(), 0777)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	err = os.Chmod(f.Name(), 0777)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	err = os.Chmod(cleanup.Name(), 0777)
+// 	if err != nil {
+// 		return err
+// 	}
+
+// 	// remove virtualizer from active vms
+// 	virtualizers.ActiveVMs.Delete(v.name)
+// 	return nil
+// }

@@ -313,8 +313,8 @@ func (v *Virtualizer) Close(force bool) error {
 		}
 
 		// Cleanup tap devices
-		for _, ifname := range o.tapDevicesName {
-			err = tenus.DeleteLink(name)
+		for _, ifname := range v.tapDevicesName {
+			err = tenus.DeleteLink(ifname)
 			if err != nil {
 				return err
 			}

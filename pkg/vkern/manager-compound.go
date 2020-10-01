@@ -37,10 +37,6 @@ func (mgr *CompoundManager) Get(ctx context.Context, version CalVer) (*ManagedBu
 		return mgr.mgrs[tuple.Idx].Get(ctx, tuple.Version)
 	}
 
-	if err != nil {
-		return nil, err
-	}
-
 	// this branch in logic exists to handle CLI-style situations where the list might not update until the get call
 	for _, m := range mgr.mgrs {
 		b, err = m.Get(ctx, version)

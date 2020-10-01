@@ -94,7 +94,7 @@ func commandInit() {
 	rootCmd.AddCommand(projectsCmd)
 	rootCmd.AddCommand(provisionersCmd)
 	rootCmd.AddCommand(runCmd)
-	rootCmd.AddCommand(initFirecrackerCmd)
+	// rootCmd.AddCommand(initFirecrackerCmd)
 
 	addImagesCmd()
 

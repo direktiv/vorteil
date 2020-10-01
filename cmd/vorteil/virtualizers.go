@@ -17,13 +17,26 @@ import (
 	"github.com/vorteil/vorteil/pkg/vimg"
 	"github.com/vorteil/vorteil/pkg/virtualizers/firecracker"
 	"github.com/vorteil/vorteil/pkg/virtualizers/hyperv"
+	"github.com/vorteil/vorteil/pkg/virtualizers/iputil"
 	"github.com/vorteil/vorteil/pkg/virtualizers/qemu"
 	"github.com/vorteil/vorteil/pkg/virtualizers/virtualbox"
 	"github.com/vorteil/vorteil/pkg/vpkg"
 )
 
+var ips *iputil.IPStack
+
 // buildFirecracker does the same thing as vdisk.Build but it returns me a calver of the kernel being used
 func buildFirecracker(ctx context.Context, w io.WriteSeeker, cfg *vcfg.VCFG, args *vdisk.BuildArgs) (string, error) {
+	for i := range cfg.Networks {
+		ip := ips.Pop()
+		if ip == "" {
+			return "", errors.New("no more ips in stack")
+
+		}
+		cfg.Networks[i].IP = ip
+		cfg.Networks[i].Gateway = "10.26.10.1"
+		cfg.Networks[i].Mask = "255.255.255.0"
+	}
 	vimgBuilder, err := vdisk.CreateBuilder(ctx, &vimg.BuilderArgs{
 		Kernel: vimg.KernelOptions{
 			Shell: args.KernelOptions.Shell,
@@ -60,12 +73,17 @@ func runFirecracker(pkgReader vpkg.Reader, cfg *vcfg.VCFG, name string) error {
 	if !firecracker.Allocator.IsAvailable() {
 		return errors.New("firecracker is not installed on your system")
 	}
-	// Check if bridge device exists
-	err := firecracker.FetchBridgeDev()
-	if err != nil {
-		return errors.New("try running 'sudo vorteil firecracker-setup' before using firecracker")
+
+	ips = iputil.NewIPStack()
+	ip := ips.Pop()
+	if ip == "" {
+		return errors.New("no more ips in stack")
 	}
 
+	err := firecracker.SetupBridge(log, ip)
+	if err != nil {
+		return err
+	}
 	// Create base folder to store firecracker vms so the socket can be grouped
 	parent := fmt.Sprintf("%s-%s", firecracker.VirtualizerID, randstr.Hex(5))
 	parent = filepath.Join(os.TempDir(), parent)

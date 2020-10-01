@@ -3,13 +3,10 @@
 package firecracker
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
-	"net/http"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -36,7 +33,7 @@ const (
 )
 
 // DownloadPath is the path where we pull firecracker-vmlinux's from
-const DownloadPath = "https://storage.googleapis.com/vorteil-dl/firecracker-vmlinux/"
+const DownloadPath = "https://downloads.vorteil.io/firecracker-vmlinux/"
 
 // Details returns data to for the ConverToVM function on util
 func (v *Virtualizer) Details() (string, string, string, []virtualizers.NetworkInterface, time.Time, *vcfg.VCFG, interface{}) {
@@ -72,8 +69,10 @@ type Virtualizer struct {
 	machine     *firecracker.Machine // machine firecracker spawned
 	machineOpts []firecracker.Opt    // options provided to spawn machine
 
-	bridgeDevice tenus.Bridger // bridge device e.g vorteil-bridge
-	tapDevice    Devices       // tap device for the machine
+	bridgeDevice   tenus.Bridger    // bridge device e.g vorteil-bridge
+	tapDevices     []*net.Interface // tap devices created that are slaves to vorteil-bridge
+	tapDevicesName []string         //array of tap device names
+	// tapDevice    Devices       // tap device for the machine
 
 	vmdrive string // store disks in this directory
 }
@@ -313,22 +312,13 @@ func (v *Virtualizer) Close(force bool) error {
 			return err
 		}
 
-		client := &http.Client{}
-		cdm, err := json.Marshal(v.tapDevice)
-		if err != nil {
-			return err
+		// Cleanup tap devices
+		for _, ifname := range o.tapDevicesName {
+			err = tenus.DeleteLink(name)
+			if err != nil {
+				return err
+			}
 		}
-
-		req, err := http.NewRequest("DELETE", "http://localhost:7476/", bytes.NewBuffer(cdm))
-		if err != nil {
-			return err
-		}
-
-		resp, err := client.Do(req)
-		if err != nil {
-			return err
-		}
-		defer resp.Body.Close()
 
 		v.state = virtualizers.Deleted
 
@@ -390,16 +380,20 @@ func (f *firecrackerFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 
 func (o *operation) initializeVM(args *virtualizers.PrepareArgs) error {
 	o.updateStatus(fmt.Sprintf("Building firecracker command and tap interfaces..."))
-
+	var err error
 	o.state = "initializing"
 	o.name = args.Name
-	err := os.MkdirAll(args.FCPath, os.ModePerm)
+	err = os.MkdirAll(args.FCPath, os.ModePerm)
 	if err != nil {
 		return err
 	}
 	o.folder = filepath.Dir(args.ImagePath)
 	o.id = strings.Split(filepath.Base(o.folder), "-")[1]
-
+	// get bridge device
+	o.bridgeDevice, err = tenus.BridgeFromName(vorteilBridge)
+	if err != nil {
+		return err
+	}
 	o.gctx = context.Background()
 	o.vmmCtx, o.vmmCancel = context.WithCancel(o.gctx)
 
@@ -425,7 +419,7 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 		returnErr = err
 		return
 	}
-	err = o.sendDeviceCreation()
+	err = o.deviceCreation()
 	if err != nil {
 		returnErr = err
 		return
@@ -473,19 +467,20 @@ func (o *operation) generateFirecrackerConfig(diskpath string) (firecracker.Conf
 	devices = append(devices, rootDrive)
 	var interfaces []firecracker.NetworkInterface
 
-	for i := 0; i < len(o.tapDevice.Devices); i++ {
+	for i := 0; i < len(o.tapDevices); i++ {
 		interfaces = append(interfaces,
 			firecracker.NetworkInterface{
 				StaticConfiguration: &firecracker.StaticNetworkConfiguration{
-					HostDevName: o.tapDevice.Devices[i],
+					HostDevName: o.tapDevicesName[i],
 				},
 			},
 		)
 	}
+
 	return firecracker.Config{
 			SocketPath:      filepath.Join(o.folder, fmt.Sprintf("%s.%s", o.name, "socket")),
 			KernelImagePath: o.kip,
-			KernelArgs:      fmt.Sprintf("loglevel=4 init=/vorteil/vinitd root=PARTUUID=%s reboot=k panic=1 pci=off vt.color=0x00", vimg.Part2UUIDString),
+			KernelArgs:      fmt.Sprintf("console=ttyS0 loglevel=2 init=/vorteil/vinitd root=PARTUUID=%s reboot=k panic=1 pci=off vt.color=0x00", vimg.Part2UUIDString),
 			Drives:          devices,
 			MachineCfg: models.MachineConfiguration{
 				VcpuCount:  firecracker.Int64(int64(o.config.VM.CPUs)),
@@ -499,35 +494,30 @@ func (o *operation) generateFirecrackerConfig(diskpath string) (firecracker.Conf
 		}
 }
 
-func (o *operation) sendDeviceCreation() error {
-	cd := CreateDevices{
-		Id:     o.id,
-		Routes: len(o.routes),
-	}
+func (o *operation) deviceCreation() error {
 
-	cdm, err := json.Marshal(cd)
-	if err != nil {
+	ifceName := fmt.Sprintf("eth%s", o.id)
 
-		return err
-	}
-	resp, err := http.Post("http://localhost:7476/", "application/json", bytes.NewBuffer(cdm))
-	if err != nil {
-		return errors.New("Run 'sudo vorteil firecracker-setup' for the listener")
-	}
-
-	defer resp.Body.Close()
-	body, err := ioutil.ReadAll(resp.Body)
+	// create interface
+	err := createIfc(ifceName)
 	if err != nil {
 		return err
 	}
-	var ifs Devices
-	err = json.Unmarshal(body, &ifs)
-	if err != nil {
 
+	// attach to bridge
+	ifc, err := net.InterfaceByName(ifceName)
+	if err != nil {
 		return err
 	}
 
-	o.tapDevice = ifs
+	// Add tap device to bridge
+	err = o.bridgeDevice.AddSlaveIfc(ifc)
+	if err != nil {
+		return err
+	}
+
+	o.tapDevicesName = append(o.tapDevicesName, ifceName)
+	o.tapDevices = append(o.tapDevices, ifc)
 	return nil
 }
 

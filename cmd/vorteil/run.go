@@ -20,25 +20,23 @@ import (
 	"github.com/vorteil/vorteil/pkg/vcfg"
 	"github.com/vorteil/vorteil/pkg/vdecompiler"
 	"github.com/vorteil/vorteil/pkg/virtualizers"
-	"github.com/vorteil/vorteil/pkg/virtualizers/firecracker"
 	"github.com/vorteil/vorteil/pkg/virtualizers/util"
 	"github.com/vorteil/vorteil/pkg/vpkg"
 )
 
-var initFirecrackerCmd = &cobra.Command{
-	Use:    "firecracker-setup",
-	Short:  "Initialize firecracker by spawning a Bridge Device and a DHCP server",
-	Long:   `The init firecracker command is a convenience function to quickly setup the bridge device and DHCP server that firecracker will use`,
-	Hidden: true,
-	Args:   cobra.MaximumNArgs(0),
-	Run: func(cmd *cobra.Command, args []string) {
-
-		err := firecracker.SetupBridgeAndDHCPServer(log)
-		if err != nil {
-			SetError(err, 1)
-		}
-	},
-}
+// var initFirecrackerCmd = &cobra.Command{
+// 	Use:    "firecracker-setup",
+// 	Short:  "Initialize firecracker by spawning a Bridge Device and a DHCP server",
+// 	Long:   `The init firecracker command is a convenience function to quickly setup the bridge device and DHCP server that firecracker will use`,
+// 	Hidden: true,
+// 	Args:   cobra.MaximumNArgs(0),
+// 	Run: func(cmd *cobra.Command, args []string) {
+// 		err := firecracker.SetupBridgeAndDHCPServer(log)
+// 		if err != nil {
+// 			SetError(err, 1)
+// 		}
+// 	},
+// }
 
 var runCmd = &cobra.Command{
 	Use:   "run [RUNNABLE]",

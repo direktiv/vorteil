@@ -25,7 +25,7 @@ func FetchBridgeDev() error {
 }
 
 // SetupBridgeAndDHCPServer initializes the dhcp and bridge device
-func SetupBridgeAndDHCPServer(log elog.View) error {
+func SetupBridge(log elog.View, ip string) error {
 	return errors.New("firecracker init not supported on this operating system")
 }
 

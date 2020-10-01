@@ -35,6 +35,8 @@ func buildFirecracker(ctx context.Context, w io.WriteSeeker, cfg *vcfg.VCFG, arg
 			if err != nil {
 				return "", err
 			}
+			defer ips.Close()
+
 		}
 		ip, err := ips.Dequeue()
 		if err != nil {
@@ -44,7 +46,6 @@ func buildFirecracker(ctx context.Context, w io.WriteSeeker, cfg *vcfg.VCFG, arg
 		cfg.Networks[i].Gateway = iputil.BridgeIP
 		cfg.Networks[i].Mask = "255.255.255.0"
 	}
-	defer ips.Close()
 	vimgBuilder, err := vdisk.CreateBuilder(ctx, &vimg.BuilderArgs{
 		Kernel: vimg.KernelOptions{
 			Shell: args.KernelOptions.Shell,

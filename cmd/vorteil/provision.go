@@ -156,9 +156,10 @@ If your PROVISIONER was created with a passphrase you can input this passphrase 
 		defer f.Close()
 
 		err = vdisk.Build(context.Background(), f, &vdisk.BuildArgs{
-			PackageReader: pkgReader,
-			Format:        prov.DiskFormat(),
-			SizeAlign:     int64(prov.SizeAlign()),
+			WithVCFGDefaults: true,
+			PackageReader:    pkgReader,
+			Format:           prov.DiskFormat(),
+			SizeAlign:        int64(prov.SizeAlign()),
 			KernelOptions: vdisk.KernelOptions{
 				Shell: flagShell,
 			},

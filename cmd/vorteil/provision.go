@@ -14,6 +14,7 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/google/uuid"
@@ -160,9 +161,10 @@ If your PROVISIONER was created with a passphrase you can input this passphrase 
 		defer f.Close()
 
 		err = vdisk.Build(context.Background(), f, &vdisk.BuildArgs{
-			PackageReader: pkgReader,
-			Format:        prov.DiskFormat(),
-			SizeAlign:     int64(prov.SizeAlign()),
+			WithVCFGDefaults: true,
+			PackageReader:    pkgReader,
+			Format:           prov.DiskFormat(),
+			SizeAlign:        int64(prov.SizeAlign()),
 			KernelOptions: vdisk.KernelOptions{
 				Shell: flagShell,
 			},
@@ -192,7 +194,8 @@ If your PROVISIONER was created with a passphrase you can input this passphrase 
 		}
 
 		if provisionName == "" {
-			provisionName = strings.ReplaceAll(uuid.New().String(), "-", "")
+			provisionName = generateProvisionUUID()
+			log.Infof("--name flag what not set using generated uuid '%s'", provisionName)
 		}
 
 		ctx := context.TODO()
@@ -212,6 +215,17 @@ If your PROVISIONER was created with a passphrase you can input this passphrase 
 
 		fmt.Printf("Finished creating image.\n")
 	},
+}
+
+func generateProvisionUUID() string {
+	pName := strings.ReplaceAll(uuid.New().String(), "-", "")
+
+	// Replace first character with v if its a number
+	if _, err := strconv.Atoi(pName[:1]); err == nil {
+		pName = "v" + pName[1:]
+	}
+
+	return pName
 }
 
 var (

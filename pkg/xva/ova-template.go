@@ -1,5 +1,10 @@
 package xva
 
+/**
+ * SPDX-License-Identifier: Apache-2.0
+ * Copyright 2020 vorteil.io Pty Ltd
+ */
+
 const ovaXMLTemplate = `<?xml version="1.0" encoding="UTF-8"?>
 <value>
 	<struct>

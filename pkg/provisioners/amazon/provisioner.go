@@ -131,7 +131,6 @@ func (p *Provisioner) Initialize(data []byte) error {
 func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 	p.args = *args
 	var err error
-	var failedMsg string
 	var instanceID string
 	var instanceIP string
 
@@ -141,14 +140,14 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 	// Create EC2 Client
 	p.client, p.httpClient, p.ec2UserData, err = p.createClient()
 	if err != nil {
-		failedMsg = "failed to create client or ec2 userdata for aws"
-		goto FAILED
+		p.args.Logger.Errorf("failed to create client or ec2 userdata for aws")
+		return err
 	}
 
 	instanceID, err = p.createEmptyInstance()
 	if err != nil {
-		failedMsg = "failed to create empty instance"
-		goto FAILED
+		p.args.Logger.Errorf("failed to create empty instance")
+		return err
 	}
 	p.args.Logger.Infof("Created empty instance: %s.\n", instanceID)
 
@@ -168,36 +167,32 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 
 	instanceIP, err = p.getInstancePublicIP(instanceID)
 	if err != nil {
-		failedMsg = "failed to get live instances public ip address"
-		goto FAILED
+		p.args.Logger.Errorf("failed to get live instances public ip address")
+		return err
 	}
 
 	p.args.Logger.Infof("Instance public IP address: %s\n", instanceIP)
 
 	err = p.prepareInstaceForPayload(instanceIP, instanceID)
 	if err != nil {
-		failedMsg = "failed to prepare instance for raw image payload"
-		goto FAILED
+		p.args.Logger.Errorf("failed to prepare instance for raw image payload")
+		return err
 	}
 
 	p.args.Logger.Infof("Instance is live and ready for payload.")
 
 	err = p.uploadedPayloadToInstance(instanceIP)
 	if err != nil {
-		failedMsg = fmt.Sprintf("failed to upload raw image payload to instance '%s'", instanceID)
-		goto FAILED
+		p.args.Logger.Errorf(fmt.Sprintf("failed to upload raw image payload to instance '%s'", instanceID))
+		return err
 	}
 
 	ami, err = p.pushAMI(instanceID)
 	if err != nil {
-		failedMsg = fmt.Sprintf("failed to create ami from instance '%s'", instanceID)
-		goto FAILED
+		p.args.Logger.Errorf(fmt.Sprintf("failed to create ami from instance '%s'", instanceID))
+	} else {
+		p.args.Logger.Printf("Successfully Provisioned ami '%s'", ami)
 	}
-	p.args.Logger.Printf("Successfully Provisioned ami '%s'", ami)
-	return nil
-
-FAILED:
-	p.args.Logger.Errorf(failedMsg)
 	return err
 }
 

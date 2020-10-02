@@ -8,9 +8,6 @@ package firecracker
  */
 
 import (
-	"bytes"
-	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -19,33 +16,102 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
+	"unsafe"
 
-	dhcp "github.com/krolaw/dhcp4"
-	conn "github.com/krolaw/dhcp4/conn"
 	"github.com/milosgajdos/tenus"
-	"github.com/songgao/water"
+	"github.com/vishvananda/netlink"
 	"github.com/vorteil/vorteil/pkg/elog"
-	dhcpHandler "github.com/vorteil/vorteil/pkg/virtualizers/dhcp"
+	"github.com/vorteil/vorteil/pkg/virtualizers/iputil"
 )
 
-// FetchBridgeDev attempts to retrieve the bridge device
-func FetchBridgeDev() error {
-	// Check if bridge device exists
+const (
+	tunPath = "/dev/net/tun"
+
+	cIFFTAP  = 0x0002
+	cIFFNOPI = 0x1000
+)
+
+type ifReq struct {
+	Name  [0x10]byte
+	Flags uint16
+	pad   [0x28 - 0x10 - 2]byte
+}
+
+func ioctl(fd uintptr, request uintptr, argp uintptr) error {
+	_, _, errno := syscall.Syscall(syscall.SYS_IOCTL, fd, uintptr(request), argp)
+	if errno != 0 {
+		return os.NewSyscallError("ioctl", errno)
+	}
+	return nil
+}
+
+// createIfc creates an interface and returns an error if unsuccessful
+func createIfc(name string) error {
+
+	var (
+		tunfd int
+		err   error
+	)
+	// delete the interface if something failed
+	defer func() {
+		if err != nil {
+			tenus.DeleteLink(name)
+		}
+	}()
+
+	if tunfd, err = syscall.Open(tunPath, os.O_RDWR|syscall.O_NONBLOCK, 0); err != nil {
+		return err
+	}
+	defer syscall.Close(tunfd)
+
+	var req ifReq
+	req.Flags = cIFFTAP | cIFFNOPI
+	copy(req.Name[:], name)
+
+	err = ioctl(uintptr(tunfd), syscall.TUNSETIFF, uintptr(unsafe.Pointer(&req)))
+	if err != nil {
+		return err
+	}
+
+	req2 := 1
+	err = ioctl(uintptr(tunfd), syscall.TUNSETPERSIST, uintptr(unsafe.Pointer(&req2)))
+	if err != nil {
+		return err
+	}
+
+	link, err := netlink.LinkByName(name)
+	if err != nil {
+		return err
+	}
+
+	err = netlink.LinkSetUp(link)
+	if err != nil {
+		return err
+	}
+
+	return nil
+
+}
+
+// FetchBridgeDevice check if the bridge exists
+func FetchBridgeDevice() error {
 	_, err := tenus.BridgeFromName(vorteilBridge)
 	if err != nil {
-		return errors.New("try running 'vorteil firecracker-setup' before using firecracker")
+		return err
 	}
-	return err
+	return nil
 }
 
 // SetupBridgeAndDHCPServer creates the bridge which provides DHCP addresses todo
 // firecracker instances.
-func SetupBridgeAndDHCPServer(log elog.View) error {
+func SetupBridge(log elog.View, ip string) error {
 
-	log.Printf("creating bridge %s", vorteilBridge)
+	bridgeExists := true
 	// Create bridge device
 	bridger, err := tenus.NewBridgeWithName(vorteilBridge)
 	if err != nil {
+		bridgeExists = false
 		if !strings.Contains(err.Error(), "Interface name vorteil-bridge already assigned on the host") {
 			return err
 		}
@@ -55,12 +121,19 @@ func SetupBridgeAndDHCPServer(log elog.View) error {
 			return err
 		}
 	}
+
+	if !bridgeExists {
+		log.Printf("creating bridge %s", vorteilBridge)
+	}
+
 	// Switch bridge up
 	if err = bridger.SetLinkUp(); err != nil {
 		return err
 	}
+	cidr := fmt.Sprintf("%s/%s", ip, iputil.BaseMask)
+
 	// Fetch address
-	ipv4Addr, ipv4Net, err := net.ParseCIDR("174.72.0.1/24")
+	ipv4Addr, ipv4Net, err := net.ParseCIDR(cidr)
 	if err != nil {
 		if !strings.Contains(err.Error(), "file exists") {
 			return err
@@ -73,137 +146,7 @@ func SetupBridgeAndDHCPServer(log elog.View) error {
 		}
 	}
 
-	log.Printf("starting dhcp server")
-
-	// create dhcp server on an interface
-	server := dhcpHandler.NewHandler()
-	pc, err := conn.NewUDP4BoundListener(vorteilBridge, ":67")
-	if err != nil {
-		return err
-	}
-
-	// create server handler to create tap devices under sudo
-	http.HandleFunc("/", OrganiseTapDevices)
-	go func() {
-		http.ListenAndServe(":7476", nil)
-	}()
-	log.Printf("Listening on '7476' for creating and deleting TAP devices")
-	log.Printf("Listening on 'vorteil-bridge' for DHCP requests")
-	// Start dhcp server to listen
-	dhcp.Serve(pc, server)
-
 	return nil
-}
-
-// CreateDevices is a struct used to tell the process to create TAP devices via a rest request
-type CreateDevices struct {
-	Id     string `json:"id"`
-	Routes int    `json:"count"`
-}
-
-// Devices is a struct used to tell the process to deleted TAP devices via a delete request
-type Devices struct {
-	Devices []string `json:"devices"`
-}
-
-func createTaps(w http.ResponseWriter, cd CreateDevices, t tenus.Bridger) []string {
-	var tapDevices []string
-
-	for i := 0; i < cd.Routes; i++ {
-		ifceName := fmt.Sprintf("%s-%s", cd.Id, strconv.Itoa(i))
-
-		// create tap device
-		config := water.Config{
-			DeviceType: water.TAP,
-		}
-		config.Name = ifceName
-		config.Persist = true
-		ifce, err := water.New(config)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-		}
-		// close interface so firecracker can read it
-		err = ifce.Close()
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-		}
-
-		// get tap device
-		linkDev, err := tenus.NewLinkFrom(ifceName)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-		}
-		//set tap device up
-		err = linkDev.SetLinkUp()
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-		}
-		// add network interface to bridge
-		err = t.AddSlaveIfc(linkDev.NetInterface())
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-		}
-		tapDevices = append(tapDevices, ifceName)
-	}
-
-	return tapDevices
-}
-
-func createDevices(w http.ResponseWriter, r *http.Request) {
-	var cd CreateDevices
-
-	err := json.NewDecoder(r.Body).Decode(&cd)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-	}
-
-	// get bridge device
-	bridgeDev, err := tenus.BridgeFromName(vorteilBridge)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-	}
-
-	// set network adapters
-	if cd.Routes > 0 {
-		// write interfaces back
-		returnDevices := &Devices{
-			Devices: createTaps(w, cd, bridgeDev),
-		}
-		body, err := json.Marshal(returnDevices)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-
-		}
-		io.Copy(w, bytes.NewBuffer(body))
-	}
-}
-
-// OrganiseTapDevices handles http requests to create and delete tap interfaces for firecracker
-func OrganiseTapDevices(w http.ResponseWriter, r *http.Request) {
-	switch r.Method {
-	case http.MethodPost:
-		createDevices(w, r)
-	case http.MethodDelete:
-		deleteDevices(w, r)
-	default:
-		http.Error(w, "method not available", http.StatusBadRequest)
-	}
-}
-
-func deleteDevices(w http.ResponseWriter, r *http.Request) {
-	var dd Devices
-	err := json.NewDecoder(r.Body).Decode(&dd)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-	}
-
-	for i := 0; i < len(dd.Devices); i++ {
-		err := tenus.DeleteLink(dd.Devices[i])
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-		}
-	}
-	w.WriteHeader(http.StatusOK)
 }
 
 // writeCounter counts the number of bytes written to it.

@@ -1,5 +1,10 @@
 package vkern
 
+/**
+ * SPDX-License-Identifier: Apache-2.0
+ * Copyright 2020 vorteil.io Pty Ltd
+ */
+
 import (
 	"context"
 	"sort"
@@ -35,10 +40,6 @@ func (mgr *CompoundManager) Get(ctx context.Context, version CalVer) (*ManagedBu
 	tuple, err := list.BestMatch(version)
 	if err == nil {
 		return mgr.mgrs[tuple.Idx].Get(ctx, tuple.Version)
-	}
-
-	if err != nil {
-		return nil, err
 	}
 
 	// this branch in logic exists to handle CLI-style situations where the list might not update until the get call

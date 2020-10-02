@@ -2,6 +2,11 @@
 
 package hyperv
 
+/**
+ * SPDX-License-Identifier: Apache-2.0
+ * Copyright 2020 vorteil.io Pty Ltd
+ */
+
 import "errors"
 
 // initLogs returns an error as this is a windows only hypervisor

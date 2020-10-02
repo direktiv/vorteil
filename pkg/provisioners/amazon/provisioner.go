@@ -188,7 +188,7 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 	}
 
 	ami, err = p.pushAMI(instanceID)
-	if err == nil {
+	if err != nil {
 		p.args.Logger.Errorf(fmt.Sprintf("failed to create ami from instance '%s'", instanceID))
 	} else {
 		p.args.Logger.Printf("Successfully Provisioned ami '%s'", ami)

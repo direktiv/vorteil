@@ -1,8 +1,9 @@
+package azure
+
 /**
  * SPDX-License-Identifier: Apache-2.0
  * Copyright 2020 vorteil.io Pty Ltd
  */
-package azure
 
 import (
 	"bufio"

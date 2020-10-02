@@ -1,5 +1,10 @@
 package vhd
 
+/**
+ * SPDX-License-Identifier: Apache-2.0
+ * Copyright 2020 vorteil.io Pty Ltd
+ */
+
 type footer struct { // 512 bytes
 	Cookie             uint64
 	Features           uint32

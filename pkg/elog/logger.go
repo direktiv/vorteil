@@ -1,5 +1,10 @@
 package elog
 
+/**
+ * SPDX-License-Identifier: Apache-2.0
+ * Copyright 2020 vorteil.io Pty Ltd
+ */
+
 import (
 	"bytes"
 	"errors"

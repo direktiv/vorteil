@@ -1,5 +1,10 @@
 package ext
 
+/**
+ * SPDX-License-Identifier: Apache-2.0
+ * Copyright 2020 vorteil.io Pty Ltd
+ */
+
 import "github.com/vorteil/vorteil/pkg/vio"
 
 type blockUsage struct {

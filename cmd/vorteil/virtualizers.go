@@ -118,6 +118,11 @@ func runFirecracker(pkgReader vpkg.Reader, cfg *vcfg.VCFG, name string) error {
 
 	defer os.Remove(parent)
 
+	err = vcfg.WithDefaults(cfg, log)
+	if err != nil {
+		return err
+	}
+
 	kernelVer, err := buildFirecracker(context.Background(), f, cfg, &vdisk.BuildArgs{
 		WithVCFGDefaults: true,
 		PackageReader:    pkgReader,

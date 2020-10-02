@@ -1,9 +1,8 @@
-package imagetools
-
 /**
  * SPDX-License-Identifier: Apache-2.0
  * Copyright 2020 vorteil.io Pty Ltd
  */
+package imagetools
 
 import (
 	"io"
@@ -13,12 +12,11 @@ import (
 	"github.com/vorteil/vorteil/pkg/vimg"
 )
 
-// FSIMGImage ...
+// FSIMGImage copies a vorteil image's file system partition to destPath
 func FSIMGImage(vorteilImage *vdecompiler.IO, destPath string) error {
 	f, err := os.Create(destPath)
 	if err != nil {
 		return err
-
 	}
 	defer f.Close()
 

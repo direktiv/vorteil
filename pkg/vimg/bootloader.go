@@ -1,10 +1,5 @@
 package vimg
 
-/**
- * SPDX-License-Identifier: Apache-2.0
- * Copyright 2020 vorteil.io Pty Ltd
- */
-
 // Compiler version constants.
 const (
 	SemverMajor    = 3

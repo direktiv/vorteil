@@ -1,9 +1,8 @@
-package vconvert
-
 /**
  * SPDX-License-Identifier: Apache-2.0
  * Copyright 2020 vorteil.io Pty Ltd
  */
+package vconvert
 
 import (
 	"archive/tar"

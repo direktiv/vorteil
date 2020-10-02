@@ -1,14 +1,15 @@
+package imagetools
+
 /**
  * SPDX-License-Identifier: Apache-2.0
  * Copyright 2020 vorteil.io Pty Ltd
  */
-package imagetools
 
 import (
 	"github.com/vorteil/vorteil/pkg/vdecompiler"
 )
 
-// ImageGPTReport : Info on a Images GUID Partition Table
+// ImageGPTReport ...
 type ImageGPTReport struct {
 	HeaderLBA       int
 	BackupLBA       int
@@ -18,14 +19,14 @@ type ImageGPTReport struct {
 	Entries         []GPTEntry
 }
 
-// GPTEntry : Info on a GPT entry
+// GPTEntry ...
 type GPTEntry struct {
 	Name     string
 	FirstLBA int
 	LastLBA  int
 }
 
-// ImageGPT returns a summary of the information in a Vorteil Image's GUID Partition Table
+// ImageGPT ...
 func ImageGPT(vorteilImage *vdecompiler.IO) (ImageGPTReport, error) {
 	var gptOut ImageGPTReport
 	header, err := vorteilImage.GPTHeader()

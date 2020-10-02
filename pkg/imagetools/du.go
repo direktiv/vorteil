@@ -1,8 +1,9 @@
+package imagetools
+
 /**
  * SPDX-License-Identifier: Apache-2.0
  * Copyright 2020 vorteil.io Pty Ltd
  */
-package imagetools
 
 import (
 	"path/filepath"
@@ -11,7 +12,7 @@ import (
 	"github.com/vorteil/vorteil/pkg/vdecompiler"
 )
 
-// DUImageReport Returns a Disk usage report
+// DUImageReport ...
 type DUImageReport struct {
 	FreeSpace  int
 	ImageFiles []duImageInfo
@@ -22,8 +23,7 @@ type duImageInfo struct {
 	FileSize int
 }
 
-// DUImageFile returns the disk usage calculations of a path (imageFilePath) in a vorteilImage.
-//	Disk usuage is recursive will be calculated at a depth set to maxDepth.
+// DUImageFile ...
 func DUImageFile(vorteilImage *vdecompiler.IO, imageFilePath string, calcFreeSpace bool, maxDepth int, all bool) (DUImageReport, error) {
 	var duOut DUImageReport
 	var depth = 0

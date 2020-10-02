@@ -1,8 +1,9 @@
+package provisioners
+
 /**
  * SPDX-License-Identifier: Apache-2.0
  * Copyright 2020 vorteil.io Pty Ltd
  */
-package provisioners
 
 import (
 	"context"
@@ -11,8 +12,9 @@ import (
 	"crypto/md5"
 	"crypto/rand"
 	"encoding/hex"
-	"github.com/vorteil/vorteil/pkg/elog"
 	"io"
+
+	"github.com/vorteil/vorteil/pkg/elog"
 
 	"github.com/vorteil/vorteil/pkg/vcfg"
 

@@ -1,8 +1,9 @@
+package imagetools
+
 /**
  * SPDX-License-Identifier: Apache-2.0
  * Copyright 2020 vorteil.io Pty Ltd
  */
-package imagetools
 
 import (
 	"time"
@@ -11,7 +12,7 @@ import (
 	"github.com/vorteil/vorteil/pkg/vimg"
 )
 
-// FSFileReport : Contains information that summarizes a file-systems metadata
+// FSFileReport ...
 type FSFileReport struct {
 	FirstLBA        int
 	LastLBA         int
@@ -28,7 +29,7 @@ type FSFileReport struct {
 	LastWriteTime   time.Time
 }
 
-// FSImageFile Returns a summary of a vorteil image's file-system's metadata
+// FSImageFile ...
 func FSImageFile(vorteilImage *vdecompiler.IO) (FSFileReport, error) {
 	var fsOut FSFileReport
 

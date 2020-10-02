@@ -1,8 +1,9 @@
+package imagetools
+
 /**
  * SPDX-License-Identifier: Apache-2.0
  * Copyright 2020 vorteil.io Pty Ltd
  */
-package imagetools
 
 import (
 	"crypto/md5"
@@ -14,7 +15,7 @@ import (
 	"github.com/vorteil/vorteil/pkg/vdecompiler"
 )
 
-// MDSumImageFile returns the md5sum of a imageFilePath stored in vorteilImage
+// MDSumImageFile ...
 func MDSumImageFile(vorteilImagePath string, imageFilePath string, seekOS bool) (string, error) {
 	var rdr io.Reader
 	var err error

@@ -1,8 +1,9 @@
+package imagetools
+
 /**
  * SPDX-License-Identifier: Apache-2.0
  * Copyright 2020 vorteil.io Pty Ltd
  */
-package imagetools
 
 import (
 	"fmt"
@@ -34,7 +35,7 @@ type StatFileReport struct {
 	Create      time.Time
 }
 
-// StatImageFile returns the stats of a file at imageFilePath stored inside vorteilImagePath
+// StatImageFile ...
 func StatImageFile(vorteilImagePath string, imageFilePath string, seekOS bool) (StatFileReport, error) {
 	var statOut StatFileReport
 	vorteilImage, err := vdecompiler.Open(vorteilImagePath)

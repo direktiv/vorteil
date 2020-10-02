@@ -1,8 +1,9 @@
+package imagetools
+
 /**
  * SPDX-License-Identifier: Apache-2.0
  * Copyright 2020 vorteil.io Pty Ltd
  */
-package imagetools
 
 import (
 	"fmt"
@@ -57,8 +58,7 @@ func (tR *TreeReport) string(tStr string, depth int, last bool) string {
 	return tStr
 }
 
-// TreeImageFile returns the stats on the contents stored at imageFilePath on vorteilImagePath.
-//	Any child file stats from imageFilePath are also returned
+// TreeImageFile ...
 func TreeImageFile(vorteilImagePath string, imageFilePath string, seekOS bool) (TreeReport, error) {
 	vorteilImage, err := vdecompiler.Open(vorteilImagePath)
 	if err != nil {

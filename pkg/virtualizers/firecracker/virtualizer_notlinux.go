@@ -19,13 +19,13 @@ import (
 // DownloadPath is the path where we pull firecracker-vmlinux's from
 const DownloadPath = "https://downloads.vorteil.io/vcli/firecracker-vmlinux/"
 
-// FetchBridgeDev fetches the bridge device used for firecracker normally 'vorteil-bridge'
-func FetchBridgeDev() error {
-	return errors.New("bridge devices for firecracker only supported on linux")
+// FetchBridgeDevice check if the bridge exists
+func FetchBridgeDevice() error {
+	return nil
 }
 
-// SetupBridgeAndDHCPServer initializes the dhcp and bridge device
-func SetupBridgeAndDHCPServer(log elog.View) error {
+// SetupBridge initializes the dhcp and bridge device
+func SetupBridge(log elog.View, ip string) error {
 	return errors.New("firecracker init not supported on this operating system")
 }
 

@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"runtime"
 
+	"github.com/beeker1121/goque"
 	"github.com/thanhpk/randstr"
 	"github.com/vorteil/vorteil/pkg/ext"
 	"github.com/vorteil/vorteil/pkg/vcfg"
@@ -17,13 +18,34 @@ import (
 	"github.com/vorteil/vorteil/pkg/vimg"
 	"github.com/vorteil/vorteil/pkg/virtualizers/firecracker"
 	"github.com/vorteil/vorteil/pkg/virtualizers/hyperv"
+	"github.com/vorteil/vorteil/pkg/virtualizers/iputil"
 	"github.com/vorteil/vorteil/pkg/virtualizers/qemu"
 	"github.com/vorteil/vorteil/pkg/virtualizers/virtualbox"
 	"github.com/vorteil/vorteil/pkg/vpkg"
 )
 
+var ips *goque.Queue
+
 // buildFirecracker does the same thing as vdisk.Build but it returns me a calver of the kernel being used
 func buildFirecracker(ctx context.Context, w io.WriteSeeker, cfg *vcfg.VCFG, args *vdisk.BuildArgs) (string, error) {
+	var err error
+	for i := range cfg.Networks {
+		if ips == nil {
+			ips, err = iputil.NewIPStack()
+			if err != nil {
+				return "", err
+			}
+			defer ips.Close()
+
+		}
+		ip, err := ips.Dequeue()
+		if err != nil {
+			return "", err
+		}
+		cfg.Networks[i].IP = ip.ToString()
+		cfg.Networks[i].Gateway = iputil.BridgeIP
+		cfg.Networks[i].Mask = "255.255.255.0"
+	}
 	vimgBuilder, err := vdisk.CreateBuilder(ctx, &vimg.BuilderArgs{
 		Kernel: vimg.KernelOptions{
 			Shell: args.KernelOptions.Shell,
@@ -54,16 +76,21 @@ func buildFirecracker(ctx context.Context, w io.WriteSeeker, cfg *vcfg.VCFG, arg
 
 // runFirecracker needs a longer build process so we can pull the calver of the kernel used to build the disk
 func runFirecracker(pkgReader vpkg.Reader, cfg *vcfg.VCFG, name string) error {
+	var err error
 	if runtime.GOOS != "linux" {
 		return errors.New("firecracker is only available on linux")
 	}
 	if !firecracker.Allocator.IsAvailable() {
 		return errors.New("firecracker is not installed on your system")
 	}
-	// Check if bridge device exists
-	err := firecracker.FetchBridgeDev()
+
+	err = firecracker.FetchBridgeDevice()
 	if err != nil {
-		return errors.New("try running 'sudo vorteil firecracker-setup' before using firecracker")
+		// Set bridge device to 10.26.10.1
+		err = firecracker.SetupBridge(log, iputil.BridgeIP)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Create base folder to store firecracker vms so the socket can be grouped

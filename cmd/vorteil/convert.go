@@ -1,5 +1,10 @@
 package main
 
+/**
+ * SPDX-License-Identifier: Apache-2.0
+ * Copyright 2020 vorteil.io Pty Ltd
+ */
+
 import (
 	"github.com/spf13/cobra"
 	"github.com/vorteil/vorteil/pkg/vconvert"

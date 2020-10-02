@@ -1,3 +1,7 @@
+/**
+ * SPDX-License-Identifier: Apache-2.0
+ * Copyright 2020 vorteil.io Pty Ltd
+ */
 package imagetools
 
 import (
@@ -11,27 +15,32 @@ import (
 	"github.com/vorteil/vorteil/pkg/vdecompiler"
 )
 
-// DecompileReport ...
+// DecompileReport : Info on the results of a Decompile Operation
 type DecompileReport struct {
 	SkipNotTouched bool
 	ImageFiles     []DecompiledFile
 }
 
-// DecompiledFile ...
+// DecompiledFile holds the path of the decompiled file, and its results
 type DecompiledFile struct {
 	Path   string
 	Result CopyResult
 }
 
-// CopyResult ...
+// CopyResult : Enum const for the results of a decompiled file
 type CopyResult int
 
 const (
-	SkippedNotTouched   CopyResult = 0
-	SkippedAbnormalFile            = 1
-	CopiedRegularFile              = 2
-	CopiedSymlink                  = 3
-	CopiedMkDir                    = 4
+	// SkippedNotTouched : File was skipped because it was not touched during runtime
+	SkippedNotTouched CopyResult = 0
+	// SkippedAbnormalFile : File was skipped because it was not a dir, file or symlink
+	SkippedAbnormalFile = 1
+	// CopiedRegularFile : File was regular and copied during decompile
+	CopiedRegularFile = 2
+	// CopiedSymlink : File was a symlink, and was reconstructed during decompile
+	CopiedSymlink = 3
+	// CopiedMkDir : File was a dir, and was reconstructed during decompile
+	CopiedMkDir = 4
 )
 
 func createSymlinkCallback(vorteilImage *vdecompiler.IO, inode *ext.Inode, dpath string) func() error {
@@ -165,14 +174,16 @@ DONE:
 	return report, symlinkCallbacks, err
 }
 
-// DecompileImage ...
-func DecompileImage(vorteilImage *vdecompiler.IO, Outputpath string, skipNotTouched bool) (DecompileReport, error) {
+// DecompileImage will copy the contents inside vorteilImage to the outputPath on the local filesystem.
+//	If skipNotTouched is set to true, only files that have been touched during runtime will be copied.
+//	Returns a DecompileReport Object that provides information of the result of each file.
+func DecompileImage(vorteilImage *vdecompiler.IO, outputPath string, skipNotTouched bool) (DecompileReport, error) {
 	report := DecompileReport{
 		ImageFiles:     make([]DecompiledFile, 0),
 		SkipNotTouched: skipNotTouched,
 	}
 
-	fi, err := os.Stat(Outputpath)
+	fi, err := os.Stat(outputPath)
 	if err != nil && !os.IsNotExist(err) {
 		return report, err
 	}
@@ -182,9 +193,9 @@ func DecompileImage(vorteilImage *vdecompiler.IO, Outputpath string, skipNotTouc
 	}
 
 	fpath := "/"
-	dpath := Outputpath
+	dpath := outputPath
 	if into {
-		dpath = filepath.ToSlash(filepath.Join(Outputpath, filepath.Base(fpath)))
+		dpath = filepath.ToSlash(filepath.Join(outputPath, filepath.Base(fpath)))
 	}
 
 	symlinkCallbacks := make([]func() error, 0)

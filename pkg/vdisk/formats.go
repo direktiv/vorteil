@@ -1,5 +1,10 @@
 package vdisk
 
+/**
+ * SPDX-License-Identifier: Apache-2.0
+ * Copyright 2020 vorteil.io Pty Ltd
+ */
+
 import (
 	"context"
 	"encoding/json"

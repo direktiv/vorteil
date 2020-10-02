@@ -131,7 +131,6 @@ func (p *Provisioner) Initialize(data []byte) error {
 func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 	p.args = *args
 	var err error
-	var failedMsg string
 	var instanceID string
 	var instanceIP string
 
@@ -147,7 +146,7 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 
 	instanceID, err = p.createEmptyInstance()
 	if err != nil {
-		failedMsg = "failed to create empty instance"
+		p.args.Logger.Errorf("failed to create empty instance")
 		return err
 	}
 	p.args.Logger.Infof("Created empty instance: %s.\n", instanceID)

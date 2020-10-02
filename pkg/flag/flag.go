@@ -1,5 +1,10 @@
 package flag
 
+/**
+ * SPDX-License-Identifier: Apache-2.0
+ * Copyright 2020 vorteil.io Pty Ltd
+ */
+
 import "github.com/spf13/pflag"
 
 // Flag is a datatype-agnostic interface for flag objects

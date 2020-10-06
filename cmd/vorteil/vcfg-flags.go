@@ -247,6 +247,11 @@ var networkGatewayFlagValidator = func(f flag.NStringFlag) error {
 
 var networkFlagValidator = func(f flag.NStringSliceFlag, fn func(nic *vcfg.NetworkInterface, s interface{})) error {
 	for i := 0; i < *f.Total; i++ {
+		// Skip empty values from unassigned flags
+		if f.Value[i] == nil {
+			continue
+		}
+
 		initRequiredNetworks(len(f.Value[i]), i)
 		s := f.Value[i]
 		nic := &overrideVCFG.Networks[i]

@@ -10,6 +10,7 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -447,7 +448,11 @@ func (b *Builder) validateOSArgs(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		b.log.Warnf("Requested kernel '%s' is too old for this compiler. Using latest kernel instead.", b.vcfg.VM.Kernel)
+		if b.kernel.Less(vkern.CalVer("20.9.1")) {
+			return errors.New("the kernel source does not contain any kernels compatible with this compiler")
+		} else {
+			b.log.Warnf("Requested kernel '%s' is too old for this compiler. Using latest kernel instead.", b.vcfg.VM.Kernel)
+		}
 	}
 
 	err = b.processLinuxArgs()

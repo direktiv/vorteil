@@ -43,7 +43,7 @@ func loadVorteilConfig() (vorteilConfig, error) {
 		return vCfg, err
 	}
 
-	vorteild := filepath.Join(home, ".vorteild")
+	vorteild := filepath.Join(home, ".vorteil")
 	conf := filepath.Join(vorteild, "conf.toml")
 
 	confData, err := ioutil.ReadFile(conf)

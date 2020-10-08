@@ -91,7 +91,7 @@ Vorteil can deploy the images to different cloud providers. Please read the [doc
 ### Modify an Existing Package
 
 ```sh
-wget -o cockroachdb.vorteil https://apps.vorteil.io/file/vorteil/cockroachdb
+wget -O cockroachdb.vorteil https://apps.vorteil.io/file/vorteil/cockroachdb
 vorteil unpack cockroachdb.vorteil cockroachdb
 ls cockroachdb
 ```

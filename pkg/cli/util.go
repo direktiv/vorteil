@@ -1,4 +1,4 @@
-package main
+package cli
 
 /**
  * SPDX-License-Identifier: Apache-2.0
@@ -14,7 +14,7 @@ import (
 	"github.com/vorteil/vorteil/pkg/vpkg"
 )
 
-func handleCommandError() {
+func HandleErrors() {
 	if errorStatusMessage != nil {
 		// Pretty sure this only happens when invalid flags.
 		// Which the error gets printed before this
@@ -22,7 +22,10 @@ func handleCommandError() {
 			log.Errorf(errorStatusMessage.Error())
 		}
 	}
-	os.Exit(errorStatusCode)
+	if errorStatusCode != 0 {
+		os.Exit(errorStatusCode)
+	}
+	return
 }
 
 func handleDirectory(src string, dst string, builder vpkg.Builder) error {

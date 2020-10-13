@@ -122,8 +122,10 @@ const (
 	sourceINVALID            = "INVALID"
 )
 
+// readSourcePath fetches src, target or returns an error
 func readSourcePath(src string) (string, string, error) {
 
+	// Get absolute path to help with splitting
 	src, err := filepath.Abs(src)
 	if err != nil {
 		return "", "", err
@@ -131,22 +133,22 @@ func readSourcePath(src string) (string, string, error) {
 
 	// Check if source contains a target
 	colonSplit := strings.Split(src, ":")
-	var target string
+	colonLength := len(colonSplit)
 
-	// colonSplit will always be 1 when strings.splitting something that doesn't have it
-	if len(colonSplit) > 1 {
+	// Most of the time target should be here
+	target := colonSplit[len(colonSplit)-1]
+
+	// If target is src no target was provided
+	if target == src {
+		target = ""
+	}
+	if target != "" {
 		src = colonSplit[0]
-		target = colonSplit[1]
-
-		// Windows has one extra coloumn due to C:\ from abs
 		if runtime.GOOS == "windows" {
-			src = fmt.Sprintf("%s%s", "C:", colonSplit[1])
-			// If no target
-			target = ""
-
-			// If target is provided
-			if len(colonSplit) == 3 {
-				target = colonSplit[len(colonSplit)-1]
+			src = fmt.Sprintf("%s:%s", colonSplit[0], colonSplit[1])
+			// Catches edge case when window users provide no targets because of directory
+			if colonLength == 2 {
+				target = ""
 			}
 		}
 	}
@@ -169,7 +171,6 @@ func getSourceType(src string) (sourceType, error) {
 	if err != nil {
 		return sourceINVALID, err
 	}
-
 	// Check if Source is a file or dir
 	fi, err = os.Stat(src)
 	if !os.IsNotExist(err) && (fi != nil && !fi.IsDir()) {

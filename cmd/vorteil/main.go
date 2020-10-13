@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/sisatech/tablewriter"
@@ -121,6 +122,38 @@ const (
 	sourceINVALID            = "INVALID"
 )
 
+func readSourcePath(src string) (string, string, error) {
+
+	src, err := filepath.Abs(src)
+	if err != nil {
+		return "", "", err
+	}
+
+	// Check if source contains a target
+	colonSplit := strings.Split(src, ":")
+	var target string
+
+	// colonSplit will always be 1 when strings.splitting something that doesn't have it
+	if len(colonSplit) > 1 {
+		src = colonSplit[0]
+		target = colonSplit[1]
+
+		// Windows has one extra coloumn due to C:\ from abs
+		if runtime.GOOS == "windows" {
+			src = fmt.Sprintf("%s%s", "C:", colonSplit[1])
+			// If no target
+			target = ""
+
+			// If target is provided
+			if len(colonSplit) == 3 {
+				target = colonSplit[len(colonSplit)-1]
+			}
+		}
+	}
+
+	return src, target, err
+}
+
 func getSourceType(src string) (sourceType, error) {
 	var err error
 	var fi os.FileInfo
@@ -132,9 +165,17 @@ func getSourceType(src string) (sourceType, error) {
 		}
 	}
 
+	src, target, err := readSourcePath(src)
+	if err != nil {
+		return sourceINVALID, err
+	}
+
 	// Check if Source is a file or dir
 	fi, err = os.Stat(src)
 	if !os.IsNotExist(err) && (fi != nil && !fi.IsDir()) {
+		if target != "" {
+			return sourceINVALID, errors.New("Targetable runs are unable to be used on packages")
+		}
 		return sourceFile, nil
 	} else if !os.IsNotExist(err) && (fi != nil && fi.IsDir()) {
 		return sourceDir, nil

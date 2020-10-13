@@ -78,6 +78,8 @@ func (c *compiler) setPrecompileConstants(size, minDataBlocks, minInodes, minIno
 	c.blocks = c.size / BlockSize    // this is intentionally not rounded up
 	c.blocksPerGroup = BlockSize * 8 // 8 bits per byte in the bitmap
 	c.groups = divide(c.blocks, c.blocksPerGroup)
+
+retry:
 	c.inodesPerGroup = divide(minInodes, c.groups)
 
 	if c.inodesPerGroup < minInodesPer64*2 {
@@ -93,6 +95,14 @@ func (c *compiler) setPrecompileConstants(size, minDataBlocks, minInodes, minIno
 	c.blocksPerBGDT = divide(c.groups*BlockGroupDescriptorSize, BlockSize)
 	c.blocksPerInodeTable = c.inodesPerGroup / InodesPerBlock
 	c.overheadBlocksPerGroup = blocksPerSuperblock + c.blocksPerBGDT + blocksPerBlockBitmap + blocksPerInodeBitmap + c.blocksPerInodeTable
+
+	// check for an edge case where the final block groups is too small to contain its metadata
+	if x := c.blocks % c.blocksPerGroup; x > 0 && x < c.overheadBlocksPerGroup {
+		c.groups--
+		c.blocks = c.groups * c.blocksPerGroup
+		goto retry
+	}
+
 	c.dataBlocksPerGroup = c.blocksPerGroup - c.overheadBlocksPerGroup
 	c.unallocatedBlocks = c.blocks - c.filledDataBlocks - c.groups*c.overheadBlocksPerGroup
 	c.unallocatedInodes = c.groups*c.inodesPerGroup - int64(len(c.inodeBlocks)-1)

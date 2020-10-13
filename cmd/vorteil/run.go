@@ -44,28 +44,6 @@ and cleaning up the instance when it's done.`,
 		if len(args) >= 1 {
 			buildablePath = args[0]
 		}
-		// Fetch name of the app from path
-		var name string
-		_, err := os.Stat(buildablePath)
-		if err != nil {
-			// If stat errors assume its a url
-			u, errParse := url.Parse(buildablePath)
-			if errParse == nil {
-				// Check if its a url i can handle otherwise default to vorteil-vm
-				if u.Hostname() == "apps.vorteil.io" {
-					name = u.Path
-					name = strings.ReplaceAll(name, "/file/", "")
-					name = strings.ReplaceAll(name, "/", "-")
-				} else {
-					name = "vorteil-vm"
-				}
-			} else {
-				SetError(err, 1)
-				return
-			}
-		} else {
-			name = strings.ReplaceAll(filepath.Base(buildablePath), ".vorteil", "")
-		}
 
 		pkgBuilder, err := getPackageBuilder("BUILDABLE", buildablePath)
 		if err != nil {
@@ -103,6 +81,35 @@ and cleaning up the instance when it's done.`,
 		if err != nil {
 			SetError(err, 7)
 			return
+		}
+
+		src, _, err := readSourcePath(buildablePath)
+		if err != nil {
+			SetError(err, 20)
+			return
+		}
+
+		// Fetch name of the app from path
+		var name string
+		_, err = os.Stat(src)
+		if err != nil {
+			// If stat errors assume its a url
+			u, errParse := url.Parse(buildablePath)
+			if errParse == nil {
+				// Check if its a url i can handle otherwise default to vorteil-vm
+				if u.Hostname() == "apps.vorteil.io" {
+					name = u.Path
+					name = strings.ReplaceAll(name, "/file/", "")
+					name = strings.ReplaceAll(name, "/", "-")
+				} else {
+					name = "vorteil-vm"
+				}
+			} else {
+				SetError(err, 1)
+				return
+			}
+		} else {
+			name = strings.ReplaceAll(filepath.Base(buildablePath), ".vorteil", "")
 		}
 		switch flagPlatform {
 		case platformQEMU:

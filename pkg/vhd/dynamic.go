@@ -31,6 +31,7 @@ func NewDynamicWriter(w io.WriteSeeker, h HolePredictor) (*DynamicWriter, error)
 	dw := new(DynamicWriter)
 	dw.w = w
 	dw.h = h
+	dw.chunkOffsets = make([]int64, (dw.h.Size()+chunkSize-1)/chunkSize)
 	dw.buffer = new(bytes.Buffer)
 
 	err := dw.writeRedundantFooter()

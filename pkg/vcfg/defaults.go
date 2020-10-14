@@ -27,6 +27,12 @@ func WithDefaults(v *VCFG, logger elog.View) error {
 		})
 	}
 
+	if v.VM.RAM.String() == "" {
+		logger.Debugf("Using default ram. RAM (128 MiB)")
+		nBytes := 128 * 1024 * 1024
+		v.VM.RAM = Bytes(nBytes)
+	}
+
 	if v.VM.CPUs == 0 {
 		logger.Debugf("Using default no. CPUs (1)")
 		v.VM.CPUs = 1

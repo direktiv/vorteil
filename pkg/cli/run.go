@@ -220,7 +220,7 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG, name st
 		PName:     virt.Type(),
 		Start:     true,
 		Config:    cfg,
-		FCPath:    filepath.Join(home, ".vorteild", "firecracker-vm"),
+		FCPath:    filepath.Join(home, ".vorteil", "firecracker-vm"),
 		ImagePath: diskpath,
 		Logger:    log,
 	})

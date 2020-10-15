@@ -267,6 +267,7 @@ var (
 	// Amazon Web Services
 	provisionersNewAmazonKey    string
 	provisionersNewAmazonRegion string
+	provisionersNewAmazonBucket string
 	provisionersNewAmazonSecret string
 
 	// Azure
@@ -295,6 +296,7 @@ var provisionersNewAmazonEC2Cmd = &cobra.Command{
 			Key:    provisionersNewAmazonKey,
 			Secret: provisionersNewAmazonSecret,
 			Region: provisionersNewAmazonRegion,
+			Bucket: provisionersNewAmazonBucket,
 		})
 		if err != nil {
 			SetError(err, 2)
@@ -322,6 +324,7 @@ func init() {
 	f.StringVarP(&provisionersNewAmazonKey, "key", "k", "", "Access key ID")
 	f.StringVarP(&provisionersNewAmazonSecret, "secret", "s", "", "Secret access key")
 	f.StringVarP(&provisionersNewAmazonRegion, "region", "r", "ap-southeast-2", "AWS region")
+	f.StringVarP(&provisionersNewAmazonBucket, "bucket", "b", "", "AWS bucket")
 	f.StringVarP(&provisionersNewPassphrase, "passphrase", "p", "", "Passphrase for encrypting exported provisioner data.")
 }
 

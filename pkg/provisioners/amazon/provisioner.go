@@ -6,30 +6,21 @@ package amazon
  */
 
 import (
-	"compress/gzip"
 	"context"
-	"crypto/md5"
-	"crypto/rand"
-	"crypto/rsa"
-	"crypto/tls"
-	"crypto/x509"
-	"crypto/x509/pkix"
-	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
-	"encoding/pem"
 	"errors"
 	"fmt"
-	"io"
-	"io/ioutil"
-	"math/big"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/ec2"
+	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/aws/aws-sdk-go/service/s3/s3manager"
+	"github.com/google/uuid"
 	"github.com/vorteil/vorteil/pkg/provisioners"
 	"github.com/vorteil/vorteil/pkg/vcfg"
 	"github.com/vorteil/vorteil/pkg/vdisk"
@@ -52,7 +43,9 @@ type Provisioner struct {
 	cfg *Config
 
 	// aws
-	client      *ec2.EC2
+	ec2Client   *ec2.EC2
+	s3Client    *s3.S3
+	awsSession  *session.Session
 	httpClient  *http.Client
 	ec2UserData string
 	args        provisioners.ProvisionArgs
@@ -63,6 +56,7 @@ type Config struct {
 	Key    string `json:"key"`    // AWS Access Key
 	Secret string `json:"secret"` // AWS Access Key Secret
 	Region string `json:"region"` // AWS Region
+	Bucket string `json:"bucket"` // AWS Bucket
 }
 
 type userData struct {
@@ -87,7 +81,42 @@ func Create(cfg *Config) (provisioners.Provisioner, error) {
 	return p, nil
 }
 
+// init / validate the provisioner
 func (p *Provisioner) init() error {
+	// Validate
+	if p.cfg.Key == "" {
+		return errors.New("no defined access key")
+	}
+
+	if p.cfg.Secret == "" {
+		return errors.New("no defined access secret")
+	}
+
+	if p.cfg.Region == "" {
+		return errors.New("no defined region")
+	}
+
+	if p.cfg.Bucket == "" {
+		return errors.New("no defined bucket")
+	}
+
+	// attempt to connect and validate that the provided config is workable
+	sess, err := session.NewSession(&aws.Config{
+		Region:      aws.String(p.cfg.Region),
+		Credentials: credentials.NewStaticCredentials(p.cfg.Key, p.cfg.Secret, ""),
+	})
+	if err != nil {
+		return err
+	}
+
+	region, err := s3manager.GetBucketRegion(context.Background(), sess, p.cfg.Bucket, p.cfg.Region)
+	if err != nil {
+		return fmt.Errorf("bucket '%s' does not exist", p.cfg.Bucket)
+	}
+
+	if region != p.cfg.Region {
+		return fmt.Errorf("bucket '%s' does not exist in region '%s'", p.cfg.Bucket, p.cfg.Region)
+	}
 
 	return nil
 }
@@ -99,7 +128,7 @@ func (p *Provisioner) Type() string {
 
 // DiskFormat returns the provisioners required disk format
 func (p *Provisioner) DiskFormat() vdisk.Format {
-	return vdisk.RAWFormat
+	return vdisk.VHDDynamicFormat
 }
 
 // SizeAlign returns vcfg GiB size in bytes
@@ -122,6 +151,18 @@ func (p *Provisioner) Initialize(data []byte) error {
 		return err
 	}
 
+	p.awsSession, err = session.NewSession(&aws.Config{
+		Region:      aws.String(p.cfg.Region),
+		Credentials: credentials.NewStaticCredentials(p.cfg.Key, p.cfg.Secret, ""),
+	})
+
+	if err != nil {
+		return err
+	}
+
+	p.s3Client = s3.New(p.awsSession)
+	p.ec2Client = ec2.New(p.awsSession, aws.NewConfig().WithRegion(p.cfg.Region))
+
 	return nil
 }
 
@@ -130,529 +171,174 @@ func (p *Provisioner) Initialize(data []byte) error {
 //	projects image has been uploaded, unless ReadyWhenUsable was set to true, then
 //	this function will block until aws reports the ami as usable.
 func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
-	p.args = *args
 	var err error
-	var instanceID string
-	var instanceIP string
+	var imageID *string
+	p.args = *args
 
-	provisionProgress := p.args.Logger.NewProgress("Provisioning to AWS", "", 0)
-	defer provisionProgress.Finish(true)
+	uploadProgress := args.Logger.NewProgress("Uploading Image to AWS Bucket", "", 0)
+	defer uploadProgress.Finish(true)
 
-	// Create EC2 Client
-	p.client, p.httpClient, p.ec2UserData, err = p.createClient()
+	// Handle Exisitng Image and Force Flag
+	imageID, err = p.getImageID(p.args.Name)
+	if imageID != nil {
+		if args.Force {
+			// deregister current live version as were force pushing
+			p.args.Logger.Infof("deregistering old ami: %v\n", imageID)
+			_, err = p.ec2Client.DeregisterImageWithContext(p.args.Context, &ec2.DeregisterImageInput{
+				ImageId: imageID,
+			})
+		} else {
+			err = errors.New("ami exists: try using the --force flag")
+		}
+
+	}
+
 	if err != nil {
-		p.args.Logger.Errorf("failed to create client or ec2 userdata for aws")
 		return err
 	}
 
-	instanceID, err = p.createEmptyInstance()
+	// Upload Image
+	keyName := aws.String(p.args.Name + "-" + uuid.New().String())
+	uploader := s3manager.NewUploader(p.awsSession)
+	_, err = uploader.Upload(&s3manager.UploadInput{
+		Bucket: aws.String(p.cfg.Bucket),
+		Key:    keyName,
+		Body:   args.Image,
+	})
+
+	uploadProgress.Finish(true)
+
 	if err != nil {
-		p.args.Logger.Errorf("failed to create empty instance")
-		return err
+		return fmt.Errorf("Failed to upload image to bucket '%s', error: %s", p.cfg.Bucket, err.Error())
 	}
-	p.args.Logger.Infof("Created empty instance: %s.\n", instanceID)
 
 	defer func() {
-		var err error
-		args.Logger.Infof("Instance status: Attempting to terminate instance...")
-		_, err = p.client.TerminateInstances(&ec2.TerminateInstancesInput{
-			InstanceIds: []*string{
-				&instanceID,
-			},
+		p.args.Logger.Infof("Cleaning Image From Bucket %s", keyName)
+		// Delete object that was uploaded (mainly used to clean up when the function ends)
+		_, _ = p.s3Client.DeleteObject(&s3.DeleteObjectInput{
+			Bucket: aws.String(p.cfg.Bucket),
+			Key:    keyName,
 		})
-		if err != nil {
-			args.Logger.Infof("An error occurred trying to clean up instance %s: %v.\n", instanceID, err)
-		}
-		args.Logger.Infof("Instance status: terminated.")
 	}()
 
-	instanceIP, err = p.getInstancePublicIP(instanceID)
+	snapshotID, err := p.importSnapshot(aws.StringValue(keyName))
 	if err != nil {
-		p.args.Logger.Errorf("failed to get live instances public ip address")
-		return err
+		return fmt.Errorf("Failed to convert bucket Image to Snapshot, error: %s", err.Error())
 	}
 
-	p.args.Logger.Infof("Instance public IP address: %s\n", instanceIP)
-
-	err = p.prepareInstaceForPayload(instanceIP, instanceID)
-	if err != nil {
-		p.args.Logger.Errorf("failed to prepare instance for raw image payload")
-		return err
-	}
-
-	p.args.Logger.Infof("Instance is live and ready for payload.")
-
-	err = p.uploadedPayloadToInstance(instanceIP)
-	if err != nil {
-		p.args.Logger.Errorf(fmt.Sprintf("failed to upload raw image payload to instance '%s'", instanceID))
-		return err
-	}
-
-	ami, err = p.pushAMI(instanceID)
-	if err != nil {
-		p.args.Logger.Errorf(fmt.Sprintf("failed to create ami from instance '%s'", instanceID))
-	} else {
-		p.args.Logger.Printf("Successfully Provisioned ami '%s'", ami)
-	}
-	return err
-}
-
-func (p *Provisioner) createClient() (*ec2.EC2, *http.Client, string, error) {
-	var err error
-
-	// Create EC2 Client
-	p.args.Logger.Infof("Creating new session...")
-	sess, err := session.NewSession(&aws.Config{
-		Region:      aws.String(p.cfg.Region),
-		Credentials: credentials.NewStaticCredentials(p.cfg.Key, p.cfg.Secret, ""),
-	})
-	if err != nil {
-		return nil, nil, "", err
-	}
-
-	p.args.Logger.Infof("Session created.")
-
-	p.args.Logger.Infof("Creating new client...")
-	ec2Client := ec2.New(sess, aws.NewConfig().WithRegion(p.cfg.Region))
-	p.args.Logger.Infof("Client created.")
-
-	// Create EC2 Single Cert Data
-	cert, key := generateCertificate()
-	p.args.Logger.Infof("Single-use certificates created.")
-
-	data, err := json.Marshal(&userData{
-		Reboot: "false",
-		Port:   fmt.Sprintf("%d", int(securityGroupPort)),
-		Cert:   string(cert),
-		Key:    string(key),
-	})
-	if err != nil {
-		return nil, nil, "", err
-	}
-	userdata := base64.StdEncoding.EncodeToString(data)
-
-	// Create http client
-	tlsCert, err := tls.X509KeyPair(cert, key)
-	if err != nil {
-		panic(err)
-	}
-	caCertPool := x509.NewCertPool()
-	caCertPool.AppendCertsFromPEM(cert)
-
-	tlsConfig := &tls.Config{
-		Certificates:       []tls.Certificate{tlsCert},
-		RootCAs:            caCertPool,
-		InsecureSkipVerify: true,
-	}
-	tlsConfig.BuildNameToCertificate()
-	httpClient := &http.Client{
-		Transport: &http.Transport{
-			TLSClientConfig: tlsConfig,
-		},
-	}
-
-	return ec2Client, httpClient, userdata, nil
-}
-
-func (p *Provisioner) forceOverwriteCheck() error {
-	if !p.args.Force {
-		filterForce := &ec2.Filter{
-			Name:   aws.String("name"),
-			Values: []*string{aws.String(p.args.Name)},
-		}
-		var imagesForce *ec2.DescribeImagesOutput
-		imagesForce, err := p.client.DescribeImages(&ec2.DescribeImagesInput{
-			Filters: []*ec2.Filter{filterForce},
-		})
-		if err != nil {
-			return err
-		}
-		if len(imagesForce.Images) > 0 {
-			return errors.New("ami exists: try using the --force flag")
-		}
-	}
-
-	return nil
-}
-
-func checkSecurityGroupAccess(securityGroup *ec2.SecurityGroup) bool {
-	for _, perm := range securityGroup.IpPermissions {
-		// Check if permissions are nil
-		if perm.FromPort == nil || perm.ToPort == nil || perm.IpProtocol == nil {
-			continue
-		}
-
-		// Check if permissions are valid
-		if *perm.FromPort == securityGroupPort &&
-			*perm.ToPort == securityGroupPort &&
-			*perm.IpProtocol == "tcp" {
-			return true
-		}
-	}
-
-	return false
-}
-
-func (p *Provisioner) getSecurityGroups() (*ec2.DescribeSecurityGroupsOutput, error) {
-	secGroups, err := p.client.DescribeSecurityGroups(&ec2.DescribeSecurityGroupsInput{
-		GroupNames: []*string{aws.String(securityGroupName)},
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	if !checkSecurityGroupAccess(secGroups.SecurityGroups[0]) {
-		return nil, fmt.Errorf("the %s security group must allow TCP ingress on port %d", securityGroupName, securityGroupPort)
-	}
-
-	return secGroups, nil
-}
-
-func (p *Provisioner) createEmptyInstance() (string, error) {
-	var instanceID string
-
-	// Check force flag: if force is false and ami exists return error
-	if forceErr := p.forceOverwriteCheck(); forceErr != nil {
-	}
-
-	p.args.Logger.Infof("Looking up security group ID...")
-	secGroups, err := p.getSecurityGroups()
-	if err != nil {
-		return instanceID, err
-	}
-
-	securityGroupID := *secGroups.SecurityGroups[0].GroupId
-	p.args.Logger.Infof("Security group: %s\n", securityGroupID)
-	filter := &ec2.Filter{
-		Name:   aws.String("name"),
-		Values: []*string{aws.String("vorteil-compiler")},
-	}
-	images, err := p.client.DescribeImages(&ec2.DescribeImagesInput{
-		Owners:  ownerStrings,
-		Filters: []*ec2.Filter{filter},
-	})
-	if err != nil {
-		return instanceID, err
-	}
-
-	gigs := vcfg.Bytes(p.args.Image.Size())
-	gigs.Align(vcfg.GiB)
-
-	p.args.Logger.Infof("Disk size: %d GiB\n", gigs.Units(vcfg.GiB))
-	ami = *images.Images[0].ImageId
-	reservation, err := p.client.RunInstancesWithContext(p.args.Context, &ec2.RunInstancesInput{
-		MaxCount:         aws.Int64(1),
-		MinCount:         aws.Int64(1),
-		ImageId:          aws.String(ami),
-		InstanceType:     aws.String(machineType),
-		UserData:         &p.ec2UserData,
-		SecurityGroupIds: []*string{&securityGroupID},
+	registerImgProgress := p.args.Logger.NewProgress("Registering snapshot as AMI", "", 0)
+	defer registerImgProgress.Finish(true)
+	rio, err := p.ec2Client.RegisterImage(&ec2.RegisterImageInput{
+		Architecture:       aws.String("x86_64"),
+		Description:        aws.String(p.args.Description),
+		Name:               aws.String(p.args.Name),
+		EnaSupport:         aws.Bool(true),
+		VirtualizationType: aws.String("hvm"),
+		RootDeviceName:     aws.String("/dev/sda1"),
 		BlockDeviceMappings: []*ec2.BlockDeviceMapping{
-			{
+			&ec2.BlockDeviceMapping{
 				DeviceName: aws.String("/dev/sda1"),
 				Ebs: &ec2.EbsBlockDevice{
-					DeleteOnTermination: aws.Bool(true),
-					VolumeSize:          aws.Int64(int64(gigs.Units(vcfg.GiB))),
+					SnapshotId: aws.String(snapshotID),
 				},
 			},
 		},
-		// TODO: resize disk
 	})
-	if err == nil {
-		instanceID = *reservation.Instances[0].InstanceId
+	if err != nil {
+		return err
 	}
-	return instanceID, err
+	registerImgProgress.Finish(true)
+
+	args.Logger.Printf("Provisioned AMI: %s", *rio.ImageId)
+	return nil
 }
 
-func ec2PublicIPReady(description *ec2.DescribeInstancesOutput) (ip string, ready bool) {
-	// Check if children exist
-	if description == nil || len(description.Reservations) == 0 ||
-		len(description.Reservations[0].Instances) == 0 ||
-		len(description.Reservations[0].Instances[0].NetworkInterfaces) == 0 {
-		return
-	}
-
-	// Check if publicIP exists
-	if description.Reservations[0].Instances[0].NetworkInterfaces[0].Association == nil ||
-		description.Reservations[0].Instances[0].NetworkInterfaces[0].Association.PublicIp == nil {
-		return
-	}
-
-	ip = *description.Reservations[0].Instances[0].NetworkInterfaces[0].Association.PublicIp
-	if ip != "" {
-		ready = true
-	}
-	return
-}
-
-// getInstancePublicIP : Get Public Ip of Instance; Instance must be running or pending
-func (p *Provisioner) getInstancePublicIP(instanceID string) (string, error) {
-	var ip string
-	var ipReady bool
+// getImageID given a imageName, return the imageID of the first image found, or nil if not found
+func (p *Provisioner) getImageID(imageName string) (*string, error) {
 	var err error
-	for err == nil {
-		time.Sleep(pollrate)
-		description, descErr := p.client.DescribeInstancesWithContext(p.args.Context, &ec2.DescribeInstancesInput{
-			InstanceIds: []*string{
-				&instanceID,
-			},
-		})
-		if err != nil {
-			err = descErr
-			break
-		}
-
-		if description == nil || len(description.Reservations) == 0 ||
-			len(description.Reservations[0].Instances) == 0 ||
-			description.Reservations[0].Instances[0].State == nil {
-			continue
-		}
-		switch *description.Reservations[0].Instances[0].State.Code & 0xFF {
-		case 0:
-			p.args.Logger.Infof("Instance status: pending.")
-			continue
-		case 16:
-			p.args.Logger.Infof("Instance status: running.")
-			ip, ipReady = ec2PublicIPReady(description)
-			if ipReady {
-				return ip, err
-			}
-			continue
-		case 32:
-			p.args.Logger.Infof("Instance status: shutting-down.")
-			err = errors.New("instance is shutting down for an unknown reason")
-		case 48:
-			p.args.Logger.Infof("Instance status: terminated.")
-			err = errors.New("instance has been terminated for an unknown reason")
-		case 64:
-			p.args.Logger.Infof("Instance status: stopping.")
-			err = errors.New("instance is stopping for an unknown reason")
-		case 80:
-			p.args.Logger.Infof("Instance status: stopped.")
-			err = errors.New("instance stopped for an unknown reason")
-		default:
-			p.args.Logger.Infof("Instance status: unknown.")
-			continue
-		}
-	}
-
-	return ip, err
-}
-
-// prepareInstaceForPayload : Waits for instance ip to be ready for payload
-func (p *Provisioner) prepareInstaceForPayload(ip, instanceID string) error {
-	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("https://%s:%d/", ip, securityGroupPort), nil)
-	if err != nil {
-		return err
-	}
-	req = req.WithContext(p.args.Context)
-	max := 6
-	tries := 0
-	gap := time.Second
-	for {
-		tries++
-		p.args.Logger.Infof("Polling instance for connectivity (%d/%d)...\n", tries, max)
-		ctx, cancel := context.WithTimeout(p.args.Context, time.Second*10)
-		req = req.WithContext(ctx)
-		resp, err := p.httpClient.Do(req)
-		cancel()
-		if err != nil {
-			p.args.Logger.Infof("Trying %v out of %v\n", tries, max)
-			p.args.Logger.Infof("Error on POST: %v\n", err)
-			if tries == max {
-				return errors.New("instance failed to respond")
-			}
-		}
-		if resp != nil && resp.Body != nil {
-			resp.Body.Close()
-		}
-		if err == nil {
-			break
-		}
-		select {
-		case <-p.args.Context.Done():
-			// ?
-		case <-time.After(gap):
-		}
-		gap *= 2
-	}
-
-	return nil
-}
-
-func (p *Provisioner) uploadedPayloadToInstance(ip string) error {
-	gigs := vcfg.Bytes(p.args.Image.Size())
-	gigs.Align(vcfg.GiB)
-	pr, pw := io.Pipe()
-	defer pr.Close()
-	gz := gzip.NewWriter(pw)
-	hasher := md5.New()
-	mw := io.MultiWriter(gz, hasher)
-	// counter := datacounter.NewWriterCounter(mw)
-	go func() {
-		// _, _ = io.Copy(counter, p.args.Image)
-		_, _ = io.Copy(mw, p.args.Image)
-		gz.Close()
-		pw.Close()
-	}()
-
-	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("https://%s:%d/", ip, securityGroupPort), pr)
-	if err != nil {
-		return err
-	}
-
-	// TODO: use server API to track disk write progress
-	req.Header.Set("Disk-Size", fmt.Sprintf("%d", gigs.Units(1)))
-	req = req.WithContext(p.args.Context)
-
-	resp, err := p.httpClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("error posting RAW image to instance: %v", err)
-	}
-	defer resp.Body.Close()
-
-	p.args.Logger.Infof("Payload dispatched.")
-	checksum := hex.EncodeToString(hasher.Sum(nil))
-	p.args.Logger.Infof("Our checksum: %s\n", checksum)
-
-	var responseError error
-	data, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		responseError = fmt.Errorf("error reading response body: %v", err)
-	}
-
-	if resp.StatusCode != 200 {
-		responseError = fmt.Errorf("server error [%d]: %s", resp.StatusCode, data)
-	}
-
-	if responseError != nil {
-		return responseError
-	}
-
-	p.args.Logger.Infof("Server checksum: %s\n", data)
-	return nil
-}
-
-func (p *Provisioner) waitForInstanceToStop(instanceID string) error {
-	for {
-		time.Sleep(pollrate)
-		description, err := p.client.DescribeInstancesWithContext(p.args.Context, &ec2.DescribeInstancesInput{
-			InstanceIds: []*string{
-				&instanceID,
-			},
-		})
-		if err != nil {
-			return err
-		}
-
-		if description == nil || len(description.Reservations) == 0 ||
-			len(description.Reservations[0].Instances) == 0 ||
-			description.Reservations[0].Instances[0].State == nil {
-			continue
-		}
-		switch *description.Reservations[0].Instances[0].State.Code & 0xFF {
-		case 0:
-			p.args.Logger.Infof("Instance status: pending.")
-			return errors.New("instance is restarting for an unknown reason")
-		case 16:
-			p.args.Logger.Infof("Instance status: running.")
-			continue
-		case 32:
-			p.args.Logger.Infof("Instance status: shutting-down.")
-			continue
-		case 48:
-			p.args.Logger.Infof("Instance status: terminated.")
-			return errors.New("instance has been terminated for an unknown reason")
-		case 64:
-			p.args.Logger.Infof("Instance status: stopping.")
-			continue
-		case 80:
-			p.args.Logger.Infof("Instance status: stopped.")
-		default:
-			p.args.Logger.Infof("Instance status: unknown.")
-			continue
-		}
-
-		break
-	}
-
-	return nil
-}
-
-// deregisterAMI : If ami with same name is found, deregister it
-func (p *Provisioner) deregisterAMI() error {
 	filterForce := &ec2.Filter{
 		Name:   aws.String("name"),
-		Values: []*string{aws.String(p.args.Name)},
+		Values: []*string{aws.String(imageName)},
 	}
-	imagesForce, err := p.client.DescribeImages(&ec2.DescribeImagesInput{
+	awsImages, err := p.ec2Client.DescribeImages(&ec2.DescribeImagesInput{
 		Filters: []*ec2.Filter{filterForce},
 	})
 	if err != nil {
-		return err
+		return nil, fmt.Errorf("Could not get image ID for image '%s', error: %v", imageName, err)
 	}
-	if len(imagesForce.Images) > 0 {
-		// deregister current live version as were force pushing
-		p.args.Logger.Infof("deregistering old ami: %v\n", imagesForce.Images[0].ImageId)
-		_, err := p.client.DeregisterImageWithContext(p.args.Context, &ec2.DeregisterImageInput{
-			ImageId: imagesForce.Images[0].ImageId,
-		})
-		if err != nil {
-			return err
-		}
+
+	if len(awsImages.Images) > 0 {
+		return awsImages.Images[0].ImageId, nil
 	}
-	return nil
+
+	return nil, nil
 }
 
-func (p *Provisioner) pushAMI(instanceID string) (string, error) {
-	if err := p.waitForInstanceToStop(instanceID); err != nil {
-		return "", err
-	}
-	p.args.Logger.Infof("Instance has stopped.")
-
-	if p.args.Force {
-		// attemp to deregister AMI
-		if err := p.deregisterAMI(); err != nil {
-			return "", err
-		}
-	}
-
-	img, err := p.client.CreateImageWithContext(p.args.Context, &ec2.CreateImageInput{
+func (p *Provisioner) importSnapshot(bucketImageKey string) (string, error) {
+	snapshotProgress := p.args.Logger.NewProgress("Converting Image to Snapshot ", "%", 100)
+	defer snapshotProgress.Finish(false)
+	// Import Snapshot
+	var snapshotID *string
+	// o.updateStatus("Importing disk into EBS Snapshot")
+	iso, err := p.ec2Client.ImportSnapshot(&ec2.ImportSnapshotInput{
 		Description: aws.String(p.args.Description),
-		InstanceId:  aws.String(instanceID),
-		Name:        aws.String(p.args.Name),
-		// TODO: Block Device Mappings?
+		DiskContainer: &ec2.SnapshotDiskContainer{
+			UserBucket: &ec2.UserBucket{
+				S3Bucket: aws.String(p.cfg.Bucket),
+				S3Key:    aws.String(bucketImageKey),
+			},
+			Format: aws.String("VHD"),
+		},
 	})
 	if err != nil {
-		return "", err
+		return aws.StringValue(snapshotID), err
 	}
 
-	p.args.Logger.Infof("AMI ID: %s\n", *img.ImageId)
+	var progress int = 0
+	var disto *ec2.DescribeImportSnapshotTasksOutput
+	for {
+		disto, err = p.ec2Client.DescribeImportSnapshotTasks(&ec2.DescribeImportSnapshotTasksInput{
+			ImportTaskIds: []*string{iso.ImportTaskId},
+		})
+		if err != nil {
+			break
+		}
 
-	if p.args.ReadyWhenUsable {
-		for {
-			time.Sleep(pollrate)
-			description, err := p.client.DescribeImagesWithContext(p.args.Context, &ec2.DescribeImagesInput{
-				ImageIds: []*string{
-					img.ImageId,
-				},
-			})
-			if err != nil {
-				return "", err
+		// Check if task exists
+		if len(disto.ImportSnapshotTasks) > 0 {
+			if disto.ImportSnapshotTasks[0].SnapshotTaskDetail.StatusMessage != nil && disto.ImportSnapshotTasks[0].SnapshotTaskDetail.Progress != nil {
+				progressIncrement := 0
+				newProgress, _ := strconv.Atoi(*disto.ImportSnapshotTasks[0].SnapshotTaskDetail.Progress)
+				if newProgress != 0 {
+					progressIncrement = newProgress - progress
+					progress += progressIncrement
+				}
+				snapshotProgress.Increment(int64(progressIncrement))
 			}
 
-			if description == nil || len(description.Images) == 0 {
-				continue
-			}
-			p.args.Logger.Infof("Image status: %s.\n", *description.Images[0].State)
-			if *description.Images[0].State == "available" {
+			if *disto.ImportSnapshotTasks[0].SnapshotTaskDetail.Status == *aws.String("completed") {
+				progress = 100
+				snapshotID = disto.ImportSnapshotTasks[0].SnapshotTaskDetail.SnapshotId
 				break
 			}
+			// Task errored out hence deleting return status message as error
+			if disto.ImportSnapshotTasks[0].SnapshotTaskDetail.Status == aws.String("deleted") || disto.ImportSnapshotTasks[0].SnapshotTaskDetail.Status == aws.String("deleting") {
+				err = errors.New(*disto.ImportSnapshotTasks[0].SnapshotTaskDetail.StatusMessage)
+				break
+			}
+		} else {
+			err = errors.New("No import id tasks exists for the snapshot")
+			break
 		}
+		time.Sleep(pollrate)
+	}
+	if progress == 100 {
+		snapshotProgress.Finish(true)
+	} else {
+		snapshotProgress.Finish(false)
 	}
 
-	p.args.Logger.Printf("Provisioned AMI: %s\n", *img.ImageId)
-	return *img.ImageId, nil
+	return aws.StringValue(snapshotID), err
 }
 
 // Marshal returns json provisioner as bytes
@@ -662,6 +348,7 @@ func (p *Provisioner) Marshal() ([]byte, error) {
 	m["key"] = p.cfg.Key
 	m["secret"] = p.cfg.Secret
 	m["region"] = p.cfg.Region
+	m["bucket"] = p.cfg.Bucket
 
 	out, err := json.Marshal(m)
 	if err != nil {
@@ -669,41 +356,4 @@ func (p *Provisioner) Marshal() ([]byte, error) {
 	}
 
 	return out, nil
-}
-
-func generateCertificate() (cert []byte, key []byte) {
-
-	serialno, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
-	if err != nil {
-		panic(err)
-	}
-
-	priv, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		panic(err)
-	}
-
-	certificate := x509.Certificate{
-		SerialNumber: serialno,
-		Subject: pkix.Name{
-			Organization: []string{"Vorteil.io Pty Ltd"},
-		},
-		NotBefore:             time.Now(),
-		NotAfter:              time.Now().Add(time.Minute * 30),
-		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
-		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
-		BasicConstraintsValid: true,
-		DNSNames:              []string{"localhost"},
-		EmailAddresses:        []string{"support@vorteil.io"},
-		IsCA:                  true,
-	}
-
-	data, err := x509.CreateCertificate(rand.Reader, &certificate, &certificate, &priv.PublicKey, priv)
-	if err != nil {
-		panic(err)
-	}
-
-	cert = pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: data})
-	key = pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(priv)})
-	return cert, key
 }

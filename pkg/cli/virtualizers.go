@@ -1,4 +1,4 @@
-package main
+package cli
 
 /**
  * SPDX-License-Identifier: Apache-2.0

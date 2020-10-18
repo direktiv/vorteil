@@ -1,4 +1,4 @@
-package main
+package cli
 
 /**
  * SPDX-License-Identifier: Apache-2.0
@@ -40,7 +40,7 @@ const (
 	platformFirecracker = "firecracker"
 )
 
-func commandInit() {
+func InitializeCommands() {
 
 	// Here we attack VCFG modification flags to relevant commands. Because of
 	// the order Go runs init functions this is the safest place to do this.
@@ -50,11 +50,11 @@ func commandInit() {
 	addModifyFlags(unpackCmd.Flags())
 	addModifyFlags(packCmd.Flags())
 	// setup logging across all commands
-	rootCmd.PersistentFlags().BoolVarP(&flagVerbose, "verbose", "v", false, "enable verbose output")
-	rootCmd.PersistentFlags().BoolVarP(&flagDebug, "debug", "d", false, "enable debug output")
-	rootCmd.PersistentFlags().BoolVarP(&flagJSON, "json", "j", false, "enable json output")
+	RootCommand.PersistentFlags().BoolVarP(&flagVerbose, "verbose", "v", false, "enable verbose output")
+	RootCommand.PersistentFlags().BoolVarP(&flagDebug, "debug", "d", false, "enable debug output")
+	RootCommand.PersistentFlags().BoolVarP(&flagJSON, "json", "j", false, "enable json output")
 
-	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+	RootCommand.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
 
 		logger := &elog.CLI{}
 
@@ -80,22 +80,22 @@ func commandInit() {
 	}
 
 	// Here we define some hidden top-level shortcuts.
-	rootCmd.AddCommand(commandShortcut(versionCmd))
-	rootCmd.AddCommand(commandShortcut(buildCmd))
-	rootCmd.AddCommand(commandShortcut(decompileCmd))
-	rootCmd.AddCommand(commandShortcut(provisionCmd))
-	rootCmd.AddCommand(commandShortcut(packCmd))
-	rootCmd.AddCommand(commandShortcut(unpackCmd))
-	rootCmd.AddCommand(commandShortcut(convertContainerCmd))
-	rootCmd.AddCommand(commandShortcut(importSharedObjectsCmd))
+	RootCommand.AddCommand(commandShortcut(versionCmd))
+	RootCommand.AddCommand(commandShortcut(buildCmd))
+	RootCommand.AddCommand(commandShortcut(decompileCmd))
+	RootCommand.AddCommand(commandShortcut(provisionCmd))
+	RootCommand.AddCommand(commandShortcut(packCmd))
+	RootCommand.AddCommand(commandShortcut(unpackCmd))
+	RootCommand.AddCommand(commandShortcut(convertContainerCmd))
+	RootCommand.AddCommand(commandShortcut(importSharedObjectsCmd))
 
 	// Here is the visible command structure definition.
-	rootCmd.AddCommand(imagesCmd)
-	rootCmd.AddCommand(packagesCmd)
-	rootCmd.AddCommand(projectsCmd)
-	rootCmd.AddCommand(provisionersCmd)
-	rootCmd.AddCommand(runCmd)
-	// rootCmd.AddCommand(initFirecrackerCmd)
+	RootCommand.AddCommand(imagesCmd)
+	RootCommand.AddCommand(packagesCmd)
+	RootCommand.AddCommand(projectsCmd)
+	RootCommand.AddCommand(provisionersCmd)
+	RootCommand.AddCommand(runCmd)
+	// RootCommand.AddCommand(initFirecrackerCmd)
 
 	addImagesCmd()
 
@@ -139,7 +139,7 @@ func commandShortcut(cmd *cobra.Command) *cobra.Command {
 	return &c
 }
 
-var rootCmd = &cobra.Command{
+var RootCommand = &cobra.Command{
 	Use:   "vorteil",
 	Short: "Vorteil's command-line interface",
 	Long: `Vorteil's command-line interface provides a complete set of tools for developers

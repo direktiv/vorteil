@@ -311,7 +311,10 @@ func generateDirectoryData(node *nodeBlocks) (io.Reader, error) {
 
 	}
 
-	buf.Grow(int(leftover) % int(BlockSize))
+	_, err := io.CopyN(buf, vio.Zeroes, align(int64(buf.Len()), BlockSize)-int64(buf.Len()))
+	if err != nil {
+		panic(err)
+	}
 
 	return bytes.NewReader(buf.Bytes()), nil
 

@@ -47,6 +47,8 @@ const (
 	inodeDirectoryPermissions   = InodeTypeDirectory | DefaultInodePermissions
 	inodeRegularFilePermissions = InodeTypeRegularFile | DefaultInodePermissions
 	inodeSymlinkPermissions     = InodeTypeSymlink | DefaultInodePermissions
+
+	IncompatFiletype = 0x2
 )
 
 // Superblock is the structure of a superblock as written to the disk.
@@ -76,6 +78,11 @@ type Superblock struct {
 	VersionMajor        uint32
 	SuperUser           uint16
 	SuperGroup          uint16
+	_                   uint32
+	_                   uint16
+	_                   uint16
+	_                   uint32
+	RequiredFeatures    uint32
 }
 
 // BlockGroupDescriptorTableEntry is the structure of an ext block group
@@ -260,19 +267,34 @@ func calculateDirectoryBlocks(n *vio.TreeNode) (int64, int64) {
 
 }
 
+const (
+	ftypeRegularFile = 0x1
+	ftypeDir         = 0x2
+	ftypeSymlink     = 0x7
+)
+
 type dirTuple struct {
 	name  string
 	inode uint32
+	ftype uint8
 }
 
 func generateDirectoryData(node *nodeBlocks) (io.Reader, error) {
 
 	var tuples []*dirTuple
-	tuples = append(tuples, &dirTuple{name: ".", inode: uint32(node.node.NodeSequenceNumber)})
-	tuples = append(tuples, &dirTuple{name: "..", inode: uint32(node.node.Parent.NodeSequenceNumber)})
+	tuples = append(tuples, &dirTuple{name: ".", inode: uint32(node.node.NodeSequenceNumber), ftype: ftypeDir})
+	tuples = append(tuples, &dirTuple{name: "..", inode: uint32(node.node.Parent.NodeSequenceNumber), ftype: ftypeDir})
 
 	for _, child := range node.node.Children {
-		tuples = append(tuples, &dirTuple{name: path.Base(child.File.Name()), inode: uint32(child.NodeSequenceNumber)})
+		var ftype uint8
+		if child.File.IsDir() {
+			ftype = ftypeDir
+		} else if child.File.IsSymlink() {
+			ftype = ftypeSymlink
+		} else {
+			ftype = ftypeRegularFile
+		}
+		tuples = append(tuples, &dirTuple{name: path.Base(child.File.Name()), inode: uint32(child.NodeSequenceNumber), ftype: ftype})
 	}
 
 	buf := new(bytes.Buffer)
@@ -289,7 +311,8 @@ func generateDirectoryData(node *nodeBlocks) (io.Reader, error) {
 			// add a null entry into the leftover space
 			_ = binary.Write(buf, binary.LittleEndian, uint32(0))        // inode
 			_ = binary.Write(buf, binary.LittleEndian, uint16(leftover)) // entry size
-			_ = binary.Write(buf, binary.LittleEndian, uint16(0))        // name length
+			_ = binary.Write(buf, binary.LittleEndian, uint8(0))         // name length
+			_ = binary.Write(buf, binary.LittleEndian, uint8(0))         // file type
 			_, _ = buf.Write(bytes.Repeat([]byte{0}, int(leftover-8)))   // padding
 
 			length += leftover
@@ -305,7 +328,8 @@ func generateDirectoryData(node *nodeBlocks) (io.Reader, error) {
 
 		_ = binary.Write(buf, binary.LittleEndian, child.inode)                      // inode
 		_ = binary.Write(buf, binary.LittleEndian, uint16(l))                        // entry size
-		_ = binary.Write(buf, binary.LittleEndian, uint16(len(child.name)))          // name length
+		_ = binary.Write(buf, binary.LittleEndian, uint8(len(child.name)))           // name length
+		_ = binary.Write(buf, binary.LittleEndian, uint8(child.ftype))               // file type
 		_ = binary.Write(buf, binary.LittleEndian, append([]byte(child.name), 0))    // name
 		_, _ = buf.Write(bytes.Repeat([]byte{0}, int(l-8-int64(len(child.name))-1))) // padding
 

@@ -6,6 +6,7 @@ package registry
  */
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"github.com/vorteil/vorteil/pkg/elog"
@@ -18,10 +19,12 @@ import (
 func init() {
 
 	fn := func(log elog.View, data []byte) (provisioners.Provisioner, error) {
-		return google.NewProvisioner(&google.ProvisionerArgs{
-			Logger: log,
-			Data:   data,
-		})
+		var cfg google.Config
+		err := json.Unmarshal(data, &cfg)
+		if err != nil {
+			return nil, err
+		}
+		return google.NewProvisioner(log, &cfg)
 	}
 
 	err := RegisterProvisioner(google.ProvisionerType, fn)

@@ -58,19 +58,51 @@ type Config struct {
 	StorageAccountName string `json:"storageAccountName"` // Azure storage account name
 }
 
-// Create a provisioner object
-func Create(cfg *Config) (provisioners.Provisioner, error) {
+// NewProvisioner TODO:
+func NewProvisioner(log elog.View, cfg *Config) (*Provisioner, error) {
+	p := new(Provisioner)
+	p.cfg = cfg
+	p.log = log
+	return p, p.Validate()
+}
 
-	p := &Provisioner{
-		cfg: cfg,
-	}
-
-	err := p.init()
+func (p *Provisioner) Validate() error {
+	err := p.cfgNotEmpty()
 	if err != nil {
-		return nil, err
+		err = &provisioners.InvalidProvisionerError{
+			Err: err,
+		}
+	}
+	return err
+}
+
+func (p *Provisioner) cfgNotEmpty() error {
+	var err error
+	if p.cfg.Container == "" {
+		err = fmt.Errorf("field 'container' cannot be empty")
 	}
 
-	return p, nil
+	if p.cfg.Key == "" {
+		err = fmt.Errorf("field 'container' cannot be empty")
+	}
+
+	if p.cfg.Location == "" {
+		err = fmt.Errorf("field 'container' cannot be empty")
+	}
+
+	if p.cfg.ResourceGroup == "" {
+		err = fmt.Errorf("field 'container' cannot be empty")
+	}
+
+	if p.cfg.StorageAccountKey == "" {
+		err = fmt.Errorf("field 'container' cannot be empty")
+	}
+
+	if p.cfg.StorageAccountName == "" {
+		err = fmt.Errorf("field 'container' cannot be empty")
+	}
+
+	return err
 }
 
 // Type returns 'microsoft-azure'

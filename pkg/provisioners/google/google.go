@@ -141,18 +141,11 @@ func (p *Provisioner) closeClients() {
 }
 
 // NewProvisioner TODO:
-func NewProvisioner(args *ProvisionerArgs) (*Provisioner, error) {
+func NewProvisioner(log elog.View, cfg *Config) (*Provisioner, error) {
 	p := new(Provisioner)
-	p.cfg = new(Config)
-	p.log = args.Logger
-	err := json.Unmarshal(args.Data, p.cfg)
-	if err != nil {
-		return nil, err
-	}
-
-	err = p.Validate()
-
-	return p, err
+	p.cfg = cfg
+	p.log = log
+	return p, p.Validate()
 }
 
 // Type returns 'google-compute'
@@ -319,14 +312,4 @@ func (p *Provisioner) deleteConflictingImage(projectID, name string) error {
 	}
 
 	return err
-}
-
-// Create a provisioner object
-func Create(cfg *Config) (provisioners.Provisioner, error) {
-
-	p := &Provisioner{
-		cfg: cfg,
-	}
-
-	return p, nil
 }

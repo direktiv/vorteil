@@ -74,19 +74,16 @@ type userData struct {
 	Key    string `json:"SSDC_KEY"`
 }
 
-// Create a provisioner object
-func Create(cfg *Config) (provisioners.Provisioner, error) {
+// NewProvisioner TODO:
+func NewProvisioner(log elog.View, cfg *Config) (*Provisioner, error) {
+	p := new(Provisioner)
+	p.cfg = cfg
+	p.log = log
+	return p, p.Validate()
+}
 
-	p := &Provisioner{
-		cfg: cfg,
-	}
-
-	err := p.init()
-	if err != nil {
-		return nil, err
-	}
-
-	return p, nil
+func (p *Provisioner) Validate() error {
+	return nil
 }
 
 func (p *Provisioner) init() error {

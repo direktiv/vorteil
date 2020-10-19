@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/davecgh/go-spew/spew"
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 	"github.com/vorteil/vorteil/pkg/provisioners"
@@ -289,7 +290,7 @@ var provisionersNewAmazonEC2Cmd = &cobra.Command{
 		}
 		defer f.Close()
 
-		p, err := amazon.Create(&amazon.Config{
+		p, err := amazon.NewProvisioner(log, &amazon.Config{
 			Key:    provisionersNewAmazonKey,
 			Secret: provisionersNewAmazonSecret,
 			Region: provisionersNewAmazonRegion,
@@ -304,6 +305,8 @@ var provisionersNewAmazonEC2Cmd = &cobra.Command{
 			SetError(err, 3)
 			return
 		}
+
+		spew.Dump(data)
 
 		out := provisioners.Encrypt(data, provisionersNewPassphrase)
 		_, err = io.Copy(f, bytes.NewReader(out))
@@ -349,7 +352,7 @@ var provisionersNewAzureCmd = &cobra.Command{
 			return
 		}
 
-		p, err := azure.Create(&azure.Config{
+		p, err := azure.NewProvisioner(log, &azure.Config{
 			Key:                base64.StdEncoding.EncodeToString(b),
 			Container:          provisionersNewAzureContainer,
 			Location:           provisionersNewAzureLocation,
@@ -414,7 +417,7 @@ var provisionersNewGoogleCmd = &cobra.Command{
 			return
 		}
 
-		p, err := google.Create(&google.Config{
+		p, err := google.NewProvisioner(log, &google.Config{
 			Bucket: provisionersNewGoogleBucket,
 			Key:    base64.StdEncoding.EncodeToString(b),
 		})

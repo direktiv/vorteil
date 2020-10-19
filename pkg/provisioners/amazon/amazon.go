@@ -68,20 +68,22 @@ type userData struct {
 	Key    string `json:"SSDC_KEY"`
 }
 
-// NewProvisioner TODO:
+// NewProvisioner - Create a Amazon Provisioner object
 func NewProvisioner(log elog.View, cfg *Config) (*Provisioner, error) {
 	p := new(Provisioner)
 	p.cfg = cfg
 	p.log = log
-	return p, p.Validate()
+
+	err := p.Validate()
+	if err != nil {
+		return nil, fmt.Errorf("invalid %s provisioner: %v", ProvisionerType, err)
+	}
+
+	return p, p.init()
 }
 
+// Validate ...
 func (p *Provisioner) Validate() error {
-	return nil
-}
-
-// init / validate the provisioner
-func (p *Provisioner) init() error {
 	// Validate
 	if p.cfg.Key == "" {
 		return errors.New("no defined access key")
@@ -135,28 +137,14 @@ func (p *Provisioner) SizeAlign() vcfg.Bytes {
 	return vcfg.GiB
 }
 
-// Initialize ..
-func (p *Provisioner) Initialize(data []byte) error {
-
-	cfg := new(Config)
-	err := json.Unmarshal(data, cfg)
-	if err != nil {
-		return err
-	}
-
-	p.cfg = cfg
-	err = p.init()
-	if err != nil {
-		return err
-	}
-
+func (p *Provisioner) init() error {
+	var err error
 	p.awsSession, err = session.NewSession(&aws.Config{
 		Region:      aws.String(p.cfg.Region),
 		Credentials: credentials.NewStaticCredentials(p.cfg.Key, p.cfg.Secret, ""),
 	})
-
 	if err != nil {
-		return err
+		return fmt.Errorf("could not create aws session: %v", err)
 	}
 
 	p.s3Client = s3.New(p.awsSession)

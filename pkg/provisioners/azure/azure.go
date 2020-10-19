@@ -58,48 +58,45 @@ type Config struct {
 	StorageAccountName string `json:"storageAccountName"` // Azure storage account name
 }
 
-// NewProvisioner TODO:
+// NewProvisioner - Create a Azure Provisioner object
 func NewProvisioner(log elog.View, cfg *Config) (*Provisioner, error) {
 	p := new(Provisioner)
 	p.cfg = cfg
 	p.log = log
-	return p, p.Validate()
-}
-
-func (p *Provisioner) Validate() error {
-	err := p.cfgNotEmpty()
+	err := p.Validate()
 	if err != nil {
-		err = &provisioners.InvalidProvisionerError{
-			Err: err,
-		}
+		return nil, fmt.Errorf("invalid %s provisioner: %v", ProvisionerType, err)
 	}
-	return err
+
+	return p, p.init()
 }
 
-func (p *Provisioner) cfgNotEmpty() error {
+// Validate ...
+func (p *Provisioner) Validate() error {
 	var err error
+
 	if p.cfg.Container == "" {
-		err = fmt.Errorf("field 'container' cannot be empty")
+		err = fmt.Errorf("no defined container")
 	}
 
 	if p.cfg.Key == "" {
-		err = fmt.Errorf("field 'container' cannot be empty")
+		err = fmt.Errorf("no defined key")
 	}
 
 	if p.cfg.Location == "" {
-		err = fmt.Errorf("field 'container' cannot be empty")
+		err = fmt.Errorf("no defined location")
 	}
 
 	if p.cfg.ResourceGroup == "" {
-		err = fmt.Errorf("field 'container' cannot be empty")
+		err = fmt.Errorf("no defined resourceGroup")
 	}
 
 	if p.cfg.StorageAccountKey == "" {
-		err = fmt.Errorf("field 'container' cannot be empty")
+		err = fmt.Errorf("no defined storageAccountKey")
 	}
 
 	if p.cfg.StorageAccountName == "" {
-		err = fmt.Errorf("field 'container' cannot be empty")
+		err = fmt.Errorf("no defined storageAccountName")
 	}
 
 	return err
@@ -115,24 +112,6 @@ func (p *Provisioner) DiskFormat() vdisk.Format {
 	return vdisk.VHDFormat
 }
 
-// Initialize initializes n Azure provisioner
-func (p *Provisioner) Initialize(data []byte) error {
-
-	cfg := new(Config)
-	err := json.Unmarshal(data, cfg)
-	if err != nil {
-		return err
-	}
-
-	p.cfg = cfg
-	err = p.init()
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
 func fetchVal(keyMap map[string]interface{}, name string) string {
 
 	str, _ := keyMap[name].(string)
@@ -146,13 +125,13 @@ func (p *Provisioner) init() error {
 
 	p.credentials, err = base64.StdEncoding.DecodeString(p.cfg.Key)
 	if err != nil {
-		return err
+		return fmt.Errorf("could not decode %s key: %v", ProvisionerType, err)
 	}
 
 	keyMap := make(map[string]interface{})
 	err = json.Unmarshal(p.credentials, &keyMap)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to unmarshal %s credentials: %v", ProvisionerType, err)
 	}
 
 	p.clientID = fetchVal(keyMap, "clientId")

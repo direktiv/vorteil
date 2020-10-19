@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -69,20 +70,21 @@ var scopes = []string{
 	"https://www.googleapis.com/auth/cloud-platform",
 }
 
-// Validate Provisioner is valid by dry running creating google clients
+// Validate ...
 func (p *Provisioner) Validate() error {
-	defer p.closeClients()
-	err := p.createClients()
-	if err != nil {
-		err = &provisioners.InvalidProvisionerError{
-			Err: err,
-		}
+	if p.cfg.Bucket == "" {
+		return errors.New("no defined bucket")
 	}
-	return err
+
+	if p.cfg.Key == "" {
+		return errors.New("no defined key")
+	}
+
+	return nil
 }
 
-// createClients
-func (p *Provisioner) createClients() error {
+// init - Create Clients and Handlers
+func (p *Provisioner) init() error {
 
 	var (
 		err        error
@@ -110,18 +112,18 @@ func (p *Provisioner) createClients() error {
 
 	p.storageClient, err = storage.NewClient(context.Background(), option.WithCredentialsJSON(key))
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create gcp storage client: %v", err)
 	}
 
 	p.bucketHandle = p.storageClient.Bucket(p.cfg.Bucket)
 	_, err = p.bucketHandle.Attrs(context.Background())
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to communicate with gcp bucket: %v", err)
 	}
 
 	oauthToken, err = google.JWTConfigFromJSON(key, scopes...)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to decypher JWT: %v", err)
 	}
 
 	p.computeClient, err = compute.New(oauthToken.Client(context.Background()))
@@ -140,12 +142,18 @@ func (p *Provisioner) closeClients() {
 	}
 }
 
-// NewProvisioner TODO:
+// NewProvisioner - Create a Google Provisioner object
 func NewProvisioner(log elog.View, cfg *Config) (*Provisioner, error) {
 	p := new(Provisioner)
 	p.cfg = cfg
 	p.log = log
-	return p, p.Validate()
+
+	err := p.Validate()
+	if err != nil {
+		return nil, fmt.Errorf("invalid %s provisioner: %v", ProvisionerType, err)
+	}
+
+	return p, p.init()
 }
 
 // Type returns 'google-compute'
@@ -165,14 +173,6 @@ func (p *Provisioner) SizeAlign() vcfg.Bytes {
 
 // Provision provisions BUILDABLE to GCP
 func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
-	p.log.Printf("Hello World Im Google")
-
-	defer p.closeClients()
-	err := p.createClients()
-	if err != nil {
-		return fmt.Errorf("failed to create client for google, error: %v", err)
-	}
-
 	projectID := p.keyMap["project_id"].(string)
 
 	img, err := p.computeClient.Images.Get(projectID, args.Name).Do()

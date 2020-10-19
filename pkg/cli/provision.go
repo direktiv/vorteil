@@ -16,7 +16,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/davecgh/go-spew/spew"
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 	"github.com/vorteil/vorteil/pkg/provisioners"
@@ -77,43 +76,6 @@ If your PROVISIONER was created with a passphrase you can input this passphrase 
 			SetError(err, 5)
 			return
 		}
-
-		// var prov provisioners.Provisioner
-
-		// switch ptype {
-		// case google.ProvisionerType:
-		// 	fmt.Println("Provisioning to Google Cloud Platform")
-		// 	p := &google.Provisioner{}
-		// 	err = p.Initialize(data)
-		// 	if err != nil {
-		// 		SetError(err, 6)
-		// 		return
-		// 	}
-
-		// 	prov = p
-
-		// case amazon.ProvisionerType:
-		// 	fmt.Println("Provisioning to Amazon Web Services")
-		// 	p := &amazon.Provisioner{}
-		// 	err = p.Initialize(data)
-		// 	if err != nil {
-		// 		SetError(err, 7)
-		// 		return
-		// 	}
-
-		// 	prov = p
-
-		// case azure.ProvisionerType:
-		// 	fmt.Println("Provisioning to Azure")
-		// 	p := &azure.Provisioner{}
-		// 	err = p.Initialize(data)
-		// 	if err != nil {
-		// 		SetError(err, 8)
-		// 		return
-		// 	}
-
-		// 	prov = p
-		// }
 
 		buildablePath := "."
 		if len(args) >= 1 {
@@ -308,8 +270,6 @@ var provisionersNewAmazonEC2Cmd = &cobra.Command{
 			return
 		}
 
-		spew.Dump(data)
-
 		out := provisioners.Encrypt(data, provisionersNewPassphrase)
 		_, err = io.Copy(f, bytes.NewReader(out))
 		if err != nil {
@@ -328,6 +288,7 @@ func init() {
 	provisionersNewAmazonEC2Cmd.MarkFlagRequired("secret")
 	f.StringVarP(&provisionersNewAmazonRegion, "region", "r", "ap-southeast-2", "AWS region")
 	f.StringVarP(&provisionersNewAmazonBucket, "bucket", "b", "", "AWS bucket")
+	provisionersNewAmazonEC2Cmd.MarkFlagRequired("bucket")
 	f.StringVarP(&provisionersNewPassphrase, "passphrase", "p", "", "Passphrase for encrypting exported provisioner data.")
 }
 

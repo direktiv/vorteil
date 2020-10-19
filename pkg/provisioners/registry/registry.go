@@ -18,7 +18,7 @@ import (
 
 func init() {
 
-	fn := func(log elog.View, data []byte) (provisioners.Provisioner, error) {
+	gcpFn := func(log elog.View, data []byte) (provisioners.Provisioner, error) {
 		var cfg google.Config
 		err := json.Unmarshal(data, &cfg)
 		if err != nil {
@@ -27,17 +27,35 @@ func init() {
 		return google.NewProvisioner(log, &cfg)
 	}
 
-	err := RegisterProvisioner(google.ProvisionerType, fn)
+	awsFn := func(log elog.View, data []byte) (provisioners.Provisioner, error) {
+		var cfg amazon.Config
+		err := json.Unmarshal(data, &cfg)
+		if err != nil {
+			return nil, err
+		}
+		return amazon.NewProvisioner(log, &cfg)
+	}
+
+	azureFn := func(log elog.View, data []byte) (provisioners.Provisioner, error) {
+		var cfg azure.Config
+		err := json.Unmarshal(data, &cfg)
+		if err != nil {
+			return nil, err
+		}
+		return azure.NewProvisioner(log, &cfg)
+	}
+
+	err := RegisterProvisioner(google.ProvisionerType, gcpFn)
 	if err != nil {
 		panic(err)
 	}
 
-	err = RegisterProvisioner(amazon.ProvisionerType, fn)
+	err = RegisterProvisioner(amazon.ProvisionerType, awsFn)
 	if err != nil {
 		panic(err)
 	}
 
-	err = RegisterProvisioner(azure.ProvisionerType, fn)
+	err = RegisterProvisioner(azure.ProvisionerType, azureFn)
 	if err != nil {
 		panic(err)
 	}

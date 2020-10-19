@@ -1,10 +1,17 @@
 package registry
 
+/**
+ * SPDX-License-Identifier: Apache-2.0
+ * Copyright 2020 vorteil.io Pty Ltd
+ */
+
 import (
 	"fmt"
 
 	"github.com/vorteil/vorteil/pkg/elog"
 	"github.com/vorteil/vorteil/pkg/provisioners"
+	"github.com/vorteil/vorteil/pkg/provisioners/amazon"
+	"github.com/vorteil/vorteil/pkg/provisioners/azure"
 	"github.com/vorteil/vorteil/pkg/provisioners/google"
 )
 
@@ -17,7 +24,17 @@ func init() {
 		})
 	}
 
-	err := RegisterProvisioner("google", fn)
+	err := RegisterProvisioner(google.ProvisionerType, fn)
+	if err != nil {
+		panic(err)
+	}
+
+	err = RegisterProvisioner(amazon.ProvisionerType, fn)
+	if err != nil {
+		panic(err)
+	}
+
+	err = RegisterProvisioner(azure.ProvisionerType, fn)
 	if err != nil {
 		panic(err)
 	}

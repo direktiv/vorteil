@@ -9,7 +9,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -23,6 +22,7 @@ import (
 	"github.com/vorteil/vorteil/pkg/provisioners/amazon"
 	"github.com/vorteil/vorteil/pkg/provisioners/azure"
 	"github.com/vorteil/vorteil/pkg/provisioners/google"
+	"github.com/vorteil/vorteil/pkg/provisioners/registry"
 	"github.com/vorteil/vorteil/pkg/vdisk"
 	"github.com/vorteil/vorteil/pkg/vio"
 	"github.com/vorteil/vorteil/pkg/vpkg"
@@ -65,55 +65,54 @@ If your PROVISIONER was created with a passphrase you can input this passphrase 
 			return
 		}
 
-		m := make(map[string]interface{})
-		err = json.Unmarshal(data, &m)
+		ptype, err := provisioners.ProvisionerType(data)
 		if err != nil {
 			SetError(err, 4)
 			return
 		}
 
-		ptype, ok := m[provisioners.MapKey]
-		if !ok {
+		prov, err := registry.NewProvisioner(ptype, log, data)
+		if err != nil {
 			SetError(err, 5)
 			return
 		}
 
-		var prov provisioners.Provisioner
+		// var prov provisioners.Provisioner
 
-		switch ptype {
-		case google.ProvisionerType:
-			fmt.Println("Provisioning to Google Cloud Platform")
-			p := &google.Provisioner{}
-			err = p.Initialize(data)
-			if err != nil {
-				SetError(err, 6)
-				return
-			}
+		// switch ptype {
+		// case google.ProvisionerType:
+		// 	fmt.Println("Provisioning to Google Cloud Platform")
+		// 	p := &google.Provisioner{}
+		// 	err = p.Initialize(data)
+		// 	if err != nil {
+		// 		SetError(err, 6)
+		// 		return
+		// 	}
 
-			prov = p
+		// 	prov = p
 
-		case amazon.ProvisionerType:
-			fmt.Println("Provisioning to Amazon Web Services")
-			p := &amazon.Provisioner{}
-			err = p.Initialize(data)
-			if err != nil {
-				SetError(err, 7)
-				return
-			}
+		// case amazon.ProvisionerType:
+		// 	fmt.Println("Provisioning to Amazon Web Services")
+		// 	p := &amazon.Provisioner{}
+		// 	err = p.Initialize(data)
+		// 	if err != nil {
+		// 		SetError(err, 7)
+		// 		return
+		// 	}
 
-			prov = p
+		// 	prov = p
 
-		case azure.ProvisionerType:
-			fmt.Println("Provisioning to Azure")
-			p := &azure.Provisioner{}
-			err = p.Initialize(data)
-			if err != nil {
-				SetError(err, 8)
-				return
-			}
+		// case azure.ProvisionerType:
+		// 	fmt.Println("Provisioning to Azure")
+		// 	p := &azure.Provisioner{}
+		// 	err = p.Initialize(data)
+		// 	if err != nil {
+		// 		SetError(err, 8)
+		// 		return
+		// 	}
 
-			prov = p
-		}
+		// 	prov = p
+		// }
 
 		buildablePath := "."
 		if len(args) >= 1 {
@@ -205,7 +204,6 @@ If your PROVISIONER was created with a passphrase you can input this passphrase 
 			Name:            provisionName,
 			Description:     provisionDescription,
 			Force:           provisionForce,
-			Logger:          log,
 			ReadyWhenUsable: provisionReadyWhenUsable,
 		})
 		if err != nil {

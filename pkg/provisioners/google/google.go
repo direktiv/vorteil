@@ -26,9 +26,6 @@ import (
 	"google.golang.org/api/option"
 )
 
-// MapKey ...
-var MapKey = ""
-
 // Provisioner ...
 type Provisioner struct {
 	cfg *Config
@@ -76,12 +73,12 @@ var scopes = []string{
 func (p *Provisioner) Validate() error {
 	defer p.closeClients()
 	err := p.createClients()
-	// if err != nil {
-	// 	err = fmt.Errorf("invalid provisioner, %v", err)
-	// }
-	return &provisioners.InvalidProvisionerError{
-		Err: err,
+	if err != nil {
+		err = &provisioners.InvalidProvisionerError{
+			Err: err,
+		}
 	}
+	return err
 }
 
 // createClients
@@ -225,8 +222,6 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 	}
 
 	return p.uploadImage(projectID, name, args)
-
-	return nil
 }
 
 // Marshal returns json provisioner as bytes
@@ -324,4 +319,14 @@ func (p *Provisioner) deleteConflictingImage(projectID, name string) error {
 	}
 
 	return err
+}
+
+// Create a provisioner object
+func Create(cfg *Config) (provisioners.Provisioner, error) {
+
+	p := &Provisioner{
+		cfg: cfg,
+	}
+
+	return p, nil
 }

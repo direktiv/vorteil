@@ -321,7 +321,9 @@ var provisionersNewAmazonEC2Cmd = &cobra.Command{
 func init() {
 	f := provisionersNewAmazonEC2Cmd.Flags()
 	f.StringVarP(&provisionersNewAmazonKey, "key", "k", "", "Access key ID")
+	provisionersNewAmazonEC2Cmd.MarkFlagRequired("key")
 	f.StringVarP(&provisionersNewAmazonSecret, "secret", "s", "", "Secret access key")
+	provisionersNewAmazonEC2Cmd.MarkFlagRequired("secret")
 	f.StringVarP(&provisionersNewAmazonRegion, "region", "r", "ap-southeast-2", "AWS region")
 	f.StringVarP(&provisionersNewPassphrase, "passphrase", "p", "", "Passphrase for encrypting exported provisioner data.")
 }
@@ -384,11 +386,19 @@ var provisionersNewAzureCmd = &cobra.Command{
 func init() {
 	f := provisionersNewAzureCmd.Flags()
 	f.StringVarP(&provisionersNewAzureKeyFile, "key-file", "k", "", "Azure 'Service Principal' credentials file")
+	provisionersNewAzureCmd.MarkFlagRequired("key-file")
 	f.StringVarP(&provisionersNewAzureContainer, "container", "c", "", "Azure container name")
+	provisionersNewAzureCmd.MarkFlagRequired("container")
 	f.StringVarP(&provisionersNewAzureResourceGroup, "resource-group", "r", "", "Azure resource group name")
+	provisionersNewAzureCmd.MarkFlagRequired("resource-group")
 	f.StringVarP(&provisionersNewAzureLocation, "location", "l", "", "Azure location")
+	provisionersNewAzureCmd.MarkFlagRequired("location")
 	f.StringVarP(&provisionersNewAzureStorageAccountKey, "storage-account-key", "s", "", "Azure storage account key")
+	provisionersNewAzureCmd.MarkFlagRequired("storage-account-key")
 	f.StringVarP(&provisionersNewAzureStorageAccountName, "storage-account-name", "n", "", "Azure storage account name")
+	provisionersNewAzureCmd.MarkFlagRequired("storage-account-name")
+	f.StringVarP(&provisionersNewPassphrase, "passphrase", "p", "", "Passphrase for encrypting exported provisioner data.")
+
 }
 
 var provisionersNewGoogleCmd = &cobra.Command{
@@ -445,5 +455,7 @@ func init() {
 	f := provisionersNewGoogleCmd.Flags()
 	f.StringVarP(&provisionersNewPassphrase, "passphrase", "p", "", "Passphrase for encrypting exported provisioner data.")
 	f.StringVarP(&provisionersNewGoogleBucket, "bucket", "b", "", "Name of an existing Google Cloud Storage bucket, for which the provided service account credentials have adequate permissions for object creation/deletion.")
+	provisionersNewGoogleCmd.MarkFlagRequired("bucket")
 	f.StringVarP(&provisionersNewGoogleKeyFile, "credentials", "f", "", "Path of an existing JSON-formatted Google Cloud Platform service account credentials file.")
+	provisionersNewGoogleCmd.MarkFlagRequired("credentials")
 }

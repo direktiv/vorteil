@@ -53,7 +53,8 @@ func (ws *writeSeeker) Seek(offset int64, whence int) (int64, error) {
 			ws.k += k
 			return ws.k, err
 		} else {
-			return ws.s.Seek(offset, whence)
+			n, err := ws.s.Seek(offset, whence)
+			return n - ws.k, err
 		}
 	case io.SeekStart:
 		if ws.s == nil {

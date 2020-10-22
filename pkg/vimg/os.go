@@ -486,7 +486,7 @@ func (b *Builder) processLinuxArgs() error {
 
 	// if the fs is not set here we assume it is ext2
 	fs := b.vcfg.System.Filesystem
-	if fs == "" {
+	if fs == "" || fs == "ext" {
 		fs = "ext2"
 	}
 

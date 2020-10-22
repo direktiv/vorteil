@@ -137,6 +137,7 @@ func (c *compiler) initSuperblock() {
 	c.superblock.FragmentsPerGroup = uint32(c.blocksPerGroup)
 	c.superblock.UnallocatedBlocks = uint32(c.unallocatedBlocks)
 	c.superblock.UnallocatedInodes = uint32(c.unallocatedInodes)
+	c.superblock.RequiredFeatures = IncompatFiletype
 }
 
 func (c *compiler) generateBGDT() error {

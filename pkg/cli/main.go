@@ -163,6 +163,7 @@ func getSourceType(src string) (sourceType, error) {
 		if target != "" {
 			return sourceINVALID, errors.New("Targetable runs are unable to be used on packages")
 		}
+		return sourceFile, nil
 	} else if !os.IsNotExist(err) && (fi != nil && fi.IsDir()) {
 		return sourceDir, nil
 	}

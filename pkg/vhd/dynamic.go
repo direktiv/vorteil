@@ -11,19 +11,19 @@ import (
 	"errors"
 	"io"
 	"time"
-
-	"github.com/vorteil/vorteil/pkg/vio"
 )
 
 const chunkSize = 0x200000
 
 type DynamicWriter struct {
-	w      io.WriteSeeker
-	h      HolePredictor
-	header *header
-	footer *bytes.Buffer
-	cursor int64
-	buffer *bytes.Buffer
+	w             io.WriteSeeker
+	h             HolePredictor
+	header        *header
+	footer        *bytes.Buffer
+	cursor        int64
+	buffer        *bytes.Buffer
+	chunkOffsets  []int64
+	flushedChunks int64
 }
 
 func NewDynamicWriter(w io.WriteSeeker, h HolePredictor) (*DynamicWriter, error) {
@@ -31,6 +31,7 @@ func NewDynamicWriter(w io.WriteSeeker, h HolePredictor) (*DynamicWriter, error)
 	dw := new(DynamicWriter)
 	dw.w = w
 	dw.h = h
+	dw.chunkOffsets = make([]int64, (dw.h.Size()+chunkSize-1)/chunkSize)
 	dw.buffer = new(bytes.Buffer)
 
 	err := dw.writeRedundantFooter()
@@ -195,17 +196,20 @@ func (w *DynamicWriter) writeBAT() error {
 	batSize := ((4*batEntries + 511) / 512) * 512
 	dataStart := int(w.header.TableOffset) + int(batSize)
 	bat := bytes.Repeat([]byte{255}, int(batSize))
+	offset := int64(dataStart)
 	for i := 0; i < int(batEntries); i++ {
-		offset := (dataStart + i*(512+chunkSize)) / 512
-		binary.BigEndian.PutUint32(bat[4*i:4*(i+1)], uint32(offset))
+		w.chunkOffsets[i] = offset
+		binary.BigEndian.PutUint32(bat[4*i:4*(i+1)], uint32(offset/512))
+		if w.h.RegionIsHole(int64(i)*chunkSize, chunkSize) {
+			continue
+		}
+		offset += 512 + chunkSize
 	}
 
 	_, err := io.Copy(w.w, bytes.NewReader(bat))
 	if err != nil {
 		return err
 	}
-
-	// TODO: make sparse
 
 	return nil
 }
@@ -251,7 +255,23 @@ func (w *DynamicWriter) Write(p []byte) (n int, err error) {
 
 func (w *DynamicWriter) flushBuffer() error {
 
-	_, err := io.Copy(w.w, bytes.NewReader(bytes.Repeat([]byte{255}, 512)))
+	_, err := w.w.Seek(w.chunkOffsets[w.flushedChunks], io.SeekStart)
+	if err != nil {
+		return err
+	}
+
+	if int64(len(w.chunkOffsets)) > w.flushedChunks+1 {
+		// check if chunk is considered a "hole"
+		if w.chunkOffsets[w.flushedChunks] == w.chunkOffsets[w.flushedChunks+1] {
+			w.flushedChunks++
+			w.buffer.Reset()
+			return nil
+		}
+	}
+
+	w.flushedChunks++
+
+	_, err = io.Copy(w.w, bytes.NewReader(bytes.Repeat([]byte{255}, 512)))
 	if err != nil {
 		return err
 	}
@@ -282,14 +302,25 @@ func (w *DynamicWriter) Seek(offset int64, whence int) (int64, error) {
 		return w.cursor, errors.New("vhd dynamic archive writer cannot seek backwards")
 	}
 
-	// TODO: make this faster using HolePredictor
-	delta := abs - w.cursor
-	_, err := io.CopyN(w, vio.Zeroes, delta)
-	if err != nil {
-		return w.cursor, err
+	currentChunk := w.cursor / chunkSize
+	chunk := abs / chunkSize
+	delta := abs % chunkSize
+	x := w.chunkOffsets[chunk] + delta
+
+	for i := currentChunk; i < chunk; i++ {
+		err := w.flushBuffer()
+		if err != nil {
+			return 0, err
+		}
 	}
 
-	return w.cursor, nil
+	_, err := w.w.Seek(x, io.SeekStart)
+	w.cursor = abs
+	if err != nil {
+		return 0, err
+	}
+	return abs, nil
+
 }
 
 func (w *DynamicWriter) writeFooter() error {

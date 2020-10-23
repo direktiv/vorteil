@@ -11,7 +11,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -275,8 +274,8 @@ func (p *Provisioner) getImageID(imageName string) (*string, error) {
 }
 
 func (p *Provisioner) importSnapshot(bucketImageKey string) (string, error) {
-	snapshotProgress := p.args.Logger.NewProgress("Converting Image to Snapshot ", "%", 100)
-	defer snapshotProgress.Finish(false)
+	snapshotProgress := p.args.Logger.NewProgress("Converting Image to Snapshot ", "", 0)
+	defer snapshotProgress.Finish(true)
 	// Import Snapshot
 	var snapshotID *string
 	// o.updateStatus("Importing disk into EBS Snapshot")
@@ -294,7 +293,6 @@ func (p *Provisioner) importSnapshot(bucketImageKey string) (string, error) {
 		return aws.StringValue(snapshotID), err
 	}
 
-	var progress int = 0
 	var disto *ec2.DescribeImportSnapshotTasksOutput
 	for {
 		disto, err = p.ec2Client.DescribeImportSnapshotTasks(&ec2.DescribeImportSnapshotTasksInput{
@@ -306,18 +304,7 @@ func (p *Provisioner) importSnapshot(bucketImageKey string) (string, error) {
 
 		// Check if task exists
 		if len(disto.ImportSnapshotTasks) > 0 {
-			if disto.ImportSnapshotTasks[0].SnapshotTaskDetail.StatusMessage != nil && disto.ImportSnapshotTasks[0].SnapshotTaskDetail.Progress != nil {
-				progressIncrement := 0
-				newProgress, _ := strconv.Atoi(*disto.ImportSnapshotTasks[0].SnapshotTaskDetail.Progress)
-				if newProgress != 0 {
-					progressIncrement = newProgress - progress
-					progress += progressIncrement
-				}
-				snapshotProgress.Increment(int64(progressIncrement))
-			}
-
 			if *disto.ImportSnapshotTasks[0].SnapshotTaskDetail.Status == *aws.String("completed") {
-				progress = 100
 				snapshotID = disto.ImportSnapshotTasks[0].SnapshotTaskDetail.SnapshotId
 				break
 			}
@@ -331,11 +318,6 @@ func (p *Provisioner) importSnapshot(bucketImageKey string) (string, error) {
 			break
 		}
 		time.Sleep(pollrate)
-	}
-	if progress == 100 {
-		snapshotProgress.Finish(true)
-	} else {
-		snapshotProgress.Finish(false)
 	}
 
 	return aws.StringValue(snapshotID), err

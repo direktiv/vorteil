@@ -21,7 +21,6 @@ type DynamicWriter struct {
 	header        *header
 	footer        *bytes.Buffer
 	cursor        int64
-	buffer        *bytes.Buffer
 	chunkOffsets  []int64
 	flushedChunks int64
 }
@@ -32,7 +31,6 @@ func NewDynamicWriter(w io.WriteSeeker, h HolePredictor) (*DynamicWriter, error)
 	dw.w = w
 	dw.h = h
 	dw.chunkOffsets = make([]int64, (dw.h.Size()+chunkSize-1)/chunkSize)
-	dw.buffer = new(bytes.Buffer)
 
 	err := dw.writeRedundantFooter()
 	if err != nil {
@@ -199,10 +197,11 @@ func (w *DynamicWriter) writeBAT() error {
 	offset := int64(dataStart)
 	for i := 0; i < int(batEntries); i++ {
 		w.chunkOffsets[i] = offset
-		binary.BigEndian.PutUint32(bat[4*i:4*(i+1)], uint32(offset/512))
 		if w.h.RegionIsHole(int64(i)*chunkSize, chunkSize) {
+			binary.BigEndian.PutUint32(bat[4*i:4*(i+1)], uint32(0xFFFFFFFF))
 			continue
 		}
+		binary.BigEndian.PutUint32(bat[4*i:4*(i+1)], uint32(offset/512))
 		offset += 512 + chunkSize
 	}
 
@@ -216,76 +215,56 @@ func (w *DynamicWriter) writeBAT() error {
 
 func (w *DynamicWriter) Write(p []byte) (n int, err error) {
 
-	var total int
+	chunk := w.cursor / chunkSize
+	delta := w.cursor % chunkSize
 
-	for {
-		chunkSpace := chunkSize - w.cursor%chunkSize
-		if int64(len(p)) < chunkSpace {
-			n, err = w.buffer.Write(p)
-			w.cursor += int64(n)
-			total += n
-			return total, err
-		}
-
-		this := p[:chunkSpace]
-		next := p[chunkSpace:]
-		n, err = w.buffer.Write(this)
-		w.cursor += int64(n)
-		total += n
-		if err != nil {
-			return total, err
-		}
-
-		err = w.flushBuffer()
-		if err != nil {
-			return total, err
-		}
-
-		if len(next) > 0 {
-			p = next
-			continue
-		}
-
-		break
+	endCursor := w.cursor + int64(len(p))
+	lastChunk := endCursor / chunkSize
+	if endCursor%chunkSize == 0 {
+		lastChunk--
 	}
 
-	return total, err
+	for chunk <= lastChunk {
 
-}
+		var k int64
 
-func (w *DynamicWriter) flushBuffer() error {
+		if delta == 0 {
 
-	_, err := w.w.Seek(w.chunkOffsets[w.flushedChunks], io.SeekStart)
-	if err != nil {
-		return err
-	}
+			// check that offset matched BAT
+			k, err = w.w.Seek(0, io.SeekCurrent)
+			if err != nil {
+				return
+			}
 
-	if int64(len(w.chunkOffsets)) > w.flushedChunks+1 {
-		// check if chunk is considered a "hole"
-		if w.chunkOffsets[w.flushedChunks] == w.chunkOffsets[w.flushedChunks+1] {
-			w.flushedChunks++
-			w.buffer.Reset()
-			return nil
+			if w.chunkOffsets[chunk] == k {
+				// write bitmap
+				_, err = io.Copy(w.w, bytes.NewReader(bytes.Repeat([]byte{255}, 512)))
+				if err != nil {
+					return
+				}
+			}
 		}
+
+		// write data
+		k, err = io.CopyN(w.w, bytes.NewReader(p), chunkSize)
+		n += int(k)
+		if err != io.EOF {
+			return
+		}
+
+		err = nil
+		p = p[k:]
+		delta = 0
+		chunk++
 	}
 
-	w.flushedChunks++
+	w.cursor += int64(n)
+	return
 
-	_, err = io.Copy(w.w, bytes.NewReader(bytes.Repeat([]byte{255}, 512)))
-	if err != nil {
-		return err
-	}
-
-	_, err = io.Copy(w.w, bytes.NewReader(w.buffer.Bytes()))
-	if err != nil {
-		return err
-	}
-
-	w.buffer.Reset()
-	return nil
 }
 
 func (w *DynamicWriter) Seek(offset int64, whence int) (int64, error) {
+
 	var abs int64
 	switch whence {
 	case io.SeekStart:
@@ -298,27 +277,60 @@ func (w *DynamicWriter) Seek(offset int64, whence int) (int64, error) {
 		panic("bad seek whence")
 	}
 
-	if abs < w.cursor {
-		return w.cursor, errors.New("vhd dynamic archive writer cannot seek backwards")
+	chunk := abs / chunkSize
+	delta := abs % chunkSize
+	var trueOffset int64
+	l := int64(len(w.chunkOffsets))
+
+	if chunk > l || (chunk == l && delta > 0) {
+		return l * chunkSize, io.EOF
+	} else if chunk == l {
+		trueOffset = l * chunkSize
+	} else {
+		trueOffset = w.chunkOffsets[chunk] + 512 + delta
 	}
 
 	currentChunk := w.cursor / chunkSize
-	chunk := abs / chunkSize
-	delta := abs % chunkSize
-	x := w.chunkOffsets[chunk] + delta
 
-	for i := currentChunk; i < chunk; i++ {
-		err := w.flushBuffer()
+	// chunk bitmaps for every chunk we've skipped
+	for {
+		curr, err := w.w.Seek(0, io.SeekCurrent)
 		if err != nil {
 			return 0, err
 		}
+
+		if curr >= trueOffset {
+			break
+		}
+
+		if currentChunk >= l {
+			break
+		}
+
+		if curr <= w.chunkOffsets[currentChunk] {
+			_, err = w.w.Seek(w.chunkOffsets[currentChunk], io.SeekStart)
+			if err != nil {
+				return 0, err
+			}
+
+			_, err = io.Copy(w.w, bytes.NewReader(bytes.Repeat([]byte{255}, 512)))
+			if err != nil {
+				return 0, err
+			}
+		}
+
+		currentChunk++
 	}
 
-	_, err := w.w.Seek(x, io.SeekStart)
-	w.cursor = abs
+	_, err := w.w.Seek(trueOffset, io.SeekStart)
 	if err != nil {
 		return 0, err
 	}
+
+	if w.cursor < abs {
+		w.cursor = abs
+	}
+
 	return abs, nil
 
 }

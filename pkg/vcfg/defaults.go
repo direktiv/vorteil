@@ -57,5 +57,5 @@ func sanitizeHostname(s string) string {
 	if x == nil {
 		return "vorteil"
 	}
-	return strings.Join(x, "")
+	return strings.Trim(strings.Join(x, ""), "-")
 }

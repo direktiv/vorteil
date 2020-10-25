@@ -131,6 +131,19 @@ func (c *nodeTracker) prepNextDataBlock() error {
 
 }
 
+func growToBlock(buf *bytes.Buffer) {
+	var size int64
+	if buf.Len() == 0 {
+		size = BlockSize
+	} else {
+		size = align(int64(buf.Len()), BlockSize)
+	}
+	_, err := io.CopyN(buf, vio.Zeroes, size-int64(buf.Len()))
+	if err != nil {
+		panic(err)
+	}
+}
+
 func (c *nodeTracker) writeBlock(w io.Writer, mapDBtoBlockAddr func(int64) int64) error {
 
 	// write next block
@@ -161,6 +174,8 @@ func (c *nodeTracker) writeBlock(w io.Writer, mapDBtoBlockAddr func(int64) int64
 	}
 
 	// pad and write
+	growToBlock(buffer)
+
 	_, err := w.Write(buffer.Bytes())
 	if err != nil {
 		return err

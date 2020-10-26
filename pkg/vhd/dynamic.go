@@ -246,9 +246,13 @@ func (w *DynamicWriter) Write(p []byte) (n int, err error) {
 		}
 
 		// write data
-		k, err = io.CopyN(w.w, bytes.NewReader(p), chunkSize)
+		k, err = io.CopyN(w.w, bytes.NewReader(p), chunkSize-delta)
 		n += int(k)
-		if err != io.EOF {
+		w.cursor += int64(k)
+		if err != nil {
+			if err == io.EOF {
+				err = nil
+			}
 			return
 		}
 
@@ -258,7 +262,6 @@ func (w *DynamicWriter) Write(p []byte) (n int, err error) {
 		chunk++
 	}
 
-	w.cursor += int64(n)
 	return
 
 }
@@ -308,7 +311,8 @@ func (w *DynamicWriter) Seek(offset int64, whence int) (int64, error) {
 		}
 
 		if curr <= w.chunkOffsets[currentChunk] {
-			_, err = w.w.Seek(w.chunkOffsets[currentChunk], io.SeekStart)
+			var k int64
+			k, err = w.w.Seek(w.chunkOffsets[currentChunk], io.SeekStart)
 			if err != nil {
 				return 0, err
 			}

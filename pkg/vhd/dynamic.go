@@ -311,8 +311,7 @@ func (w *DynamicWriter) Seek(offset int64, whence int) (int64, error) {
 		}
 
 		if curr <= w.chunkOffsets[currentChunk] {
-			var k int64
-			k, err = w.w.Seek(w.chunkOffsets[currentChunk], io.SeekStart)
+			_, err = w.w.Seek(w.chunkOffsets[currentChunk], io.SeekStart)
 			if err != nil {
 				return 0, err
 			}

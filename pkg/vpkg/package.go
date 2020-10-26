@@ -143,6 +143,10 @@ type Builder interface {
 	// previously existing icon.
 	SetIcon(f vio.File) error
 
+	// RemoveFromFS removes a single filesystem mapping
+	// from the package.
+	RemoveFromFS(path string) error
+
 	// AddToFS takes the single vio.File and maps it
 	// into the filesystem for the package, replacing
 	// anything it conflicts with and automatically
@@ -291,6 +295,14 @@ func (b *builder) SetCompressionLevel(level int) {
 
 func (b *builder) SetMonitoringOptions(opts MonitoringOptions) {
 	b.monitoring = opts
+}
+
+func (b *builder) RemoveFromFS(path string) error {
+	path = strings.TrimPrefix(path, "/")
+	if path == "" {
+		return errors.New("cannot remove empty path from filesystem")
+	}
+	return b.tree.Unmap(fsPath + "/" + path)
 }
 
 func (b *builder) AddToFS(path string, f vio.File) error {

@@ -30,7 +30,7 @@ jobs:
         - sudo ctr images pull docker.io/library/hello-world:latest
         - sudo chmod 0777 /run/containerd/containerd.sock
         - go test -timeout 30s -coverprofile c.out ./...
-        - export LDFLAGS="-X main.release=$BUILD_TAG -X main.commit=$BUILD_REF -X 'main.date=$BUILD_DATE'"
+        - export LDFLAGS="-X github.com/vorteil/vorteil/pkg/cli.release=$BUILD_TAG -X github.com/vorteil/vorteil/pkg/cli.commit=$BUILD_REF -X 'github.com/vorteil/vorteil/pkg/cli.date=$BUILD_DATE'"
         - echo $LDFLAGS
         - go build -o vorteil -ldflags "$LDFLAGS" github.com/vorteil/vorteil/cmd/vorteil 
         - GOOS=windows go build -o vorteil.exe -ldflags "$LDFLAGS" github.com/vorteil/vorteil/cmd/vorteil

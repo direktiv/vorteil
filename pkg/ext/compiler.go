@@ -137,6 +137,7 @@ func (c *compiler) initSuperblock() {
 	c.superblock.FragmentsPerGroup = uint32(c.blocksPerGroup)
 	c.superblock.UnallocatedBlocks = uint32(c.unallocatedBlocks)
 	c.superblock.UnallocatedInodes = uint32(c.unallocatedInodes)
+	c.superblock.RequiredFeatures = IncompatFiletype
 }
 
 func (c *compiler) generateBGDT() error {
@@ -396,14 +397,14 @@ func (c *compiler) writeDataBlocks(ctx context.Context, w io.WriteSeeker, g int6
 		last = c.blocks - 1
 	}
 
+	_, err := w.Seek(first*BlockSize, io.SeekStart)
+	if err != nil {
+		return err
+	}
+
 	for block := first; block <= last; block++ {
 
 		err := ctx.Err()
-		if err != nil {
-			return err
-		}
-
-		_, err = w.Seek(block*BlockSize, io.SeekStart)
 		if err != nil {
 			return err
 		}

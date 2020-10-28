@@ -72,7 +72,7 @@ func (a *allocator) IsAvailable() bool {
 
 // DiskFormat returns the format the hypervisor should be using
 func (a *allocator) DiskFormat() vdisk.Format {
-	return vdisk.VHDFormat
+	return vdisk.VHDDynamicFormat
 }
 
 // ValidateArgs check if valid args are passed to create a valid Virtualizer

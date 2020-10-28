@@ -219,7 +219,18 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 
 // Marshal returns json provisioner as bytes
 func (p *Provisioner) Marshal() ([]byte, error) {
-	return nil, nil
+
+	m := make(map[string]interface{})
+	m[provisioners.MapKey] = ProvisionerType
+	m["bucket"] = p.cfg.Bucket
+	m["key"] = p.cfg.Key
+
+	out, err := json.Marshal(m)
+	if err != nil {
+		return nil, err
+	}
+
+	return out, nil
 }
 
 // utils

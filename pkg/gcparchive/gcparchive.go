@@ -53,7 +53,7 @@ func NewWriter(w io.Writer, h Sizer) (*Writer, error) {
 func (w *Writer) writeHeader() error {
 	header := new(gcpTarPosixHeader)
 	copy(header.Name[:], []byte("disk.raw")) // gcp requires the file is called disk.raw
-	octal := "0" + strconv.FormatUint(uint64(w.length), 8)
+	octal := strconv.FormatUint(uint64(w.length), 8)
 	copy(header.Size[:], []byte(octal))
 	header.Mode = [8]byte{0x30, 0x30, 0x30, 0x30, 0x36, 0x34, 0x34, 0x00}
 	copy(header.Mtime[:], []byte("00000000000"))

@@ -8,6 +8,7 @@ package registry
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 
 	"github.com/vorteil/vorteil/pkg/elog"
 	"github.com/vorteil/vorteil/pkg/provisioners"
@@ -61,12 +62,12 @@ func init() {
 	}
 }
 
-// ProvisionerInstantiator - TODO:
+// ProvisionerInstantiator is a function that returns a new provisioner
 type ProvisionerInstantiator func(log elog.View, data []byte) (provisioners.Provisioner, error)
 
 var registeredProvisioners map[string]ProvisionerInstantiator
 
-// RegisterProvisioner - TODO:
+// RegisterProvisioner registers a ProvisionerInstantiator with a given name.
 func RegisterProvisioner(name string, fn ProvisionerInstantiator) error {
 
 	if registeredProvisioners == nil {
@@ -81,7 +82,43 @@ func RegisterProvisioner(name string, fn ProvisionerInstantiator) error {
 	return nil
 }
 
-// NewProvisioner ...
+// Provisioners returns an alphabetised list of all registered
+// provisioners. Note that a single provisioners may appear multiple times
+// in the list under different names.
+func Provisioners() []string {
+
+	var names = []string{}
+
+	if registeredProvisioners == nil {
+		return names
+	}
+
+	for k := range registeredProvisioners {
+		names = append(names, k)
+	}
+
+	sort.Strings(names)
+	return names
+
+}
+
+// DeregisterProvisioner deregisters a ProvisionerInstantiator for the
+// given name.
+func DeregisterProvisioner(name string) error {
+
+	if registeredProvisioners != nil {
+		if _, exists := registeredProvisioners[name]; exists {
+			delete(registeredProvisioners, name)
+			return nil
+		}
+	}
+
+	return fmt.Errorf("provisioner '%s' not found", name)
+
+}
+
+// NewProvisioner returns a provisioners.Provisioner object that can be used to
+// provision a vorteil buildable, if the named provisioner is registered.
 func NewProvisioner(name string, log elog.View, data []byte) (provisioners.Provisioner, error) {
 
 	fn, exists := registeredProvisioners[name]

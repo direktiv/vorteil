@@ -179,7 +179,7 @@ func getReaderURL(src string) (vpkg.Reader, error) {
 	if err != nil {
 		return nil, err
 	}
-	fmt.Println(flagKey)
+
 	if flagKey != "" {
 		req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", flagKey))
 	}

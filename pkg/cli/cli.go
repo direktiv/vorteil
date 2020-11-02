@@ -26,6 +26,7 @@ var (
 	flagFormat           string
 	flagOutput           string
 	flagPlatform         string
+	flagKey              string
 	flagGUI              bool
 	flagOS               bool
 	flagRecord           string

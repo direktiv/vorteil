@@ -26,12 +26,16 @@ var (
 	flagFormat           string
 	flagOutput           string
 	flagPlatform         string
+	flagName             string
 	flagKey              string
 	flagGUI              bool
 	flagOS               bool
 	flagRecord           string
 	flagShell            bool
 	flagTouched          bool
+
+	pushOrganisation string
+	pushBucket       string
 )
 
 const (
@@ -89,6 +93,7 @@ func InitializeCommands() {
 	RootCommand.AddCommand(commandShortcut(unpackCmd))
 	RootCommand.AddCommand(commandShortcut(convertContainerCmd))
 	RootCommand.AddCommand(commandShortcut(importSharedObjectsCmd))
+	RootCommand.AddCommand(commandShortcut(pushCmd))
 
 	// Here is the visible command structure definition.
 	RootCommand.AddCommand(imagesCmd)

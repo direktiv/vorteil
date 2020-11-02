@@ -179,6 +179,9 @@ func getReaderURL(src string) (vpkg.Reader, error) {
 		resp.Body.Close()
 		return nil, err
 	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, errors.New(resp.Status)
+	}
 	p := log.NewProgress("Downloading package", "KiB", resp.ContentLength)
 
 	pkgr, err := vpkg.Load(p.ProxyReader(resp.Body))

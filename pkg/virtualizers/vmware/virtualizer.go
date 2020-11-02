@@ -170,7 +170,7 @@ func (v *Virtualizer) Close(force bool) error {
 	command := exec.Command("vmrun", "-T", vmwareType, "deleteVM", v.vmxPath)
 	output, err := v.execute(command)
 	if err != nil {
-		if !strings.Contains(err.Error(), "4294967295") {
+		if !strings.Contains(err.Error(), "4294967295") && !strings.Contains(err.Error(), "3221225786") {
 			if runtime.GOOS == "darwin" && !v.headless {
 				if strings.Contains(err.Error(), "is in use") {
 					v.logger.Errorf("%s (if running with gui make sure its closed)", err.Error())
@@ -286,7 +286,7 @@ func (v *Virtualizer) Stop() error {
 		command := exec.Command("vmrun", "-T", vmwareType, "stop", v.vmxPath)
 		output, err := v.execute(command)
 		if err != nil {
-			if !strings.Contains(err.Error(), "4294967295") {
+			if !strings.Contains(err.Error(), "4294967295") && !strings.Contains(err.Error(), "3221225786") {
 				return err
 			}
 		}
@@ -295,7 +295,6 @@ func (v *Virtualizer) Stop() error {
 		}
 
 		v.state = virtualizers.Ready
-
 	}
 	return nil
 }
@@ -325,8 +324,11 @@ func (v *Virtualizer) Start() error {
 
 		output, err := v.execute(v.startCommand)
 		if err != nil {
-			v.logger.Errorf("Error starting vm: %v", err)
-			return err
+			if !strings.Contains(err.Error(), "3221225786") {
+				v.logger.Errorf("Error starting vm: %v", err)
+				return err
+			}
+
 		}
 		if len(output) > 0 {
 			v.logger.Debugf("%s", output)
@@ -506,7 +508,7 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 
 	o.config.VM.RAM.Align(vcfg.MiB * 4)
 
-	vmxString := GenerateVMX(strconv.Itoa(int(o.config.VM.CPUs)), strconv.Itoa(o.config.VM.RAM.Units(vcfg.MiB)), args.ImagePath, o.name, o.folder, len(o.routes), o.networkType, o.id)
+	vmxString := GenerateVMX(strconv.Itoa(int(o.config.VM.CPUs)), strconv.Itoa(o.config.VM.RAM.Units(vcfg.MiB)), args.ImagePath, o.name, o.folder, len(o.routes), "nat", o.id)
 
 	vmxPath := filepath.Join(o.folder, o.name+".vmx")
 	o.vmxPath = vmxPath

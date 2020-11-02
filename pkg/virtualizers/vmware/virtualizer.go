@@ -51,7 +51,6 @@ type Virtualizer struct {
 	disk         *os.File       // the disk the vm is running
 	vmxPath      string         // the vmx file workstation will use
 	networkType  string         // the type of network the vm spawns on
-	virtLogger   *logger.Logger // virtualizer logger outputs what is executed
 	source       interface{}    //details about how the source was created using api.source struct
 	serialLogger *logger.Logger // serial output logger for app that gets run
 	startCommand *exec.Cmd      // The execute command to start the vmware instance
@@ -160,7 +159,8 @@ func (v *Virtualizer) Close(force bool) error {
 		if err != nil {
 			return err
 		}
-	} else if v.state != virtualizers.Ready {
+	}
+	if v.state != virtualizers.Ready {
 		err := v.Stop()
 		if err != nil {
 			return err
@@ -189,7 +189,6 @@ func (v *Virtualizer) Close(force bool) error {
 	if v.sock != nil {
 		v.sock.Close()
 	}
-	v.disk.Close()
 
 	if !v.headless {
 		err = v.RemoveEntry()
@@ -202,64 +201,61 @@ func (v *Virtualizer) Close(force bool) error {
 	}
 
 	virtualizers.ActiveVMs.Delete(v.name)
-	// err = os.RemoveAll(v.folder)
-	// if err != nil {
-	// 	return err
-	// }
+
 	return nil
 }
 
 // Detach removes vm from active vm list
-func (v *Virtualizer) Detach(source string) error {
-	if v.state != virtualizers.Ready {
-		return errors.New("virtual machine must be in ready state to detach")
-	}
+// func (v *Virtualizer) Detach(source string) error {
+// 	if v.state != virtualizers.Ready {
+// 		return errors.New("virtual machine must be in ready state to detach")
+// 	}
 
-	err := os.MkdirAll(filepath.Join(source, v.name), 0777)
-	if err != nil {
-		return err
-	}
+// 	err := os.MkdirAll(filepath.Join(source, v.name), 0777)
+// 	if err != nil {
+// 		return err
+// 	}
 
-	cmd := exec.Command("vmrun", "-T", vmwareType, "clone", v.vmxPath, filepath.Join(source, v.name, filepath.Base(v.vmxPath)), "full")
-	_, err = v.execute(cmd)
-	if err != nil {
-		if strings.Contains(err.Error(), "4294967295") {
-			return errors.New("vm contents already exist at location")
-		}
-		return err
-	}
+// 	cmd := exec.Command("vmrun", "-T", vmwareType, "clone", v.vmxPath, filepath.Join(source, v.name, filepath.Base(v.vmxPath)), "full")
+// 	_, err = v.execute(cmd)
+// 	if err != nil {
+// 		if strings.Contains(err.Error(), "4294967295") {
+// 			return errors.New("vm contents already exist at location")
+// 		}
+// 		return err
+// 	}
 
-	command := exec.Command("vmrun", "-T", vmwareType, "deleteVM", v.vmxPath)
-	output, err := v.execute(command)
-	if err != nil {
-		if !strings.Contains(err.Error(), "4294967295") {
-			if runtime.GOOS == "darwin" && !v.headless {
-				if strings.Contains(err.Error(), "is in use") {
-					v.logger.Errorf("%s (if running with gui make sure its closed)", err.Error())
-					return fmt.Errorf("%s (if running with gui make sure its closed)", err.Error())
-				}
-			}
-			return err
-		}
-	}
-	if len(output) > 0 {
-		v.logger.Debugf("%s", output)
-	}
+// 	command := exec.Command("vmrun", "-T", vmwareType, "deleteVM", v.vmxPath)
+// 	output, err := v.execute(command)
+// 	if err != nil {
+// 		if !strings.Contains(err.Error(), "4294967295") {
+// 			if runtime.GOOS == "darwin" && !v.headless {
+// 				if strings.Contains(err.Error(), "is in use") {
+// 					v.logger.Errorf("%s (if running with gui make sure its closed)", err.Error())
+// 					return fmt.Errorf("%s (if running with gui make sure its closed)", err.Error())
+// 				}
+// 			}
+// 			return err
+// 		}
+// 	}
+// 	if len(output) > 0 {
+// 		v.logger.Debugf("%s", output)
+// 	}
 
-	v.state = virtualizers.Deleted
+// 	v.state = virtualizers.Deleted
 
-	if v.sock != nil {
-		v.sock.Close()
-	}
-	v.disk.Close()
+// 	if v.sock != nil {
+// 		v.sock.Close()
+// 	}
+// 	v.disk.Close()
 
-	virtualizers.ActiveVMs.Delete(v.name)
-	// err = os.RemoveAll(v.folder)
-	// if err != nil {
-	// 	return err
-	// }
-	return nil
-}
+// 	virtualizers.ActiveVMs.Delete(v.name)
+// 	// err = os.RemoveAll(v.folder)
+// 	// if err != nil {
+// 	// 	return err
+// 	// }
+// 	return nil
+// }
 
 // ForceStop stop the vm without shutting down mainly used when the daemon gets powered off
 func (v *Virtualizer) ForceStop() error {
@@ -304,7 +300,6 @@ func (v *Virtualizer) execute(cmd *exec.Cmd) (string, error) {
 	v.logger.Infof("Executing %s", cmd.Args)
 	resp, err := cmd.CombinedOutput()
 	if err != nil {
-
 		if err.Error() == "" || err.Error() == "exit status 255" {
 			return "", errors.New(string(resp))
 		}
@@ -337,7 +332,7 @@ func (v *Virtualizer) Start() error {
 		go func() {
 			v.routes = util.LookForIP(v.serialLogger, v.routes)
 		}()
-		// go v.checkRunning()
+		go v.checkRunning()
 
 	default:
 		return fmt.Errorf("cannot start vm in state '%s'", v.State())
@@ -345,10 +340,6 @@ func (v *Virtualizer) Start() error {
 	return nil
 }
 
-// Logs returns the virtualizer logger
-func (v *Virtualizer) Logs() *logger.Logger {
-	return v.virtLogger
-}
 
 // Serial returns the serial logger
 func (v *Virtualizer) Serial() *logger.Logger {
@@ -419,20 +410,6 @@ func (o *operation) updateStatus(text string) {
 	o.Logs <- text
 }
 
-// log writes a log line to the logger and adds prefix and suffix depending on what type of log was sent.
-func (v *Virtualizer) log(logType string, text string, args ...interface{}) {
-	switch logType {
-	case "error":
-		text = fmt.Sprintf("%s%s%s\n", "\033[31m", text, "\033[0m")
-	case "warning":
-		text = fmt.Sprintf("%s%s%s\n", "\033[33m", text, "\033[0m")
-	case "info":
-		text = fmt.Sprintf("%s%s%s\n", "\u001b[37;1m", text, "\u001b[0m")
-	default:
-		text = fmt.Sprintf("%s\n", text)
-	}
-	v.virtLogger.Write([]byte(fmt.Sprintf(text, args...)))
-}
 
 // Prepare sets the fields and arguments to spawn the virtual machine
 func (v *Virtualizer) Prepare(args *virtualizers.PrepareArgs) *virtualizers.VirtualizeOperation {
@@ -445,7 +422,6 @@ func (v *Virtualizer) Prepare(args *virtualizers.PrepareArgs) *virtualizers.Virt
 	v.logger = args.Logger
 
 	v.source = args.Source
-	v.virtLogger = logger.NewLogger(2048)
 	v.serialLogger = logger.NewLogger(2048 * 10)
 	v.routes = util.Routes(args.Config.Networks)
 	v.logger.Debugf("Preparing VM")
@@ -508,7 +484,7 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 
 	o.config.VM.RAM.Align(vcfg.MiB * 4)
 
-	vmxString := GenerateVMX(strconv.Itoa(int(o.config.VM.CPUs)), strconv.Itoa(o.config.VM.RAM.Units(vcfg.MiB)), args.ImagePath, o.name, o.folder, len(o.routes), "nat", o.id)
+	vmxString := GenerateVMX(strconv.Itoa(int(o.config.VM.CPUs)), strconv.Itoa(o.config.VM.RAM.Units(vcfg.MiB)), args.ImagePath, o.name, o.folder, len(o.routes), o.networkType, o.id)
 
 	vmxPath := filepath.Join(o.folder, o.name+".vmx")
 	o.vmxPath = vmxPath
@@ -547,8 +523,10 @@ func (v *Virtualizer) checkRunning() {
 	for {
 		running, err := v.isRunning()
 		if err != nil {
-			v.logger.Errorf("Checking Running State: %s", err)
-			return
+			if !strings.Contains(err.Error(), "3221225786") {
+				v.logger.Errorf("Checking Running State: %s", err)
+				return
+			}
 		}
 		if !running {
 			v.state = virtualizers.Ready

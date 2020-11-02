@@ -136,6 +136,7 @@ func runVMware(pkgReader vpkg.Reader, cfg *vcfg.VCFG, name string) error {
 
 	config := vmware.Config{
 		Headless: !flagGUI,
+		NetworkType: "nat",
 	}
 
 	err = virt.Initialize(config.Marshal())

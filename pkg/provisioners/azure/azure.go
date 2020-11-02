@@ -23,6 +23,7 @@ import (
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/go-autorest/autorest/azure"
 	"github.com/Azure/go-autorest/autorest/azure/auth"
+	"github.com/vorteil/vorteil/pkg/elog"
 	"github.com/vorteil/vorteil/pkg/provisioners"
 	"github.com/vorteil/vorteil/pkg/vcfg"
 	"github.com/vorteil/vorteil/pkg/vdisk"
@@ -37,6 +38,7 @@ const (
 // Provisioner satisfies the provisioners.Provisioner interface
 type Provisioner struct {
 	cfg *Config
+	log elog.View
 
 	credentials                []byte
 	clientID                   string
@@ -56,19 +58,48 @@ type Config struct {
 	StorageAccountName string `json:"storageAccountName"` // Azure storage account name
 }
 
-// Create a provisioner object
-func Create(cfg *Config) (provisioners.Provisioner, error) {
-
-	p := &Provisioner{
-		cfg: cfg,
-	}
-
-	err := p.init()
+// NewProvisioner - Create a Azure Provisioner object
+func NewProvisioner(log elog.View, cfg *Config) (*Provisioner, error) {
+	p := new(Provisioner)
+	p.cfg = cfg
+	p.log = log
+	err := p.Validate()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("invalid %s provisioner: %v", ProvisionerType, err)
 	}
 
-	return p, nil
+	return p, p.init()
+}
+
+// Validate ...
+func (p *Provisioner) Validate() error {
+	var err error
+
+	if p.cfg.Container == "" {
+		err = fmt.Errorf("no defined container")
+	}
+
+	if p.cfg.Key == "" {
+		err = fmt.Errorf("no defined key")
+	}
+
+	if p.cfg.Location == "" {
+		err = fmt.Errorf("no defined location")
+	}
+
+	if p.cfg.ResourceGroup == "" {
+		err = fmt.Errorf("no defined resourceGroup")
+	}
+
+	if p.cfg.StorageAccountKey == "" {
+		err = fmt.Errorf("no defined storageAccountKey")
+	}
+
+	if p.cfg.StorageAccountName == "" {
+		err = fmt.Errorf("no defined storageAccountName")
+	}
+
+	return err
 }
 
 // Type returns 'microsoft-azure'
@@ -79,24 +110,6 @@ func (p *Provisioner) Type() string {
 // DiskFormat returns the provisioners required disk format
 func (p *Provisioner) DiskFormat() vdisk.Format {
 	return vdisk.VHDFormat
-}
-
-// Initialize initializes n Azure provisioner
-func (p *Provisioner) Initialize(data []byte) error {
-
-	cfg := new(Config)
-	err := json.Unmarshal(data, cfg)
-	if err != nil {
-		return err
-	}
-
-	p.cfg = cfg
-	err = p.init()
-	if err != nil {
-		return err
-	}
-
-	return nil
 }
 
 func fetchVal(keyMap map[string]interface{}, name string) string {
@@ -112,13 +125,13 @@ func (p *Provisioner) init() error {
 
 	p.credentials, err = base64.StdEncoding.DecodeString(p.cfg.Key)
 	if err != nil {
-		return err
+		return fmt.Errorf("could not decode %s key: %v", ProvisionerType, err)
 	}
 
 	keyMap := make(map[string]interface{})
 	err = json.Unmarshal(p.credentials, &keyMap)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to unmarshal %s credentials: %v", ProvisionerType, err)
 	}
 
 	p.clientID = fetchVal(keyMap, "clientId")
@@ -218,7 +231,7 @@ func prepTempFile(args *provisioners.ProvisionArgs) (*os.File, int64, error) {
 
 }
 
-func uploadBlob(f *os.File, args *provisioners.ProvisionArgs, blob *storage.Blob) error {
+func (p *Provisioner) uploadBlob(f *os.File, args *provisioners.ProvisionArgs, blob *storage.Blob) error {
 
 	var ps int64
 
@@ -229,7 +242,7 @@ func uploadBlob(f *os.File, args *provisioners.ProvisionArgs, blob *storage.Blob
 		}
 	}
 
-	progress := args.Logger.NewProgress(fmt.Sprintf("Uploading %s:", args.Name), "KiB", int64(args.Image.Size()))
+	progress := p.log.NewProgress(fmt.Sprintf("Uploading %s:", args.Name), "KiB", int64(args.Image.Size()))
 	pr := progress.ProxyReader(f)
 	defer pr.Close()
 
@@ -299,7 +312,7 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 	blob.Properties.ContentType = "text/plain"
 	blob.Properties.ContentLength = length
 
-	err = uploadBlob(f, args, blob)
+	err = p.uploadBlob(f, args, blob)
 	if err != nil {
 		return err
 	}
@@ -321,7 +334,7 @@ func (p *Provisioner) deleteImageIfRequired(imagesClient compute.ImagesClient, a
 			return fmt.Errorf("Image already exists; aborting. To replace conflicting image, include the 'force' directive")
 		}
 
-		ciprogree := args.Logger.NewProgress("Deleting existing image", "", 0)
+		ciprogree := p.log.NewProgress("Deleting existing image", "", 0)
 		defer ciprogree.Finish(false)
 
 		delFuture, err := imagesClient.Delete(args.Context, p.cfg.ResourceGroup, args.Name)
@@ -350,7 +363,7 @@ func (p *Provisioner) createImage(length int64, args *provisioners.ProvisionArgs
 		return err
 	}
 
-	ciprogree := args.Logger.NewProgress("Creating Image from blob", "", 0)
+	ciprogree := p.log.NewProgress("Creating Image from blob", "", 0)
 	defer ciprogree.Finish(false)
 
 	diskSize := bytesToGB(length)

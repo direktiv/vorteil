@@ -2,10 +2,12 @@ package main
 
 import (
 	"github.com/vorteil/vorteil/pkg/cli"
+	"github.com/vorteil/vorteil/pkg/elog"
 )
 
-func main() {
+var log elog.View
 
+func main() {
 	cli.InitializeCommands()
 
 	err := cli.RootCommand.Execute()

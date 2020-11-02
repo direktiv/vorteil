@@ -115,6 +115,11 @@ func InitializeCommands() {
 	provisionersNewCmd.AddCommand(provisionersNewGoogleCmd)
 }
 
+// AddNewProvisionerCmd - Append a command to the `vorteil provisioners new` command
+func AddNewProvisionerCmd(newCmd *cobra.Command) {
+	provisionersNewCmd.AddCommand(newCmd)
+}
+
 func addImagesCmd() {
 	imagesCmd.AddCommand(buildCmd)
 	imagesCmd.AddCommand(decompileCmd)

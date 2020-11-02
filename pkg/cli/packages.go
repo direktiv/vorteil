@@ -104,6 +104,7 @@ identify it and explain its purpose and its use.`,
 func init() {
 	f := packCmd.Flags()
 	f.BoolVarP(&flagForce, "force", "f", false, "force overwrite of existing files")
+	f.StringVarP(&flagKey, "key", "k", "", "vrepo authentication key")
 	f.StringVarP(&flagOutput, "output", "o", "", "path to put package file")
 	f.UintVar(&flagCompressionLevel, "compression-level", 1, "compression level (0-9)")
 }
@@ -170,5 +171,7 @@ other files. If the DEST argument is omitted it will default to ".".`,
 
 func init() {
 	f := unpackCmd.Flags()
+	f.StringVarP(&flagKey, "key", "k", "", "vrepo authentication key")
+
 	f.BoolVarP(&flagForce, "force", "f", false, "force overwrite of existing files")
 }

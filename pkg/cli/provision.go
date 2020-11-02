@@ -199,6 +199,8 @@ var (
 
 func init() {
 	f := provisionCmd.Flags()
+	f.StringVarP(&flagKey, "key", "k", "", "vrepo authentication key")
+
 	f.StringVarP(&provisionName, "name", "n", "", "Name of the resulting image on the remote platform.")
 	f.StringVarP(&provisionDescription, "description", "D", "", "Description for the resulting image, if supported by the platform.")
 	f.BoolVarP(&provisionForce, "force", "f", false, "Force an overwrite if an existing image conflicts with the new.")

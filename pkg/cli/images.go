@@ -151,6 +151,7 @@ func init() {
 	f := buildCmd.Flags()
 	f.BoolVarP(&flagForce, "force", "f", false, "force overwrite of existing files")
 	f.StringVarP(&flagOutput, "output", "o", "", "path to put image file")
+	f.StringVarP(&flagKey, "key", "k", "", "vrepo authentication key")
 	f.StringVar(&flagFormat, "format", "vmdk", "disk image format")
 	f.BoolVar(&flagShell, "shell", false, "add a busybox shell environment to the image")
 }

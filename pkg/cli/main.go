@@ -173,8 +173,18 @@ func getSourceType(src string) (sourceType, error) {
 }
 
 func getReaderURL(src string) (vpkg.Reader, error) {
+	client := &http.Client{}
 
-	resp, err := http.Get(src)
+	req, err := http.NewRequest("GET", src, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if flagKey != "" {
+		req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", flagKey))
+	}
+
+	resp, err := client.Do(req)
 	if err != nil {
 		resp.Body.Close()
 		return nil, err

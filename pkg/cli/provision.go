@@ -9,7 +9,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -23,6 +22,7 @@ import (
 	"github.com/vorteil/vorteil/pkg/provisioners/amazon"
 	"github.com/vorteil/vorteil/pkg/provisioners/azure"
 	"github.com/vorteil/vorteil/pkg/provisioners/google"
+	"github.com/vorteil/vorteil/pkg/provisioners/registry"
 	"github.com/vorteil/vorteil/pkg/vdisk"
 	"github.com/vorteil/vorteil/pkg/vio"
 	"github.com/vorteil/vorteil/pkg/vpkg"
@@ -65,54 +65,16 @@ If your PROVISIONER was created with a passphrase you can input this passphrase 
 			return
 		}
 
-		m := make(map[string]interface{})
-		err = json.Unmarshal(data, &m)
+		ptype, err := provisioners.ProvisionerType(data)
 		if err != nil {
 			SetError(err, 4)
 			return
 		}
 
-		ptype, ok := m[provisioners.MapKey]
-		if !ok {
+		prov, err := registry.NewProvisioner(ptype, log, data)
+		if err != nil {
 			SetError(err, 5)
 			return
-		}
-
-		var prov provisioners.Provisioner
-
-		switch ptype {
-		case google.ProvisionerType:
-			fmt.Println("Provisioning to Google Cloud Platform")
-			p := &google.Provisioner{}
-			err = p.Initialize(data)
-			if err != nil {
-				SetError(err, 6)
-				return
-			}
-
-			prov = p
-
-		case amazon.ProvisionerType:
-			fmt.Println("Provisioning to Amazon Web Services")
-			p := &amazon.Provisioner{}
-			err = p.Initialize(data)
-			if err != nil {
-				SetError(err, 7)
-				return
-			}
-
-			prov = p
-
-		case azure.ProvisionerType:
-			fmt.Println("Provisioning to Azure")
-			p := &azure.Provisioner{}
-			err = p.Initialize(data)
-			if err != nil {
-				SetError(err, 8)
-				return
-			}
-
-			prov = p
 		}
 
 		buildablePath := "."
@@ -205,7 +167,6 @@ If your PROVISIONER was created with a passphrase you can input this passphrase 
 			Name:            provisionName,
 			Description:     provisionDescription,
 			Force:           provisionForce,
-			Logger:          log,
 			ReadyWhenUsable: provisionReadyWhenUsable,
 		})
 		if err != nil {
@@ -292,7 +253,7 @@ var provisionersNewAmazonEC2Cmd = &cobra.Command{
 		}
 		defer f.Close()
 
-		p, err := amazon.Create(&amazon.Config{
+		p, err := amazon.NewProvisioner(log, &amazon.Config{
 			Key:    provisionersNewAmazonKey,
 			Secret: provisionersNewAmazonSecret,
 			Region: provisionersNewAmazonRegion,
@@ -322,9 +283,12 @@ var provisionersNewAmazonEC2Cmd = &cobra.Command{
 func init() {
 	f := provisionersNewAmazonEC2Cmd.Flags()
 	f.StringVarP(&provisionersNewAmazonKey, "key", "k", "", "Access key ID")
+	provisionersNewAmazonEC2Cmd.MarkFlagRequired("key")
 	f.StringVarP(&provisionersNewAmazonSecret, "secret", "s", "", "Secret access key")
+	provisionersNewAmazonEC2Cmd.MarkFlagRequired("secret")
 	f.StringVarP(&provisionersNewAmazonRegion, "region", "r", "ap-southeast-2", "AWS region")
 	f.StringVarP(&provisionersNewAmazonBucket, "bucket", "b", "", "AWS bucket")
+	provisionersNewAmazonEC2Cmd.MarkFlagRequired("bucket")
 	f.StringVarP(&provisionersNewPassphrase, "passphrase", "p", "", "Passphrase for encrypting exported provisioner data.")
 }
 
@@ -354,7 +318,7 @@ var provisionersNewAzureCmd = &cobra.Command{
 			return
 		}
 
-		p, err := azure.Create(&azure.Config{
+		p, err := azure.NewProvisioner(log, &azure.Config{
 			Key:                base64.StdEncoding.EncodeToString(b),
 			Container:          provisionersNewAzureContainer,
 			Location:           provisionersNewAzureLocation,
@@ -386,11 +350,19 @@ var provisionersNewAzureCmd = &cobra.Command{
 func init() {
 	f := provisionersNewAzureCmd.Flags()
 	f.StringVarP(&provisionersNewAzureKeyFile, "key-file", "k", "", "Azure 'Service Principal' credentials file")
+	provisionersNewAzureCmd.MarkFlagRequired("key-file")
 	f.StringVarP(&provisionersNewAzureContainer, "container", "c", "", "Azure container name")
+	provisionersNewAzureCmd.MarkFlagRequired("container")
 	f.StringVarP(&provisionersNewAzureResourceGroup, "resource-group", "r", "", "Azure resource group name")
+	provisionersNewAzureCmd.MarkFlagRequired("resource-group")
 	f.StringVarP(&provisionersNewAzureLocation, "location", "l", "", "Azure location")
+	provisionersNewAzureCmd.MarkFlagRequired("location")
 	f.StringVarP(&provisionersNewAzureStorageAccountKey, "storage-account-key", "s", "", "Azure storage account key")
+	provisionersNewAzureCmd.MarkFlagRequired("storage-account-key")
 	f.StringVarP(&provisionersNewAzureStorageAccountName, "storage-account-name", "n", "", "Azure storage account name")
+	provisionersNewAzureCmd.MarkFlagRequired("storage-account-name")
+	f.StringVarP(&provisionersNewPassphrase, "passphrase", "p", "", "Passphrase for encrypting exported provisioner data.")
+
 }
 
 var provisionersNewGoogleCmd = &cobra.Command{
@@ -419,7 +391,7 @@ var provisionersNewGoogleCmd = &cobra.Command{
 			return
 		}
 
-		p, err := google.Create(&google.Config{
+		p, err := google.NewProvisioner(log, &google.Config{
 			Bucket: provisionersNewGoogleBucket,
 			Key:    base64.StdEncoding.EncodeToString(b),
 		})
@@ -447,5 +419,7 @@ func init() {
 	f := provisionersNewGoogleCmd.Flags()
 	f.StringVarP(&provisionersNewPassphrase, "passphrase", "p", "", "Passphrase for encrypting exported provisioner data.")
 	f.StringVarP(&provisionersNewGoogleBucket, "bucket", "b", "", "Name of an existing Google Cloud Storage bucket, for which the provided service account credentials have adequate permissions for object creation/deletion.")
+	provisionersNewGoogleCmd.MarkFlagRequired("bucket")
 	f.StringVarP(&provisionersNewGoogleKeyFile, "credentials", "f", "", "Path of an existing JSON-formatted Google Cloud Platform service account credentials file.")
+	provisionersNewGoogleCmd.MarkFlagRequired("credentials")
 }

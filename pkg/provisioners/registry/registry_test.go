@@ -45,13 +45,13 @@ func TestDeregisterProvisioner(t *testing.T) {
 		return azure.NewProvisioner(log, &cfg)
 	}
 
-	if !assert.NoError(t, RegisterProvisioner("testProvisioner", azureFn)) {
+	if !assert.NoError(t, RegisterProvisioner("tProvisioner", azureFn)) {
 		os.Exit(1)
 	}
 
-	if !assert.NoError(t, DeregisterProvisioner("testProvisioner")) {
+	if !assert.NoError(t, DeregisterProvisioner("tProvisioner")) {
 		os.Exit(2)
 	}
 
-	assert.NotContains(t, Provisioners(), "testProvisioner")
+	assert.NotContains(t, Provisioners(), "tProvisioner")
 }

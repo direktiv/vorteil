@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/thanhpk/randstr"
+	"github.com/vorteil/vorteil/pkg/elog"
 	"github.com/vorteil/vorteil/pkg/vcfg"
 	"github.com/vorteil/vorteil/pkg/vio"
 	"github.com/vorteil/vorteil/pkg/virtualizers"
@@ -55,6 +56,7 @@ type Virtualizer struct {
 	serialLogger *logger.Logger // serial output logger for app that gets run
 	startCommand *exec.Cmd      // The execute command to start the vmware instance
 	sock         net.Conn       // net connection to read serial from
+	logger       elog.View      // logger for the CLI
 
 	routes []virtualizers.NetworkInterface
 	config *vcfg.VCFG
@@ -152,7 +154,7 @@ func (v *Virtualizer) RemoveEntry() error {
 
 // Close deletes and cleans up the VM
 func (v *Virtualizer) Close(force bool) error {
-	v.log("debug", "Deleting VM")
+	v.logger.Debugf("Deleting VM")
 	if force && v.state != virtualizers.Ready {
 		err := v.ForceStop()
 		if err != nil {
@@ -171,7 +173,7 @@ func (v *Virtualizer) Close(force bool) error {
 		if !strings.Contains(err.Error(), "4294967295") {
 			if runtime.GOOS == "darwin" && !v.headless {
 				if strings.Contains(err.Error(), "is in use") {
-					v.log("error", "%s (if running with gui make sure its closed)", err.Error())
+					v.logger.Errorf("%s (if running with gui make sure its closed)", err.Error())
 					return fmt.Errorf("%s (if running with gui make sure its closed)", err.Error())
 				}
 			}
@@ -179,7 +181,7 @@ func (v *Virtualizer) Close(force bool) error {
 		}
 	}
 	if len(output) > 0 {
-		v.log("info", "%s", output)
+		v.logger.Debugf("%s", output)
 	}
 
 	v.state = virtualizers.Deleted
@@ -233,7 +235,7 @@ func (v *Virtualizer) Detach(source string) error {
 		if !strings.Contains(err.Error(), "4294967295") {
 			if runtime.GOOS == "darwin" && !v.headless {
 				if strings.Contains(err.Error(), "is in use") {
-					v.log("error", "%s (if running with gui make sure its closed)", err.Error())
+					v.logger.Errorf("%s (if running with gui make sure its closed)", err.Error())
 					return fmt.Errorf("%s (if running with gui make sure its closed)", err.Error())
 				}
 			}
@@ -241,7 +243,7 @@ func (v *Virtualizer) Detach(source string) error {
 		}
 	}
 	if len(output) > 0 {
-		v.log("info", "%s", output)
+		v.logger.Debugf("%s", output)
 	}
 
 	v.state = virtualizers.Deleted
@@ -269,7 +271,7 @@ func (v *Virtualizer) ForceStop() error {
 		}
 	}
 	if len(output) > 0 {
-		v.log("info", "%s", output)
+		v.logger.Debugf("%s", output)
 	}
 	v.state = virtualizers.Ready
 
@@ -278,7 +280,7 @@ func (v *Virtualizer) ForceStop() error {
 
 // Stop the vm with sigint through the hypervisor
 func (v *Virtualizer) Stop() error {
-	v.log("debug", "Stopping VM")
+	v.logger.Debugf("Stopping VM")
 	if v.state != virtualizers.Ready {
 		v.state = virtualizers.Changing
 		command := exec.Command("vmrun", "-T", vmwareType, "stop", v.vmxPath)
@@ -289,7 +291,7 @@ func (v *Virtualizer) Stop() error {
 			}
 		}
 		if len(output) > 0 {
-			v.log("info", "%s", output)
+			v.logger.Debugf("%s", output)
 		}
 
 		v.state = virtualizers.Ready
@@ -300,7 +302,7 @@ func (v *Virtualizer) Stop() error {
 
 // execute is a generic wrapper function for executing commands
 func (v *Virtualizer) execute(cmd *exec.Cmd) (string, error) {
-	v.log("info", "Executing %s", cmd.Args)
+	v.logger.Infof("Executing %s", cmd.Args)
 	resp, err := cmd.CombinedOutput()
 	if err != nil {
 
@@ -315,7 +317,7 @@ func (v *Virtualizer) execute(cmd *exec.Cmd) (string, error) {
 
 // Start the vm
 func (v *Virtualizer) Start() error {
-	v.log("debug", "Starting VM")
+	v.logger.Debugf("Starting VM")
 	v.startCommand = exec.Command(v.startCommand.Args[0], v.startCommand.Args[1:]...)
 	switch v.State() {
 	case "ready":
@@ -323,17 +325,17 @@ func (v *Virtualizer) Start() error {
 
 		output, err := v.execute(v.startCommand)
 		if err != nil {
-			v.log("error", "Error starting vm: %v", err)
+			v.logger.Errorf("Error starting vm: %v", err)
 			return err
 		}
 		if len(output) > 0 {
-			v.log("info", "%s", output)
+			v.logger.Debugf("%s", output)
 		}
 		v.state = virtualizers.Alive
 		go func() {
 			v.routes = util.LookForIP(v.serialLogger, v.routes)
 		}()
-		go v.checkRunning()
+		// go v.checkRunning()
 
 	default:
 		return fmt.Errorf("cannot start vm in state '%s'", v.State())
@@ -438,11 +440,13 @@ func (v *Virtualizer) Prepare(args *virtualizers.PrepareArgs) *virtualizers.Virt
 	v.vmdrive = args.VMDrive
 	v.created = time.Now()
 	v.config = args.Config
+	v.logger = args.Logger
+
 	v.source = args.Source
 	v.virtLogger = logger.NewLogger(2048)
 	v.serialLogger = logger.NewLogger(2048 * 10)
 	v.routes = util.Routes(args.Config.Networks)
-	v.log("debug", "Preparing VM")
+	v.logger.Debugf("Preparing VM")
 
 	op.Logs = make(chan string, 128)
 	op.Error = make(chan error, 1)
@@ -463,7 +467,7 @@ func (v *Virtualizer) Prepare(args *virtualizers.PrepareArgs) *virtualizers.Virt
 
 // Download returns the disk as a vio.File
 func (v *Virtualizer) Download() (vio.File, error) {
-	v.log("debug", "Downloading Disk")
+	v.logger.Debugf("Downloading Disk")
 
 	if !(v.state == virtualizers.Ready) {
 		return nil, fmt.Errorf("the machine must be in a stopped or ready state")
@@ -498,34 +502,8 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	}
 	o.state = "initializing"
 	o.id = randstr.Hex(5)
-	o.folder = filepath.Join(o.vmdrive, fmt.Sprintf("%s-%s", o.id, o.Type()))
+	o.folder = filepath.Dir(args.ImagePath)
 
-	// create vm folder
-	// err = os.MkdirAll(o.folder, os.ModePerm)
-	// if err != nil {
-	// 	returnErr = err
-	// 	return
-	// }
-
-	// copy disk to folder
-	// f, err := os.Create(filepath.Join(o.folder, o.name+".vmdk"))
-	// if err != nil {
-	// 	returnErr = err
-	// 	return
-	// }
-
-	// _, err = io.Copy(f, args.ImagePath)
-	// if err != nil {
-	// 	returnErr = err
-	// 	return
-	// }
-
-	// defer f.Close()
-	// o.disk = f
-
-	// generate vmx'
-
-	// align size to 4 MiB
 	o.config.VM.RAM.Align(vcfg.MiB * 4)
 
 	vmxString := GenerateVMX(strconv.Itoa(int(o.config.VM.CPUs)), strconv.Itoa(o.config.VM.RAM.Units(vcfg.MiB)), args.ImagePath, o.name, o.folder, len(o.routes), o.networkType, o.id)
@@ -567,7 +545,7 @@ func (v *Virtualizer) checkRunning() {
 	for {
 		running, err := v.isRunning()
 		if err != nil {
-			v.log("error", "Checking Running State: %s", err)
+			v.logger.Errorf("Checking Running State: %s", err)
 			return
 		}
 		if !running {

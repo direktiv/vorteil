@@ -26,6 +26,7 @@ import (
 	"github.com/vorteil/vorteil/pkg/virtualizers/iputil"
 	"github.com/vorteil/vorteil/pkg/virtualizers/qemu"
 	"github.com/vorteil/vorteil/pkg/virtualizers/virtualbox"
+	"github.com/vorteil/vorteil/pkg/virtualizers/vmware"
 	"github.com/vorteil/vorteil/pkg/vpkg"
 )
 
@@ -77,6 +78,77 @@ func buildFirecracker(ctx context.Context, w io.WriteSeeker, cfg *vcfg.VCFG, arg
 		return "", err
 	}
 	return string(vimgBuilder.KernelUsed()), nil
+}
+
+// runVMware
+func runVMware(pkgReader vpkg.Reader, cfg *vcfg.VCFG, name string) error {
+	if !vmware.Allocator.IsAvailable() {
+		return errors.New("vmware is not installed on your system")
+	}
+
+	var err error
+	// Create base folder to store vmware vms so the socket can be grouped
+	parent := fmt.Sprintf("%s-%s", vmware.VirtualizerID, randstr.Hex(5))
+	parent = filepath.Join(os.TempDir(), parent)
+
+	// Create parent directory as it doesn't exist
+	err = os.MkdirAll(parent, os.ModePerm)
+	if err != nil {
+		return err
+	}
+
+	// need to create a tempfile rather than use the function to as vmware complains if the extension doesn't exist
+	f, err := os.Create(filepath.Join(parent, "disk.vmdk"))
+	if err != nil {
+		return err
+	}
+
+	defer os.Remove(f.Name())
+	defer f.Close()
+
+	defer os.RemoveAll(parent)
+
+	err = vdisk.Build(context.Background(), f, &vdisk.BuildArgs{
+		WithVCFGDefaults: true,
+		PackageReader:    pkgReader,
+		Format:           vmware.Allocator.DiskFormat(),
+		KernelOptions: vdisk.KernelOptions{
+			Shell: flagShell,
+		},
+		Logger: log,
+	})
+	if err != nil {
+		return err
+	}
+
+	err = f.Close()
+	if err != nil {
+		return err
+	}
+
+	err = pkgReader.Close()
+	if err != nil {
+		return err
+	}
+
+	alloc := vmware.Allocator
+	virt := alloc.Alloc()
+
+	config := vmware.Config{
+		Headless: !flagGUI,
+	}
+
+	err = virt.Initialize(config.Marshal())
+	if err != nil {
+		return err
+	}
+
+	err = vcfg.WithDefaults(cfg, log)
+	if err != nil {
+		return err
+	}
+
+	return run(virt, f.Name(), cfg, name)
 }
 
 // runFirecracker needs a longer build process so we can pull the calver of the kernel used to build the disk

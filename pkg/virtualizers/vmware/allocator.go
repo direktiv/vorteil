@@ -61,6 +61,7 @@ func (a *allocator) DiskAlignment() vcfg.Bytes {
 func (a *allocator) IsAvailable() bool {
 	installed, _ := virtualizers.Backends()
 	for _, platform := range installed {
+		fmt.Println(platform)
 		if platform == "vmware" {
 			return true
 		}
@@ -70,7 +71,7 @@ func (a *allocator) IsAvailable() bool {
 
 // DiskFormat return the format the hypervisor should be using
 func (a *allocator) DiskFormat() vdisk.Format {
-	return vdisk.VMDKSparseFormat
+	return vdisk.VMDKFormat
 }
 
 // ValidateArgs check if valid args are passed to create a valid Virtualizer

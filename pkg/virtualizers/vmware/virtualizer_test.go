@@ -60,14 +60,12 @@ func TestType(t *testing.T) {
 }
 func TestLoggerAndSerial(t *testing.T) {
 	v := &Virtualizer{
-		virtLogger:   logger.NewLogger(2048),
 		serialLogger: logger.NewLogger(2048),
 	}
 
-	virtl := v.Logs()
 	seriall := v.Serial()
 
-	if virtl == nil || seriall == nil {
+	if seriall == nil {
 		t.Errorf("unable to get loggers from virtualizer")
 	}
 }
@@ -79,9 +77,8 @@ func TestDownload(t *testing.T) {
 	}
 	defer f.Close()
 	v := &Virtualizer{
-		virtLogger: logger.NewLogger(2048),
-		disk:       f,
-		state:      "ready",
+		disk:  f,
+		state: "ready",
 	}
 
 	file, err := v.Download()

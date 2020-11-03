@@ -20,6 +20,7 @@ var (
 	flagJSON             bool
 	flagVerbose          bool
 	flagDebug            bool
+	flagDefault          bool
 	flagCompressionLevel uint
 	flagForce            bool
 	flagExcludeDefault   bool
@@ -93,7 +94,6 @@ func InitializeCommands() {
 	RootCommand.AddCommand(commandShortcut(unpackCmd))
 	RootCommand.AddCommand(commandShortcut(convertContainerCmd))
 	RootCommand.AddCommand(commandShortcut(importSharedObjectsCmd))
-	RootCommand.AddCommand(commandShortcut(pushCmd))
 
 	// Here is the visible command structure definition.
 	RootCommand.AddCommand(imagesCmd)
@@ -101,7 +101,16 @@ func InitializeCommands() {
 	RootCommand.AddCommand(projectsCmd)
 	RootCommand.AddCommand(provisionersCmd)
 	RootCommand.AddCommand(runCmd)
+
+	RootCommand.AddCommand(repositoriesCmd)
 	// RootCommand.AddCommand(initFirecrackerCmd)
+
+	repositoriesCmd.AddCommand(pushCmd)
+	repositoriesCmd.AddCommand(keysCmd)
+
+	keysCmd.AddCommand(createKeyCmd)
+	keysCmd.AddCommand(deleteKeyCmd)
+	keysCmd.AddCommand(listKeysCmd)
 
 	addImagesCmd()
 

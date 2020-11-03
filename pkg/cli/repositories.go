@@ -110,6 +110,11 @@ var listKeysCmd = &cobra.Command{
 		}
 		pathCheck := filepath.Join(usr, ".vorteil", "repository-keys")
 
+		if _, err = os.Stat(pathCheck); os.IsNotExist(err) {
+			fmt.Printf("no keys found\n")
+			return
+		}
+
 		fis, err := ioutil.ReadDir(pathCheck)
 		if err != nil {
 			SetError(err, 2)

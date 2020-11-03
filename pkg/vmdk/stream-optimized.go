@@ -325,6 +325,11 @@ func (w *StreamOptimizedWriter) Write(p []byte) (int, error) {
 
 	x := k
 	p = p[delta:]
+
+	if len(p) == 0 {
+		return x, nil
+	}
+
 	k, err = w.Write(p)
 	k += x
 	return k, err

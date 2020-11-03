@@ -275,13 +275,25 @@ func Backends() ([]string, error) {
 	}
 	path = os.Getenv("PATH")
 
-	// if !strings.Contains(path, vmware) {
-	// 	err := os.Setenv("PATH", fmt.Sprintf("%s%s%s", path, separated, vmware))
-	// 	if err != nil {
-	// 		return nil, err
-	// 	}
-	// }
-	// path = os.Getenv("PATH")
+	// VMware 16 changed where vmrun is located on windows
+	if runtime.GOOS == "windows" {
+		if !strings.Contains(path, fmt.Sprintf("%s;", vmware)) {
+			err := os.Setenv("PATH", fmt.Sprintf("%s%s%s", path, separated, vmware))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	path = os.Getenv("PATH")
+
+	if !strings.Contains(path, vmware) {
+		err := os.Setenv("PATH", fmt.Sprintf("%s%s%s", path, separated, vmware))
+		if err != nil {
+			return nil, err
+		}
+	}
+	path = os.Getenv("PATH")
 
 	if !strings.Contains(path, qemu) {
 		err := os.Setenv("PATH", fmt.Sprintf("%s%s%s", path, separated, qemu))

@@ -44,6 +44,7 @@ const (
 	platformVirtualBox  = "virtualbox"
 	platformHyperV      = "hyper-v"
 	platformFirecracker = "firecracker"
+	platformVMware      = "vmware"
 )
 
 func InitializeCommands() {
@@ -128,6 +129,11 @@ func InitializeCommands() {
 	provisionersNewCmd.AddCommand(provisionersNewAmazonEC2Cmd)
 	provisionersNewCmd.AddCommand(provisionersNewAzureCmd)
 	provisionersNewCmd.AddCommand(provisionersNewGoogleCmd)
+}
+
+// AddNewProvisionerCmd - Append a command to the `vorteil provisioners new` command
+func AddNewProvisionerCmd(newCmd *cobra.Command) {
+	provisionersNewCmd.AddCommand(newCmd)
 }
 
 func addImagesCmd() {

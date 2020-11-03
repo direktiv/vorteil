@@ -20,6 +20,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	"github.com/google/uuid"
+	"github.com/vorteil/vorteil/pkg/elog"
 	"github.com/vorteil/vorteil/pkg/provisioners"
 	"github.com/vorteil/vorteil/pkg/vcfg"
 	"github.com/vorteil/vorteil/pkg/vdisk"
@@ -40,6 +41,7 @@ var securityGroupPort = int64(443)
 // Provisioner satisfies the provisioners.Provisioner interface
 type Provisioner struct {
 	cfg *Config
+	log elog.View
 
 	// aws
 	ec2Client   *ec2.EC2
@@ -65,23 +67,22 @@ type userData struct {
 	Key    string `json:"SSDC_KEY"`
 }
 
-// Create a provisioner object
-func Create(cfg *Config) (provisioners.Provisioner, error) {
+// NewProvisioner - Create a Amazon Provisioner object
+func NewProvisioner(log elog.View, cfg *Config) (*Provisioner, error) {
+	p := new(Provisioner)
+	p.cfg = cfg
+	p.log = log
 
-	p := &Provisioner{
-		cfg: cfg,
-	}
-
-	err := p.init()
+	err := p.Validate()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("invalid %s provisioner: %v", ProvisionerType, err)
 	}
 
-	return p, nil
+	return p, p.init()
 }
 
-// init / validate the provisioner
-func (p *Provisioner) init() error {
+// Validate ...
+func (p *Provisioner) Validate() error {
 	// Validate
 	if p.cfg.Key == "" {
 		return errors.New("no defined access key")
@@ -135,28 +136,14 @@ func (p *Provisioner) SizeAlign() vcfg.Bytes {
 	return vcfg.GiB
 }
 
-// Initialize ..
-func (p *Provisioner) Initialize(data []byte) error {
-
-	cfg := new(Config)
-	err := json.Unmarshal(data, cfg)
-	if err != nil {
-		return err
-	}
-
-	p.cfg = cfg
-	err = p.init()
-	if err != nil {
-		return err
-	}
-
+func (p *Provisioner) init() error {
+	var err error
 	p.awsSession, err = session.NewSession(&aws.Config{
 		Region:      aws.String(p.cfg.Region),
 		Credentials: credentials.NewStaticCredentials(p.cfg.Key, p.cfg.Secret, ""),
 	})
-
 	if err != nil {
-		return err
+		return fmt.Errorf("could not create aws session: %v", err)
 	}
 
 	p.s3Client = s3.New(p.awsSession)
@@ -174,7 +161,7 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 	var imageID *string
 	p.args = *args
 
-	uploadProgress := args.Logger.NewProgress("Uploading Image to AWS Bucket", "", 0)
+	uploadProgress := p.log.NewProgress("Uploading Image to AWS Bucket", "", 0)
 	defer uploadProgress.Finish(true)
 
 	// Handle Exisitng Image and Force Flag
@@ -182,7 +169,7 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 	if imageID != nil {
 		if args.Force {
 			// deregister current live version as were force pushing
-			p.args.Logger.Infof("deregistering old ami: %v\n", imageID)
+			p.log.Infof("deregistering old ami: %v\n", imageID)
 			_, err = p.ec2Client.DeregisterImageWithContext(p.args.Context, &ec2.DeregisterImageInput{
 				ImageId: imageID,
 			})
@@ -212,7 +199,7 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 	}
 
 	defer func() {
-		p.args.Logger.Infof("Cleaning Image From Bucket %s", keyName)
+		p.log.Infof("Cleaning Image From Bucket %s", keyName)
 		// Delete object that was uploaded (mainly used to clean up when the function ends)
 		_, _ = p.s3Client.DeleteObject(&s3.DeleteObjectInput{
 			Bucket: aws.String(p.cfg.Bucket),
@@ -225,7 +212,7 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 		return fmt.Errorf("Failed to convert bucket Image to Snapshot, error: %s", err.Error())
 	}
 
-	registerImgProgress := p.args.Logger.NewProgress("Registering snapshot as AMI", "", 0)
+	registerImgProgress := p.log.NewProgress("Registering snapshot as AMI", "", 0)
 	defer registerImgProgress.Finish(true)
 	rio, err := p.ec2Client.RegisterImage(&ec2.RegisterImageInput{
 		Architecture:       aws.String("x86_64"),
@@ -248,7 +235,7 @@ func (p *Provisioner) Provision(args *provisioners.ProvisionArgs) error {
 	}
 	registerImgProgress.Finish(true)
 
-	args.Logger.Printf("Provisioned AMI: %s", *rio.ImageId)
+	p.log.Printf("Provisioned AMI: %s", *rio.ImageId)
 	return nil
 }
 
@@ -274,8 +261,8 @@ func (p *Provisioner) getImageID(imageName string) (*string, error) {
 }
 
 func (p *Provisioner) importSnapshot(bucketImageKey string) (string, error) {
-	snapshotProgress := p.args.Logger.NewProgress("Converting Image to Snapshot ", "", 0)
-	defer snapshotProgress.Finish(true)
+	snapshotProgress := p.log.NewProgress("Converting Image to Snapshot ", "", 0)
+	defer snapshotProgress.Finish(false)
 	// Import Snapshot
 	var snapshotID *string
 	// o.updateStatus("Importing disk into EBS Snapshot")

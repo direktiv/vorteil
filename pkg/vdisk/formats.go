@@ -92,7 +92,7 @@ var (
 		VHDDynamicFormat:          1500,
 	}
 
-	buildFuncs = map[Format]func(io.WriteSeeker, *vimg.Builder, *vcfg.VCFG) (io.WriteSeeker, error){
+	buildFuncs = map[Format]BuildWriterInstantiator{
 		RAWFormat:                 buildRAW,
 		VMDKFormat:                buildSparseVMDK,
 		VMDKSparseFormat:          buildSparseVMDK,
@@ -104,6 +104,24 @@ var (
 		VHDDynamicFormat:          buildDynamicVHD,
 	}
 )
+
+// BuildWriterInstantiator is a function that returns a new io.WriteSeeker that
+// can be used to handle the writing of a raw image.
+type BuildWriterInstantiator func(io.WriteSeeker, *vimg.Builder, *vcfg.VCFG) (io.WriteSeeker, error)
+
+// RegisterNewDiskFormat registers a new disk format that can be used with the vdisk package.
+// Example: RegisterNewDiskFormat(Format("vmdk-custom"), ".vmdk", 0x200000, 1500, customVMDKBuilder)
+func RegisterNewDiskFormat(format Format, extention string, alignment int64, mtu uint, builderFunc BuildWriterInstantiator) error {
+	if _, exists := formats[format]; exists {
+		return fmt.Errorf("refusing to register disk format '%s': already registered", format)
+	}
+
+	formats[format] = extention
+	alignments[format] = alignment
+	defaultMTUs[format] = mtu
+	buildFuncs[format] = builderFunc
+	return nil
+}
 
 // String returns a string representation of the Format.
 func (x Format) String() string {

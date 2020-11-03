@@ -180,6 +180,7 @@ func getReaderURL(src string) (vpkg.Reader, error) {
 		return nil, err
 	}
 
+
 	token, err := checkAuthentication()
 	if err != nil {
 		return nil, err

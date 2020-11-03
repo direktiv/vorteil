@@ -119,6 +119,12 @@ and cleaning up the instance when it's done.`,
 				SetError(err, 8)
 				return
 			}
+		case platformVMware:
+			err = runVMware(pkgReader, cfg, name)
+			if err != nil {
+				SetError(err, 13)
+				return
+			}
 		case platformVirtualBox:
 			err = runVirtualBox(pkgReader, cfg, name)
 			if err != nil {

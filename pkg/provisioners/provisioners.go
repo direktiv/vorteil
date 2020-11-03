@@ -12,37 +12,44 @@ import (
 	"crypto/md5"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
+	"fmt"
 	"io"
 
-	"github.com/vorteil/vorteil/pkg/elog"
-
 	"github.com/vorteil/vorteil/pkg/vcfg"
-
-	"github.com/sisatech/goapi/pkg/file"
 	"github.com/vorteil/vorteil/pkg/vdisk"
+	"github.com/vorteil/vorteil/pkg/vio"
 )
 
 const (
 	MapKey = "type"
 )
 
+// Provisioner ...
 type Provisioner interface {
 	Type() string
 	DiskFormat() vdisk.Format
 	SizeAlign() vcfg.Bytes
-	Initialize(data []byte) error
 	Provision(args *ProvisionArgs) error
 	Marshal() ([]byte, error)
 }
 
+// ProvisionArgs ...
 type ProvisionArgs struct {
 	Name            string
-	Logger          elog.View
 	Description     string
 	Force           bool
-	Context         context.Context
-	Image           file.File
 	ReadyWhenUsable bool
+	Context         context.Context
+	Image           vio.File
+}
+
+type InvalidProvisionerError struct {
+	Err error
+}
+
+func (e *InvalidProvisionerError) Error() string {
+	return fmt.Sprintf("provisioner is invalid: %v", e.Err)
 }
 
 func createHash(key string) string {
@@ -82,4 +89,20 @@ func Decrypt(data []byte, passphrase string) ([]byte, error) {
 		return nil, err
 	}
 	return plaintext, nil
+}
+
+// ProvisionerType : Return Provisioner type as a string
+func ProvisionerType(data []byte) (string, error) {
+	m := make(map[string]interface{})
+	err := json.Unmarshal(data, &m)
+	if err != nil {
+		return "", err
+	}
+
+	ptype, ok := m[MapKey]
+	if !ok {
+		return "", fmt.Errorf("malformed provisioner file: mapKey not found")
+	}
+
+	return fmt.Sprintf("%v", ptype), nil
 }

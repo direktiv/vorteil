@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"crypto/md5"
 	"errors"
 	"fmt"
 	"io"
@@ -28,6 +29,66 @@ var repositoriesCmd = &cobra.Command{
 var keysCmd = &cobra.Command{
 	Use:   "keys",
 	Short: "Create, List and Delete keys for authentication with Vorteil Repositories",
+}
+
+var defaultKeyCmd = &cobra.Command{
+	Use:   "default",
+	Short: "Prints what the current default is",
+	Run: func(cmd *cobra.Command, args []string) {
+		usr, err := os.UserHomeDir()
+		if err != nil {
+			SetError(err, 1)
+			return
+		}
+
+		pathCheck := filepath.Join(usr, ".vorteil", "repository-keys")
+
+		if _, err = os.Stat(pathCheck); os.IsNotExist(err) {
+			fmt.Printf("no keys found\n")
+			return
+		}
+
+		// Open default
+		f, err := os.Open(filepath.Join(pathCheck, "default"))
+		if err != nil {
+			SetError(err, 2)
+			return
+		}
+		defer f.Close()
+
+		h := md5.New()
+		if _, err := io.Copy(h, f); err != nil {
+			SetError(err, 3)
+			return
+		}
+
+		fis, err := ioutil.ReadDir(pathCheck)
+		if err != nil {
+			SetError(err, 4)
+			return
+		}
+
+		for _, fi := range fis {
+
+			if fi.Name() != "default" {
+				f2, err := os.Open(filepath.Join(pathCheck, fi.Name()))
+				if err != nil {
+					SetError(err, 5)
+					return
+				}
+				h2 := md5.New()
+				if _, err := io.Copy(h2, f2); err != nil {
+					SetError(err, 6)
+					return
+				}
+				if bytes.Equal(h.Sum(nil), h2.Sum(nil)) {
+					fmt.Println(fi.Name())
+				}
+				f2.Close()
+			}
+
+		}
+	},
 }
 
 var createKeyCmd = &cobra.Command{

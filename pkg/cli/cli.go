@@ -109,6 +109,7 @@ func InitializeCommands() {
 	repositoriesCmd.AddCommand(pushCmd)
 	repositoriesCmd.AddCommand(keysCmd)
 
+	keysCmd.AddCommand(defaultKeyCmd)
 	keysCmd.AddCommand(createKeyCmd)
 	keysCmd.AddCommand(deleteKeyCmd)
 	keysCmd.AddCommand(listKeysCmd)

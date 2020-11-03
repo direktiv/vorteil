@@ -1,10 +1,8 @@
 package vmware
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/vorteil/vorteil/pkg/vcfg"
@@ -23,34 +21,6 @@ Windows Hypervisor Platform accelerator is operational
 2020/05/27 21:17:53 Binding port: 8888
 `
 
-func TestLogWrite(t *testing.T) {
-	v := &Virtualizer{
-		virtLogger: logger.NewLogger(2048),
-	}
-	exactText := []byte(fmt.Sprintf("%s%s%s\n", "\033[31m", "hello", "\033[0m"))
-	v.log("error", "%s", "hello")
-
-	sub := v.virtLogger.Subscribe()
-
-	var logs []byte
-	var done bool
-	for !done {
-		select {
-		case logdata, more := <-sub.Inbox():
-			if !more {
-				break
-			}
-			logs = append(logs, logdata...)
-		default:
-			done = true
-		}
-	}
-
-	if strings.TrimSpace(string(logs)) != strings.TrimSpace(string(exactText)) {
-		t.Errorf("logging \"hello\" failed, expected \"%v\" but got \"%v\"", strings.TrimSpace(string(exactText)), strings.TrimSpace(string(logs)))
-	}
-
-}
 func TestInitialize(t *testing.T) {
 	var c = &Config{
 		Headless:    true,

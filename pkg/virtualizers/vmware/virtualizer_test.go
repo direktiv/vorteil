@@ -2,8 +2,6 @@ package vmware
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -102,27 +100,6 @@ func TestLoggerAndSerial(t *testing.T) {
 	}
 }
 
-func TestDownload(t *testing.T) {
-	f, err := os.Create(filepath.Join(os.TempDir(), "disk.vmdk"))
-	if err != nil {
-		t.Errorf("unable to create temp file")
-	}
-	defer f.Close()
-	v := &Virtualizer{
-		virtLogger: logger.NewLogger(2048),
-		disk:       f,
-		state:      "ready",
-	}
-
-	file, err := v.Download()
-	if err != nil {
-		t.Errorf("unable to retrieve disk from virtualizer received error: %v", err)
-	}
-	if file == nil {
-		t.Errorf("file retrieved was nil")
-	}
-
-}
 func TestRoutes(t *testing.T) {
 	httpArr := []string{"8888"}
 	http := &vcfg.NetworkInterface{

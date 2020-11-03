@@ -39,6 +39,7 @@ const (
 	platformVirtualBox  = "virtualbox"
 	platformHyperV      = "hyper-v"
 	platformFirecracker = "firecracker"
+	platformVMware      = "vmware"
 )
 
 func InitializeCommands() {

@@ -328,9 +328,10 @@ func (v *Virtualizer) Start() error {
 		if len(output) > 0 {
 			v.logger.Debugf("%s", output)
 		}
-		v.state = virtualizers.Alive
 		go func() {
 			v.routes = util.LookForIP(v.serialLogger, v.routes)
+			v.state = virtualizers.Alive
+
 		}()
 		go v.checkRunning()
 
@@ -339,7 +340,6 @@ func (v *Virtualizer) Start() error {
 	}
 	return nil
 }
-
 
 // Serial returns the serial logger
 func (v *Virtualizer) Serial() *logger.Logger {
@@ -409,7 +409,6 @@ func (o *operation) updateStatus(text string) {
 	o.Status <- text
 	o.Logs <- text
 }
-
 
 // Prepare sets the fields and arguments to spawn the virtual machine
 func (v *Virtualizer) Prepare(args *virtualizers.PrepareArgs) *virtualizers.VirtualizeOperation {

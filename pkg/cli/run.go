@@ -332,7 +332,11 @@ func fetchPorts(lines []string, portmap virtualizers.RouteMap, networkType strin
 		}
 		lines = append(lines, fmt.Sprintf(" • %s:%s → %s", networkType, portmap.Port, port2))
 	} else {
-		lines = append(lines, fmt.Sprintf(" • %s:%s", networkType, portmap.Port))
+		if portmap.Address != "" {
+			lines = append(lines, fmt.Sprintf(" • %s: %s", networkType, portmap.Address))
+		} else {
+			lines = append(lines, fmt.Sprintf(" • %s: %s:%s", networkType, portmap.Address, portmap.Port))
+		}
 	}
 	return lines
 }

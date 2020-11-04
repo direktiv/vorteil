@@ -146,13 +146,18 @@ func (n *TreeNode) MarshalJSON() ([]byte, error) {
 		return nil, fmt.Errorf("failed to marshal JSON due to broken tree node: '%s' has size '%d'", n.path(), n.File.Size())
 	}
 
+	size := n.File.Size()
+	if n.File.IsDir() {
+		size = 0
+	}
+
 	m := make(map[string]interface{})
 	info := &fi{
 		Name:      n.File.Name(),
-		Size:      n.File.Size(),
+		Size:      size,
 		IsDir:     n.File.IsDir(),
 		IsSymlink: n.File.IsSymlink(),
-		ModTime:   n.File.ModTime(),
+		ModTime:   time.Time{},
 	}
 
 	if n.File.IsSymlink() && n.File.SymlinkIsCached() {

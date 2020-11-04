@@ -1,10 +1,6 @@
 package vmware
 
 import (
-
-	"fmt"
-	"strings"
-
 	"testing"
 
 	"github.com/vorteil/vorteil/pkg/vcfg"

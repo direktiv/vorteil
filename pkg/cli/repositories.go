@@ -45,7 +45,7 @@ func checkKeysFolder() (string, error) {
 
 var defaultKeyCmd = &cobra.Command{
 	Use:   "default KEY_NAME",
-	Short: "View the default or change the default repository key by providing KEY_NAME",
+	Short: "View the keys that are equal to the default or change the default repository key by providing KEY_NAME",
 	Run: func(cmd *cobra.Command, args []string) {
 
 		pathCheck, err := checkKeysFolder()

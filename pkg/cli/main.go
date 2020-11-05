@@ -179,10 +179,13 @@ func checkIfNewVRepo(src string) (string, error) {
 		return "", err
 	}
 	client := &http.Client{}
-	req, err := http.NewRequest("GET", fmt.Sprintf("%s://%s/info", urlo.Scheme, urlo.Host), nil)
+
+	// TODO Need to find a way to remove metadata from future vrepo urls
+	req, err := http.NewRequest("GET", fmt.Sprintf("%s://%s/metadata/info", urlo.Scheme, urlo.Host), nil)
 	if err != nil {
 		return "", err
 	}
+
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", err
@@ -206,7 +209,7 @@ func getReaderURL(src string) (vpkg.Reader, error) {
 	if err != nil {
 		return nil, err
 	}
-
+	fmt.Println(newVrepo)
 	if newVrepo == "True" {
 		token, err := checkAuthentication()
 		if err != nil {

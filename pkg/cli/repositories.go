@@ -46,6 +46,21 @@ func checkKeysFolder() (string, error) {
 var defaultKeyCmd = &cobra.Command{
 	Use:   "default KEY_NAME",
 	Short: "View the keys that are equal to the default or change the default repository key by providing KEY_NAME",
+	PreRunE: func(cmd *cobra.Command, args []string) error {
+		usr, err := os.UserHomeDir()
+		if err != nil {
+			return err
+		}
+		pathCheck := filepath.Join(usr, ".vorteil", "repository-keys")
+		_, err = os.Stat(pathCheck)
+		if err != nil {
+			err = os.MkdirAll(pathCheck, os.ModePerm)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	},
 	Run: func(cmd *cobra.Command, args []string) {
 
 		pathCheck, err := checkKeysFolder()
@@ -138,11 +153,11 @@ var createKeyCmd = &cobra.Command{
 		if len(args) < 2 {
 			return errors.New("must provide a NAME and TOKEN")
 		}
-
-		pathCheck, err := checkKeysFolder()
+		usr, err := os.UserHomeDir()
 		if err != nil {
 			return err
 		}
+		pathCheck := filepath.Join(usr, ".vorteil", "repository-keys")
 		_, err = os.Stat(pathCheck)
 		if err != nil {
 			err = os.MkdirAll(pathCheck, os.ModePerm)
@@ -204,6 +219,21 @@ var listKeysCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List all keys currently stored",
 	Args:  cobra.MaximumNArgs(0),
+	PreRunE: func(cmd *cobra.Command, args []string) error {
+		usr, err := os.UserHomeDir()
+		if err != nil {
+			return err
+		}
+		pathCheck := filepath.Join(usr, ".vorteil", "repository-keys")
+		_, err = os.Stat(pathCheck)
+		if err != nil {
+			err = os.MkdirAll(pathCheck, os.ModePerm)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	},
 	Run: func(cmd *cobra.Command, args []string) {
 		pathCheck, err := checkKeysFolder()
 		if err != nil {
@@ -232,6 +262,18 @@ var deleteKeyCmd = &cobra.Command{
 	PreRunE: func(cmd *cobra.Command, args []string) error {
 		if len(args) != 1 {
 			return errors.New("Must provide the name of the key you want to delete")
+		}
+		usr, err := os.UserHomeDir()
+		if err != nil {
+			return err
+		}
+		pathCheck := filepath.Join(usr, ".vorteil", "repository-keys")
+		_, err = os.Stat(pathCheck)
+		if err != nil {
+			err = os.MkdirAll(pathCheck, os.ModePerm)
+			if err != nil {
+				return err
+			}
 		}
 		return nil
 	},

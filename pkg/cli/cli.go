@@ -20,18 +20,23 @@ var (
 	flagJSON             bool
 	flagVerbose          bool
 	flagDebug            bool
+	flagDefault          bool
 	flagCompressionLevel uint
 	flagForce            bool
 	flagExcludeDefault   bool
 	flagFormat           string
 	flagOutput           string
 	flagPlatform         string
+	flagName             string
 	flagKey              string
 	flagGUI              bool
 	flagOS               bool
 	flagRecord           string
 	flagShell            bool
 	flagTouched          bool
+
+	pushOrganisation string
+	pushBucket       string
 )
 
 const (
@@ -97,7 +102,17 @@ func InitializeCommands() {
 	RootCommand.AddCommand(projectsCmd)
 	RootCommand.AddCommand(provisionersCmd)
 	RootCommand.AddCommand(runCmd)
+
+	RootCommand.AddCommand(repositoriesCmd)
 	// RootCommand.AddCommand(initFirecrackerCmd)
+
+	repositoriesCmd.AddCommand(pushCmd)
+	repositoriesCmd.AddCommand(keysCmd)
+
+	keysCmd.AddCommand(defaultKeyCmd)
+	keysCmd.AddCommand(createKeyCmd)
+	keysCmd.AddCommand(deleteKeyCmd)
+	keysCmd.AddCommand(listKeysCmd)
 
 	addImagesCmd()
 

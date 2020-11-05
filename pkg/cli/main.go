@@ -19,6 +19,7 @@ import (
 	"github.com/sisatech/tablewriter"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"github.com/vorteil/vorteil/pkg/elog"
 	"github.com/vorteil/vorteil/pkg/vcfg"
 	"github.com/vorteil/vorteil/pkg/vdisk"
 	"github.com/vorteil/vorteil/pkg/vio"
@@ -172,27 +173,71 @@ func getSourceType(src string) (sourceType, error) {
 	return sourceINVALID, err
 }
 
+func checkIfNewVRepo(src string) (string, error) {
+	urlo, err := url.Parse(src)
+	if err != nil {
+		return "", err
+	}
+	client := &http.Client{}
+
+	req, err := http.NewRequest("GET", fmt.Sprintf("%s://%s/info", urlo.Scheme, urlo.Host), nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Info-Request", "True")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", errors.New("not a new vorteil repository")
+	}
+	return resp.Header.Get("Vorteil-Repository"), nil
+}
+
 func getReaderURL(src string) (vpkg.Reader, error) {
+
+	newVrepo, err := checkIfNewVRepo(src)
+	if err != nil {
+		return nil, err
+	}
 	client := &http.Client{}
 
 	req, err := http.NewRequest("GET", src, nil)
 	if err != nil {
 		return nil, err
 	}
+	if newVrepo == "True" {
+		token, err := checkAuthentication()
+		if err != nil {
+			return nil, err
+		}
 
-	if flagKey != "" {
-		req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", flagKey))
+		if token != "" {
+			req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", token))
+		}
 	}
 
 	resp, err := client.Do(req)
 	if err != nil {
-		resp.Body.Close()
+		if resp != nil {
+			resp.Body.Close()
+		}
 		return nil, err
 	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, errors.New(resp.Status)
 	}
-	p := log.NewProgress("Downloading package", "KiB", resp.ContentLength)
+
+	var p elog.Progress
+	if resp.ContentLength == -1 {
+		p = log.NewProgress("Downloading package", "", 0)
+		defer p.Finish(true)
+	} else {
+		p = log.NewProgress("Downloading package", "KiB", resp.ContentLength)
+	}
 
 	pkgr, err := vpkg.Load(p.ProxyReader(resp.Body))
 	if err != nil {
@@ -200,6 +245,7 @@ func getReaderURL(src string) (vpkg.Reader, error) {
 		p.Finish(false)
 		return nil, err
 	}
+
 	return pkgr, nil
 }
 

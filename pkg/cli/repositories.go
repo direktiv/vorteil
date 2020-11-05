@@ -423,7 +423,7 @@ var pushCmd = &cobra.Command{
 
 		err = pushPackage(pkgBuilder, urlPath, repoPath)
 		if err != nil {
-			SetError(err, 4)
+			SetError(err, 5)
 			return
 		}
 
@@ -552,6 +552,11 @@ func uploadPackage(url string, repo []string, token string, file *os.File) error
 
 	defer resp.Body.Close()
 
+	// If content-type is text/html its hitting a website and not an api
+	if strings.Contains(resp.Header.Get("Content-Type"), "text/html") {
+		return errors.New("not a valid vorteil repository url")
+	}
+
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
@@ -570,6 +575,10 @@ func pushPackage(builder vpkg.Builder, url string, repo []string) error {
 	token, err := checkAuthentication()
 	if err != nil {
 		return err
+	}
+
+	if isVrepo, _ := checkIfNewVRepo(url); isVrepo == "" {
+		return fmt.Errorf("target repo '%s' is not a Vorteil Repository", url)
 	}
 
 	file, err := preparePackage(builder)

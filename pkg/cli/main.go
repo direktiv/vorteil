@@ -180,7 +180,7 @@ func checkIfNewVRepo(src string) (string, error) {
 	}
 	client := &http.Client{}
 
-	req, err := http.NewRequest("GET", fmt.Sprintf("%s://%s", urlo.Scheme, urlo.Host), nil)
+	req, err := http.NewRequest("GET", fmt.Sprintf("%s://%s/info", urlo.Scheme, urlo.Host), nil)
 	if err != nil {
 		return "", err
 	}

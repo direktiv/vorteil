@@ -200,8 +200,7 @@ func getReaderURL(src string) (vpkg.Reader, error) {
 	}
 
 	var p elog.Progress
-
-	if resp.ContentLength == 0 {
+	if resp.ContentLength == -1 {
 		p = log.NewProgress("Downloading package", "", 0)
 		defer p.Finish(true)
 	} else {

@@ -180,11 +180,11 @@ func checkIfNewVRepo(src string) (string, error) {
 	}
 	client := &http.Client{}
 
-	// TODO Need to find a way to remove metadata from future vrepo urls
-	req, err := http.NewRequest("GET", fmt.Sprintf("%s://%s/metadata/info", urlo.Scheme, urlo.Host), nil)
+	req, err := http.NewRequest("GET", fmt.Sprintf("%s://%s", urlo.Scheme, urlo.Host), nil)
 	if err != nil {
 		return "", err
 	}
+	req.Header.Set("Info-Request", "True")
 
 	resp, err := client.Do(req)
 	if err != nil {

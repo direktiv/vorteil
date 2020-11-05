@@ -182,11 +182,9 @@ var createKeyCmd = &cobra.Command{
 		// Check if file exists
 		// if stat returns no error return error saying you need to provide the force flag
 		fi, err := os.Stat(filepath.Join(pathCheck, name))
-		if err == nil {
-			if !flagForce {
-				SetError(errors.New("key file already exists provide --force to overwrite"), 2)
-				return
-			}
+		if err == nil && !flagForce {
+			SetError(errors.New("key file already exists provide --force to overwrite"), 2)
+			return
 		}
 
 		if flagForce && fi != nil {

@@ -209,7 +209,6 @@ func getReaderURL(src string) (vpkg.Reader, error) {
 	if err != nil {
 		return nil, err
 	}
-	fmt.Println(newVrepo)
 	if newVrepo == "True" {
 		token, err := checkAuthentication()
 		if err != nil {

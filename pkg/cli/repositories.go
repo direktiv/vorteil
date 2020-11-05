@@ -90,8 +90,7 @@ var defaultKeyCmd = &cobra.Command{
 			}
 
 			defer defaultF.Close()
-
-			_, err = defaultF.Write(data)
+			err = ioutil.WriteFile(filepath.Join(pathCheck, "default"), data, os.ModePerm)
 			if err != nil {
 				SetError(err, 6)
 				return
@@ -246,8 +245,38 @@ var listKeysCmd = &cobra.Command{
 			return
 		}
 
+		var data []byte
+
+		// Open default key to check which one is also the same as default
+		defaultKey, err := os.Open(filepath.Join(pathCheck, "default"))
+		if err == nil {
+			defer defaultKey.Close()
+			data, err = ioutil.ReadAll(defaultKey)
+			if err != nil {
+				SetError(err, 3)
+				return
+			}
+		}
+
 		for _, fi := range fis {
 			if fi.Name() != "default" {
+				if len(data) > 0 {
+					f, err := os.Open(filepath.Join(pathCheck, fi.Name()))
+					if err != nil {
+						SetError(err, 4)
+						return
+					}
+					defer f.Close()
+					keyD, err := ioutil.ReadAll(f)
+					if err != nil {
+						SetError(err, 5)
+						return
+					}
+					if string(data) == string(keyD) {
+						fmt.Printf("%s [default]\n", fi.Name())
+						continue
+					}
+				}
 				fmt.Println(fi.Name())
 			}
 		}

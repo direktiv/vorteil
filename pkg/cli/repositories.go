@@ -202,7 +202,7 @@ var createKeyCmd = &cobra.Command{
 				return
 			}
 			defer f2.Close()
-			odata, err := ioutil.ReadAll(f)
+			odata, err := ioutil.ReadAll(f2)
 			if err != nil {
 				SetError(err, 5)
 				return

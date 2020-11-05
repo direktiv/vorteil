@@ -1,3 +1,8 @@
+/**
+ * SPDX-License-Identifier: Apache-2.0
+ * Copyright 2020 vorteil.io Pty Ltd
+ **/ //
+
 package cli
 
 import (
@@ -16,11 +21,6 @@ import (
 	"github.com/vorteil/vorteil/pkg/vpkg"
 )
 
-/**
- * SPDX-License-Identifier: Apache-2.0
- * Copyright 2020 vorteil.io Pty Ltd
- **/ //
-
 var repositoriesCmd = &cobra.Command{
 	Use:   "repositories",
 	Short: "Interact with vorteil repositories",
@@ -31,40 +31,69 @@ var keysCmd = &cobra.Command{
 	Short: "Create, List and Delete keys for authentication with Vorteil Repositories",
 }
 
+func checkKeysFolder() (string, error) {
+	usr, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	pathCheck := filepath.Join(usr, ".vorteil", "repository-keys")
+	if _, err = os.Stat(pathCheck); os.IsNotExist(err) {
+		return "", errors.New("no keys found")
+	}
+	return pathCheck, nil
+}
+
 var defaultKeyCmd = &cobra.Command{
-	Use:   "default",
-	Short: "Prints what the current default is",
+	Use:   "default KEY_NAME",
+	Short: "View the default or change the default repository key by providing KEY_NAME",
 	Run: func(cmd *cobra.Command, args []string) {
-		usr, err := os.UserHomeDir()
+
+		pathCheck, err := checkKeysFolder()
 		if err != nil {
 			SetError(err, 1)
 			return
 		}
 
-		pathCheck := filepath.Join(usr, ".vorteil", "repository-keys")
+		if len(args) > 0 {
+			// Set default to args
+			key := args[0]
+			f, err := os.Open(filepath.Join(pathCheck, key))
+			if err != nil {
+				SetError(fmt.Errorf("%s does not exist as a key stored", key), 3)
+				return
+			}
+			defer f.Close()
 
-		if _, err = os.Stat(pathCheck); os.IsNotExist(err) {
-			fmt.Printf("no keys found\n")
+			defaultF, err := os.OpenFile(filepath.Join(pathCheck, "default"), os.O_RDWR|os.O_CREATE, 0644)
+			if err != nil {
+				SetError(fmt.Errorf("unable to open default key: %s", err.Error()), 4)
+			}
+			defer defaultF.Close()
+			if _, err := io.Copy(f, defaultF); err != nil {
+				SetError(err, 5)
+				return
+			}
+			// Finished doing what we wanted
 			return
 		}
 
 		// Open default
 		f, err := os.Open(filepath.Join(pathCheck, "default"))
 		if err != nil {
-			SetError(err, 2)
+			SetError(errors.New("default key has not been set"), 6)
 			return
 		}
 		defer f.Close()
 
 		h := md5.New()
 		if _, err := io.Copy(h, f); err != nil {
-			SetError(err, 3)
+			SetError(err, 7)
 			return
 		}
 
 		fis, err := ioutil.ReadDir(pathCheck)
 		if err != nil {
-			SetError(err, 4)
+			SetError(err, 8)
 			return
 		}
 
@@ -73,7 +102,7 @@ var defaultKeyCmd = &cobra.Command{
 			if fi.Name() != "default" {
 				f2, err := os.Open(filepath.Join(pathCheck, fi.Name()))
 				if err != nil {
-					SetError(err, 5)
+					SetError(err, 9)
 					return
 				}
 				h2 := md5.New()
@@ -93,18 +122,17 @@ var defaultKeyCmd = &cobra.Command{
 
 var createKeyCmd = &cobra.Command{
 	Use:   "create NAME TOKEN",
-	Short: "Create keys saves a file with the token to be referenced using a name",
+	Short: "Creates a file containing the access token to be referenced using name",
 	Args:  cobra.MaximumNArgs(2),
 	PreRunE: func(cmd *cobra.Command, args []string) error {
 		if len(args) < 2 {
 			return errors.New("must provide a NAME and TOKEN")
 		}
-		usr, err := os.UserHomeDir()
+
+		pathCheck, err := checkKeysFolder()
 		if err != nil {
 			return err
 		}
-		// Check if key storage exists if not create it
-		pathCheck := filepath.Join(usr, ".vorteil", "repository-keys")
 		_, err = os.Stat(pathCheck)
 		if err != nil {
 			err = os.MkdirAll(pathCheck, os.ModePerm)
@@ -116,14 +144,17 @@ var createKeyCmd = &cobra.Command{
 	},
 	Run: func(cmd *cobra.Command, args []string) {
 		name := args[0]
-		key := args[1]
-
-		usr, err := os.UserHomeDir()
-		if err != nil {
-			SetError(err, 1)
+		if name == "default" {
+			SetError(errors.New("default is a reserved word and can't be a name"), 1)
 			return
 		}
-		pathCheck := filepath.Join(usr, ".vorteil", "repository-keys")
+		key := args[1]
+
+		pathCheck, err := checkKeysFolder()
+		if err != nil {
+			SetError(err, 2)
+			return
+		}
 
 		// Check if file exists
 		if !flagForce {
@@ -164,15 +195,9 @@ var listKeysCmd = &cobra.Command{
 	Short: "List all keys currently stored",
 	Args:  cobra.MaximumNArgs(0),
 	Run: func(cmd *cobra.Command, args []string) {
-		usr, err := os.UserHomeDir()
+		pathCheck, err := checkKeysFolder()
 		if err != nil {
-			SetError(err, 1)
-			return
-		}
-		pathCheck := filepath.Join(usr, ".vorteil", "repository-keys")
-
-		if _, err = os.Stat(pathCheck); os.IsNotExist(err) {
-			fmt.Printf("no keys found\n")
+			SetError(err, 2)
 			return
 		}
 
@@ -202,13 +227,15 @@ var deleteKeyCmd = &cobra.Command{
 	},
 	Run: func(cmd *cobra.Command, args []string) {
 		name := args[0]
-
-		usr, err := os.UserHomeDir()
-		if err != nil {
-			SetError(err, 1)
+		if name == "default" {
+			SetError(errors.New("default is a reserved word and can't be used to delete a key"), 1)
 			return
 		}
-		pathCheck := filepath.Join(usr, ".vorteil", "repository-keys")
+		pathCheck, err := checkKeysFolder()
+		if err != nil {
+			SetError(err, 2)
+			return
+		}
 		path := filepath.Join(pathCheck, name)
 		dpath := filepath.Join(pathCheck, "default")
 
@@ -299,11 +326,10 @@ func init() {
 // checks to see if default exists if that doesnt exist
 // errors out saying you need to provide authentication
 func checkAuthentication() (string, error) {
-	usr, err := os.UserHomeDir()
+	pathCheck, err := checkKeysFolder()
 	if err != nil {
 		return "", err
 	}
-	pathCheck := filepath.Join(usr, ".vorteil", "repository-keys")
 	token, err := checkDefaultAndProvided(pathCheck)
 	if err != nil {
 		return "", err

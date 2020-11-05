@@ -173,7 +173,33 @@ func getSourceType(src string) (sourceType, error) {
 	return sourceINVALID, err
 }
 
+func checkIfNewVRepo(src string) (string, error) {
+	urlo, err := url.Parse(src)
+	if err != nil {
+		return "", err
+	}
+	client := &http.Client{}
+	req, err := http.NewRequest("GET", fmt.Sprintf("%s://%s/info", urlo.Scheme, urlo.Host), nil)
+	if err != nil {
+		return "", err
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", errors.New("not a new vorteil repository")
+	}
+	return resp.Header.Get("Vorteil-Repository"), nil
+}
+
 func getReaderURL(src string) (vpkg.Reader, error) {
+
+	newVrepo, err := checkIfNewVRepo(src)
+	if err != nil {
+		return nil, err
+	}
 	client := &http.Client{}
 
 	req, err := http.NewRequest("GET", src, nil)
@@ -181,22 +207,33 @@ func getReaderURL(src string) (vpkg.Reader, error) {
 		return nil, err
 	}
 
-	token, err := checkAuthentication()
-	if err != nil {
-		return nil, err
-	}
+	if newVrepo == "True" {
+		token, err := checkAuthentication()
+		if err != nil {
+			return nil, err
+		}
 
-	if token != "" {
-		req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", token))
+		if token != "" {
+			req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", token))
+		}
 	}
 
 	resp, err := client.Do(req)
 	if err != nil {
-		resp.Body.Close()
+		if resp != nil {
+			resp.Body.Close()
+		}
 		return nil, err
 	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, errors.New(resp.Status)
+	}
+
+	for name, values := range resp.Header {
+		// Loop over all values for the name.
+		for _, value := range values {
+			fmt.Println(name, value)
+		}
 	}
 
 	var p elog.Progress

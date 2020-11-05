@@ -180,21 +180,17 @@ var createKeyCmd = &cobra.Command{
 		}
 
 		// Check if file exists
-		if !flagForce {
-			// if stat returns no error return error saying you need to provide the force flag
-			_, err := os.Stat(filepath.Join(pathCheck, name))
-			if err == nil {
+		// if stat returns no error return error saying you need to provide the force flag
+		fi, err := os.Stat(filepath.Join(pathCheck, name))
+		if err == nil {
+			if !flagForce {
 				SetError(errors.New("key file already exists provide --force to overwrite"), 2)
 				return
 			}
 		}
 
-		if flagForce {
-			// Check old version
-			if _, err = os.Stat(filepath.Join(pathCheck, name)); !os.IsNotExist(err) {
-				SetError(err, 3)
-				return
-			}
+		if flagForce && fi != nil {
+
 			// open old file
 			f2, err := os.Open(filepath.Join(pathCheck, name))
 			if err != nil {
@@ -202,25 +198,27 @@ var createKeyCmd = &cobra.Command{
 				return
 			}
 			defer f2.Close()
+
 			odata, err := ioutil.ReadAll(f2)
 			if err != nil {
 				SetError(err, 5)
 				return
 			}
+
 			// check if []byte(key) is equal to default
 			f, err := os.Open(filepath.Join(pathCheck, "default"))
 			if err == nil {
 				defer f.Close()
 				data, err := ioutil.ReadAll(f)
 				if err != nil {
-					SetError(err, 4)
+					SetError(err, 6)
 					return
 				}
 				if string(data) == string(odata) {
 					// Write default to be the same
 					err = ioutil.WriteFile(filepath.Join(pathCheck, "default"), []byte(key), os.ModePerm)
 					if err != nil {
-						SetError(err, 5)
+						SetError(err, 7)
 						return
 					}
 				}
@@ -230,7 +228,7 @@ var createKeyCmd = &cobra.Command{
 		// Write key to a file under that keys directory
 		err = ioutil.WriteFile(filepath.Join(pathCheck, name), []byte(key), os.ModePerm)
 		if err != nil {
-			SetError(err, 3)
+			SetError(err, 8)
 			return
 		}
 
@@ -238,7 +236,7 @@ var createKeyCmd = &cobra.Command{
 		if flagDefault {
 			err = ioutil.WriteFile(filepath.Join(pathCheck, "default"), []byte(key), os.ModePerm)
 			if err != nil {
-				SetError(err, 6)
+				SetError(err, 9)
 				return
 			}
 		}

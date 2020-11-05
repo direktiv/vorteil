@@ -63,16 +63,26 @@ var defaultKeyCmd = &cobra.Command{
 				return
 			}
 			defer f.Close()
+			data, err := ioutil.ReadAll(f)
+			if err != nil {
+				SetError(fmt.Errorf("unable to read from key file"), 4)
+				return
+			}
 
 			defaultF, err := os.OpenFile(filepath.Join(pathCheck, "default"), os.O_RDWR|os.O_CREATE, 0644)
 			if err != nil {
-				SetError(fmt.Errorf("unable to open default key: %s", err.Error()), 4)
-			}
-			defer defaultF.Close()
-			if _, err := io.Copy(f, defaultF); err != nil {
-				SetError(err, 5)
+				SetError(fmt.Errorf("unable to open default key: %s", err.Error()), 5)
 				return
 			}
+
+			defer defaultF.Close()
+
+			_, err = defaultF.Write(data)
+			if err != nil {
+				SetError(err, 6)
+				return
+			}
+
 			// Finished doing what we wanted
 			return
 		}

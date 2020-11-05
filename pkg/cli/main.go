@@ -19,6 +19,7 @@ import (
 	"github.com/sisatech/tablewriter"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"github.com/vorteil/vorteil/pkg/elog"
 	"github.com/vorteil/vorteil/pkg/vcfg"
 	"github.com/vorteil/vorteil/pkg/vdisk"
 	"github.com/vorteil/vorteil/pkg/vio"
@@ -180,7 +181,6 @@ func getReaderURL(src string) (vpkg.Reader, error) {
 		return nil, err
 	}
 
-
 	token, err := checkAuthentication()
 	if err != nil {
 		return nil, err
@@ -198,7 +198,15 @@ func getReaderURL(src string) (vpkg.Reader, error) {
 	if resp.StatusCode != http.StatusOK {
 		return nil, errors.New(resp.Status)
 	}
-	p := log.NewProgress("Downloading package", "KiB", resp.ContentLength)
+
+	var p elog.Progress
+
+	if resp.ContentLength == 0 {
+		p = log.NewProgress("Downloading package", "", 0)
+		defer p.Finish(true)
+	} else {
+		p = log.NewProgress("Downloading package", "KiB", resp.ContentLength)
+	}
 
 	pkgr, err := vpkg.Load(p.ProxyReader(resp.Body))
 	if err != nil {
@@ -206,6 +214,7 @@ func getReaderURL(src string) (vpkg.Reader, error) {
 		p.Finish(false)
 		return nil, err
 	}
+
 	return pkgr, nil
 }
 

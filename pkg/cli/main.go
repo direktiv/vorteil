@@ -229,13 +229,6 @@ func getReaderURL(src string) (vpkg.Reader, error) {
 		return nil, errors.New(resp.Status)
 	}
 
-	for name, values := range resp.Header {
-		// Loop over all values for the name.
-		for _, value := range values {
-			fmt.Println(name, value)
-		}
-	}
-
 	var p elog.Progress
 	if resp.ContentLength == -1 {
 		p = log.NewProgress("Downloading package", "", 0)

@@ -481,7 +481,7 @@ func (b *Builder) processLinuxArgs() error {
 	_, ok1 := m["ro"]
 	_, ok2 := m["rw"]
 	if !ok1 && !ok2 {
-		args = append(args, "ro")
+		args = append(args, "rw")
 	}
 
 	// if the fs is not set here we assume it is ext2

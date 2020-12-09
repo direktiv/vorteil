@@ -14,4 +14,5 @@ const (
 	BootstrapWaitPort               = "WAIT_PORT"
 	BootstrapSleep                  = "SLEEP"
 	BootstrapFindAndReplace         = "FIND_AND_REPLACE"
+	BootstrapGetRequest             = "GET"
 )

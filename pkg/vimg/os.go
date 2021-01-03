@@ -196,6 +196,10 @@ func (b *Builder) validateConfig() error {
 
 		// TODO: validate bootstrap?
 
+		// Validate Terminate Signal
+		if err := p.Terminate.Validate(); err != nil {
+			return err
+		}
 	}
 
 	for i, n := range b.vcfg.Networks {

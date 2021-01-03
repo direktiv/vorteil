@@ -48,16 +48,17 @@ var (
 
 // Program ..
 type Program struct {
-	Binary    string    `toml:"binary,omitempty" json:"binary"`
-	Args      string    `toml:"args,omitempty" json:"args"`
-	Env       []string  `toml:"env,omitempty" json:"env"`
-	Cwd       string    `toml:"cwd,omitempty" json:"cwd"`
-	Stdout    string    `toml:"stdout,omitempty" json:"stdout"`
-	Stderr    string    `toml:"stderr,omitempty" json:"stderr"`
-	Bootstrap []string  `toml:"bootstrap,ommitempty" json:"bootstrap"`
-	LogFiles  []string  `toml:"logfiles,omitempty" json:"logfiles"`
-	Privilege Privilege `toml:"privilege,omitempty" json:"privilege"`
-	Strace    bool      `toml:"strace,omitempty" json:"strace"`
+	Binary    string          `toml:"binary,omitempty" json:"binary"`
+	Args      string          `toml:"args,omitempty" json:"args"`
+	Env       []string        `toml:"env,omitempty" json:"env"`
+	Cwd       string          `toml:"cwd,omitempty" json:"cwd"`
+	Stdout    string          `toml:"stdout,omitempty" json:"stdout"`
+	Stderr    string          `toml:"stderr,omitempty" json:"stderr"`
+	Bootstrap []string        `toml:"bootstrap,ommitempty" json:"bootstrap"`
+	LogFiles  []string        `toml:"logfiles,omitempty" json:"logfiles"`
+	Privilege Privilege       `toml:"privilege,omitempty" json:"privilege"`
+	Strace    bool            `toml:"strace,omitempty" json:"strace"`
+	Terminate TerminateSignal `toml:"terminate,omitempty" json:"terminate"`
 }
 
 // NetworkInterface ..
@@ -90,14 +91,15 @@ type Route struct {
 
 // SystemSettings ..
 type SystemSettings struct {
-	DNS        []string   `toml:"dns,omitempty" json:"dns,omitempty"`
-	NTP        []string   `toml:"ntp,omitempty" json:"ntp,omitempty"`
-	Hostname   string     `toml:"hostname,omitempty" json:"hostname,omitempty"`
-	MaxFDs     uint       `toml:"max-fds,omitzero" json:"max-fds,omitempty"`
-	StdoutMode StdoutMode `toml:"output-mode,omitzero" json:"stdout-mode,omitempty"`
-	KernelArgs string     `toml:"kernel-args,omitempty" json:"kernel-args,omitempty"`
-	Filesystem Filesystem `toml:"filesystem,omitempty" json:"filesystem,omitempty"`
-	User       string     `toml:"user,omitempty" json:"user,omitempty"` // Note: should we validate against regex ^[a-z]*$
+	DNS           []string   `toml:"dns,omitempty" json:"dns,omitempty"`
+	NTP           []string   `toml:"ntp,omitempty" json:"ntp,omitempty"`
+	Hostname      string     `toml:"hostname,omitempty" json:"hostname,omitempty"`
+	MaxFDs        uint       `toml:"max-fds,omitzero" json:"max-fds,omitempty"`
+	StdoutMode    StdoutMode `toml:"output-mode,omitzero" json:"stdout-mode,omitempty"`
+	KernelArgs    string     `toml:"kernel-args,omitempty" json:"kernel-args,omitempty"`
+	Filesystem    Filesystem `toml:"filesystem,omitempty" json:"filesystem,omitempty"`
+	User          string     `toml:"user,omitempty" json:"user,omitempty"` // Note: should we validate against regex ^[a-z]*$
+	TerminateWait string     `toml:"terminate-wait,omitempty" json:"terminate-wait,omitempty"`
 }
 
 // PackageInfo ..

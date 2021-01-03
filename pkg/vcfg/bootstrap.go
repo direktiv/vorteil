@@ -5,6 +5,7 @@ package vcfg
  * Copyright 2020 vorteil.io Pty Ltd
  */
 
+// Command ...
 type Command string
 
 // Bootstrap commands

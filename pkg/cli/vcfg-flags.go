@@ -357,10 +357,17 @@ var systemOutputModeFlagValidator = func(f flag.StringFlag) error {
 	return nil
 }
 
-// -- system.user
+// --system.user
 var systemUserFlag = flag.NewStringFlag("system.user", "name of the non-root user (default: vorteil)", hideFlags, systemUserFlagValidator)
 var systemUserFlagValidator = func(f flag.StringFlag) error {
 	overrideVCFG.System.User = f.Value
+	return nil
+}
+
+// --system.terminate-wait
+var systemTerminateWaitFlag = flag.NewStringFlag("system.terminate-wait", "how long to wait after sending signal on program termination", hideFlags, systemUserFlagValidator)
+var ssystemTerminateWaitFlagValidator = func(f flag.StringFlag) error {
+	overrideVCFG.System.TerminateWait = f.Value
 	return nil
 }
 
@@ -497,6 +504,12 @@ var programEnvFlagValidator = func(f flag.NStringSliceFlag) error {
 var programCWDFlag = flag.NewNStringFlag("program[<<N>>].cwd", "configure the working directory of a program", &maxProgramFlags, hideFlags, programCWDFlagValidator)
 var programCWDFlagValidator = func(f flag.NStringFlag) error {
 	return initRequiredProgramsFromString(f, func(prog *vcfg.Program, s string) { prog.Cwd = s })
+}
+
+// --program.terminate
+var programTerminateFlag = flag.NewNStringFlag("program[<<N>>].terminate", "configure the signal to send program on termination", &maxProgramFlags, hideFlags, programTerminateFlagValidator)
+var programTerminateFlagValidator = func(f flag.NStringFlag) error {
+	return initRequiredProgramsFromString(f, func(prog *vcfg.Program, s string) { prog.Terminate = vcfg.TerminateSignal(s) })
 }
 
 // --program.logfiles

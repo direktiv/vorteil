@@ -23,7 +23,8 @@ import (
 
 // KernelOptions contains all kernel configuration settings.
 type KernelOptions struct {
-	Shell bool
+	Record bool
+	Shell  bool
 }
 
 // BuildArgs contains all arguments a caller can use to customize the behaviour
@@ -85,7 +86,8 @@ func build(ctx context.Context, w io.WriteSeeker, cfg *vcfg.VCFG, args *BuildArg
 
 	vimgBuilder, err := CreateBuilder(ctx, &vimg.BuilderArgs{
 		Kernel: vimg.KernelOptions{
-			Shell: args.KernelOptions.Shell,
+			Record: args.KernelOptions.Record,
+			Shell:  args.KernelOptions.Shell,
 		},
 		FSCompiler: fsCompiler,
 		VCFG:       cfg,

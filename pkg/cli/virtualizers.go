@@ -113,7 +113,8 @@ func runVMware(pkgReader vpkg.Reader, cfg *vcfg.VCFG, name string) error {
 		PackageReader:    pkgReader,
 		Format:           vmware.Allocator.DiskFormat(),
 		KernelOptions: vdisk.KernelOptions{
-			Shell: flagShell,
+			Shell:  flagShell,
+			Record: flagRecord != "",
 		},
 		Logger: log,
 	})
@@ -135,7 +136,7 @@ func runVMware(pkgReader vpkg.Reader, cfg *vcfg.VCFG, name string) error {
 	virt := alloc.Alloc()
 
 	config := vmware.Config{
-		Headless: !flagGUI,
+		Headless:    !flagGUI,
 		NetworkType: "nat",
 	}
 

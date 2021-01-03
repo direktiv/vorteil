@@ -34,7 +34,8 @@ type FSCompiler interface {
 
 // KernelOptions for settings that change kernel behaviour.
 type KernelOptions struct {
-	Shell bool
+	Record bool
+	Shell  bool
 }
 
 // BuilderArgs collects all of the arguments needed to call NewBuilder into one place.

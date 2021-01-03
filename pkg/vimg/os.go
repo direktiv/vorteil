@@ -525,6 +525,11 @@ func (b *Builder) processLinuxArgs() error {
 
 	args = append(args, "i8042.noaux i8042.nomux i8042.nopnp i8042.dumbkbd vt.color=0x00")
 
+	// record mode adjustment
+	if b.kernelOptions.Record {
+		args = append(args, "recordmode")
+	}
+
 	var x []string
 	for _, s := range args {
 		if strings.ContainsAny(s, " \t") {

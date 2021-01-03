@@ -84,7 +84,9 @@ func (mgr *CLIRemoteManager) updateList(ctx context.Context) (List, error) {
 		fi, err := os.Stat(filepath.Join(mgr.dir, filenameFromVersion(tuple.Version)))
 		if err == nil {
 			if tuple.ModTime.Before(fi.ModTime()) {
-				list[i].Location += " (cached)"
+				suffix := " (cached)"
+				list[i].Location = strings.TrimSuffix(list[i].Location, suffix)
+				list[i].Location += suffix
 			} else {
 				mgr.log.Warnf("detected an unusual remote kernel file update for source '%s' on kernel '%s'", mgr.url, tuple.Version)
 				err = os.Remove(filepath.Join(mgr.dir, filenameFromVersion(tuple.Version)))
@@ -306,7 +308,7 @@ func (mgr *CLIRemoteManager) get(version CalVer) error {
 	tuple, err := mgr.cache.BestMatch(version)
 	if err == nil {
 		tuple.Location = strings.TrimSuffix(tuple.Location, " (cached)") + " (cached)"
-		tuple.ModTime = time.Now()
+		// tuple.ModTime = time.Now()
 		success = true
 	}
 

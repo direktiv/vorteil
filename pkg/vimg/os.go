@@ -311,8 +311,12 @@ func (b *Builder) writeKernel(ctx context.Context, w io.WriteSeeker) error {
 		return err
 	}
 
-	kern := b.kernelBundle.Bundle().Reader(b.kernelTags...)
-	_, err = io.Copy(w, kern)
+	kern := b.kernelBundle
+
+	b.log.Debugf("Using kernel from filepath: %s", kern.Location())
+
+	rdr := kern.Bundle().Reader(b.kernelTags...)
+	_, err = io.Copy(w, rdr)
 	if err != nil {
 		return err
 	}

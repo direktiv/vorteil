@@ -160,7 +160,7 @@ func init() {
 	f.StringVarP(&flagKey, "key", "k", "", "vrepo authentication key")
 	f.BoolVar(&flagGUI, "gui", false, "when running virtual machine show gui of hypervisor")
 	f.BoolVar(&flagShell, "shell", false, "add a busybox shell environment to the image")
-	f.StringVar(&flagRecord, "record", "", "")
+	f.StringVar(&flagRecord, "record", "", "extract touched files to this path after running")
 }
 
 func defaultVirtualizer() string {

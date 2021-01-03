@@ -316,7 +316,7 @@ var networkUDPFlagValidator = func(f flag.NStringSliceFlag) error {
 }
 
 // --system.kernel-args
-var systemKernelArgsFlag = flag.NewStringFlag("system.kernel-args", "", hideFlags, systemKernelArgsFlagValidator)
+var systemKernelArgsFlag = flag.NewStringFlag("system.kernel-args", "linux kernel args to append", hideFlags, systemKernelArgsFlagValidator)
 var systemKernelArgsFlagValidator = func(f flag.StringFlag) error {
 	overrideVCFG.System.KernelArgs = f.Value
 	return nil

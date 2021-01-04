@@ -99,7 +99,7 @@ type SystemSettings struct {
 	KernelArgs    string     `toml:"kernel-args,omitempty" json:"kernel-args,omitempty"`
 	Filesystem    Filesystem `toml:"filesystem,omitempty" json:"filesystem,omitempty"`
 	User          string     `toml:"user,omitempty" json:"user,omitempty"` // Note: should we validate against regex ^[a-z]*$
-	TerminateWait uint       `toml:"terminate-wait,omitempty" json:"terminate-wait,omitempty"`
+	TerminateWait uint       `toml:"terminate-wait,omitzero" json:"terminate-wait,omitzero"`
 }
 
 // PackageInfo ..

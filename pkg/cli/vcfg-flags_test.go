@@ -557,6 +557,20 @@ func TestSystemMaxFDsFlag(t *testing.T) {
 
 }
 
+func TestSystemTerminateWaitFlag(t *testing.T) {
+
+	testResetOverrideVCFG()
+
+	// set --system.terminate-wait="1000"
+	f := systemTerminateWaitFlag
+	f.Value = 1000
+
+	err := systemTerminateWaitFlagValidator(f)
+	assert.NoError(t, err)
+	assert.Equal(t, f.Value, overrideVCFG.System.TerminateWait)
+
+}
+
 func TestSystemOutputModeFlag(t *testing.T) {
 
 	testResetOverrideVCFG()
@@ -718,6 +732,23 @@ func TestProgramsCWDFlag(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, nProgs, len(overrideVCFG.Programs))
 	assert.Equal(t, f.Value[1], overrideVCFG.Programs[1].Cwd)
+
+}
+
+func TestProgramsTerminateFlag(t *testing.T) {
+
+	testResetOverrideVCFG()
+
+	// set --program[2].terminate="SIGTERM"
+	f := programTerminateFlag
+	f.Value = []string{"", "SIGTERM"}
+	nProgs := 2
+	f.Total = &nProgs
+
+	err := programTerminateFlagValidator(f)
+	assert.NoError(t, err)
+	assert.Equal(t, nProgs, len(overrideVCFG.Programs))
+	assert.Equal(t, f.Value[1], string(overrideVCFG.Programs[1].Terminate))
 
 }
 

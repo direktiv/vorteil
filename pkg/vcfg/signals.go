@@ -2,6 +2,7 @@ package vcfg
 
 import (
 	"fmt"
+	"syscall"
 )
 
 /**
@@ -14,27 +15,31 @@ import (
 type TerminateSignal string
 
 // TerminateSignals : Supported Signals
-var TerminateSignals = []TerminateSignal{
-	"SIGINT",  // Term    Interrupt from keyboard
-	"SIGKILL", // Term    Kill signal
-	"SIGPWR",  // Term    Power failure (System V)
-	"SIGQUIT", // Core    Quit from keyboard
-	"SIGSTOP", // Stop    Stop process
-	"SIGTERM", // Term    Termination signal
+var TerminateSignals = map[TerminateSignal]syscall.Signal{
+	"SIGINT":  syscall.SIGINT,  // Term    Interrupt from keyboard
+	"SIGKILL": syscall.SIGKILL, // Term    Kill signal
+	"SIGPWR":  syscall.SIGPWR,  // Term    Power failure (System V)
+	"SIGQUIT": syscall.SIGQUIT, // Core    Quit from keyboard
+	"SIGSTOP": syscall.SIGSTOP, // Stop    Stop process
+	"SIGTERM": syscall.SIGTERM, // Term    Termination signal
 }
 
 // Validate TerminateSignal
 func (tSig *TerminateSignal) Validate() (err error) {
 	validSignals := ""
-	for i := range TerminateSignals {
-		validSignals += string(TerminateSignals[i])
-		if len(TerminateSignals)-1 != i {
+	i := 0
+	for strSig := range TerminateSignals {
+		validSignals += string(strSig)
+
+		if i < len(TerminateSignals)-1 {
 			validSignals += ", "
 		}
 
-		if *tSig == TerminateSignals[i] {
+		if *tSig == strSig {
 			return
 		}
+
+		i++
 	}
 
 	return fmt.Errorf("terminate signal '%s' is not supported. Supported Signals: %s", *tSig, validSignals)

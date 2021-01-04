@@ -365,8 +365,8 @@ var systemUserFlagValidator = func(f flag.StringFlag) error {
 }
 
 // --system.terminate-wait
-var systemTerminateWaitFlag = flag.NewStringFlag("system.terminate-wait", "how long to wait after sending signal on program termination", hideFlags, systemUserFlagValidator)
-var ssystemTerminateWaitFlagValidator = func(f flag.StringFlag) error {
+var systemTerminateWaitFlag = flag.NewUintFlag("system.terminate-wait", "how long to wait after sending signal on program termination", hideFlags, ssystemTerminateWaitFlagValidator)
+var ssystemTerminateWaitFlagValidator = func(f flag.UintFlag) error {
 	overrideVCFG.System.TerminateWait = f.Value
 	return nil
 }

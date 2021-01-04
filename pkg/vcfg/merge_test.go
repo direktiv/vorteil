@@ -164,6 +164,7 @@ func TestMergePrograms(t *testing.T) {
 	assert.Equal(t, replacementProgram.Strace, a.Programs[0].Strace)
 	assert.Equal(t, replacementProgram.Cwd, a.Programs[0].Cwd)
 	assert.Equal(t, replacementProgram.Args, a.Programs[0].Args)
+	assert.Equal(t, replacementProgram.Terminate, a.Programs[0].Terminate)
 
 }
 

@@ -14,6 +14,9 @@ import (
 //	Additional information can be found @ https://support.vorteil.io/docs/VCFG-Reference/program/terminate
 type TerminateSignal string
 
+// DefaultTerminateSignal : Default Terminate Signal to be used on programs
+const DefaultTerminateSignal TerminateSignal = "SIGTERM"
+
 // TerminateSignals : Supported Signals
 var TerminateSignals = map[TerminateSignal]syscall.Signal{
 	"SIGINT":  syscall.SIGINT,  // Term    Interrupt from keyboard

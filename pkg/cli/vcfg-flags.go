@@ -365,7 +365,7 @@ var systemUserFlagValidator = func(f flag.StringFlag) error {
 }
 
 // --system.terminate-wait
-var systemTerminateWaitFlag = flag.NewUintFlag("system.terminate-wait", "how long to wait after sending signal on program termination", hideFlags, ssystemTerminateWaitFlagValidator)
+var systemTerminateWaitFlag = flag.NewUintFlag("system.terminate-wait", "how many milliseconds to wait for program termination (default: 3000)", hideFlags, ssystemTerminateWaitFlagValidator)
 var ssystemTerminateWaitFlagValidator = func(f flag.UintFlag) error {
 	overrideVCFG.System.TerminateWait = f.Value
 	return nil
@@ -507,7 +507,7 @@ var programCWDFlagValidator = func(f flag.NStringFlag) error {
 }
 
 // --program.terminate
-var programTerminateFlag = flag.NewNStringFlag("program[<<N>>].terminate", "configure the signal to send program on termination", &maxProgramFlags, hideFlags, programTerminateFlagValidator)
+var programTerminateFlag = flag.NewNStringFlag("program[<<N>>].terminate", "configure the signal to send program on termination (default: SIGTERM)", &maxProgramFlags, hideFlags, programTerminateFlagValidator)
 var programTerminateFlagValidator = func(f flag.NStringFlag) error {
 	return initRequiredProgramsFromString(f, func(prog *vcfg.Program, s string) { prog.Terminate = vcfg.TerminateSignal(s) })
 }

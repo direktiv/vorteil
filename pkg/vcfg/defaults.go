@@ -47,6 +47,16 @@ func WithDefaults(v *VCFG, logger elog.View) error {
 		logger.Debugf("Setting empty hostname field to '%s'", v.System.Hostname)
 	}
 
+	for i := range v.Programs {
+		if v.Programs[i].Terminate == "" {
+			v.Programs[i].Terminate = DefaultTerminateSignal
+		}
+	}
+
+	if v.System.TerminateWait == 0 {
+		v.System.TerminateWait = 3000
+	}
+
 	return nil
 }
 

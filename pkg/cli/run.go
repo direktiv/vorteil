@@ -249,7 +249,7 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG, name st
 		if flagRecord != "" {
 			decompileSpinner := log.NewProgress("Decompiling Disk", "", 0)
 			defer decompileSpinner.Finish(true)
-			if err := runDecompile(diskpath, flagRecord, flagTouched); err != nil {
+			if err := runDecompile(diskpath, flagRecord, true); err != nil {
 				SetError(err, 1)
 				return
 			}

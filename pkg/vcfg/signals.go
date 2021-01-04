@@ -44,3 +44,12 @@ func (tSig *TerminateSignal) Validate() (err error) {
 
 	return fmt.Errorf("terminate signal '%s' is not supported. Supported Signals: %s", *tSig, validSignals)
 }
+
+// Signal : Return syscall Signal
+func (tSig *TerminateSignal) Signal() (syscall.Signal, error) {
+	if err := tSig.Validate(); err != nil {
+		return syscall.Signal(0), err
+	}
+
+	return TerminateSignals[*tSig], nil
+}

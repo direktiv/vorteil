@@ -19,7 +19,7 @@ import (
 
 	"github.com/vorteil/vorteil/pkg/vcfg"
 
-	"github.com/mattn/go-shellwords"
+	shellwords "github.com/mattn/go-shellwords"
 	"github.com/vorteil/vorteil/pkg/vkern"
 )
 
@@ -498,14 +498,6 @@ func (b *Builder) processLinuxArgs() error {
 
 	if _, ok := m["loglevel"]; !ok {
 		args = append(args, "loglevel=4")
-	}
-
-	if _, ok := m["intel_idle.max_cstate"]; !ok {
-		args = append(args, "intel_idle.max_cstate=0")
-	}
-
-	if _, ok := m["processor.max_cstate"]; !ok {
-		args = append(args, "processor.max_cstate=1")
 	}
 
 	// console

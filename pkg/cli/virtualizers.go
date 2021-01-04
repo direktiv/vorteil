@@ -202,7 +202,8 @@ func runFirecracker(pkgReader vpkg.Reader, cfg *vcfg.VCFG, name string) error {
 		PackageReader:    pkgReader,
 		Format:           firecracker.Allocator.DiskFormat(),
 		KernelOptions: vdisk.KernelOptions{
-			Shell: flagShell,
+			Shell:  flagShell,
+			Record: flagRecord != "",
 		},
 		Logger: log,
 	})
@@ -273,7 +274,8 @@ func runHyperV(pkgReader vpkg.Reader, cfg *vcfg.VCFG, name string) error {
 		PackageReader:    pkgReader,
 		Format:           hyperv.Allocator.DiskFormat(),
 		KernelOptions: vdisk.KernelOptions{
-			Shell: flagShell,
+			Shell:  flagShell,
+			Record: flagRecord != "",
 		},
 		Logger: log,
 	})
@@ -341,7 +343,8 @@ func runVirtualBox(pkgReader vpkg.Reader, cfg *vcfg.VCFG, name string) error {
 		PackageReader:    pkgReader,
 		Format:           virtualbox.Allocator.DiskFormat(),
 		KernelOptions: vdisk.KernelOptions{
-			Shell: flagShell,
+			Shell:  flagShell,
+			Record: flagRecord != "",
 		},
 		Logger: log,
 	})
@@ -407,7 +410,8 @@ func runQEMU(pkgReader vpkg.Reader, cfg *vcfg.VCFG, name string) error {
 		PackageReader:    pkgReader,
 		Format:           qemu.Allocator.DiskFormat(),
 		KernelOptions: vdisk.KernelOptions{
-			Shell: flagShell,
+			Shell:  flagShell,
+			Record: flagRecord != "",
 		},
 		Logger: log,
 	})

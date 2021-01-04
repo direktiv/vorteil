@@ -561,4 +561,5 @@ var vcfgFlags = flag.FlagsList{
 	&programPrivilegesFlag, &programArgsFlag, &programStdoutFlag,
 	&programStderrFlag, &programLogFilesFlag, &programBootstrapFlag,
 	&programEnvFlag, &programCWDFlag, &programStraceFlag, &sysctlFlag,
+	&programTerminateFlag, &systemTerminateWaitFlag,
 }

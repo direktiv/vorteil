@@ -26,6 +26,8 @@ var TerminateSignals = map[TerminateSignal]syscall.Signal{
 	"SIGQUIT": syscall.SIGQUIT, // Core    Quit from keyboard
 	"SIGSTOP": syscall.SIGSTOP, // Stop    Stop process
 	"SIGTERM": syscall.SIGTERM, // Term    Termination signal
+	"SIGUSR1": syscall.SIGUSR1, // User-defined signal 1
+	"SIGUSR2": syscall.SIGUSR2, // User-defined signal 2
 }
 
 // Validate : Check if TerminateSignal is a supported signal

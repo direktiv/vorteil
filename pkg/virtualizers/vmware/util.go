@@ -143,6 +143,9 @@ func GenerateVMX(cores, memory, disk, name, dir string, numberOfNetworkCards int
 			vmx = replace(vmx, "(VHVENABLED)", "FALSE")
 			vmx = replace(vmx, "(VPMCENABLED)", "FALSE")
 		}
+	} else if vmwareType == "fusion" {
+		vmx = replace(vmx, "(VHVENABLED)", "TRUE")
+		vmx = replace(vmx, "(VPMCENABLED)", "FALSE")
 	} else {
 		vmx = replace(vmx, "(VHVENABLED)", "TRUE")
 		vmx = replace(vmx, "(VPMCENABLED)", "TRUE")
@@ -160,27 +163,27 @@ func GenerateVMX(cores, memory, disk, name, dir string, numberOfNetworkCards int
 	}
 
 	if numberOfNetworkCards > 0 {
-		vmx = replace(vmx, "(ETH0)", "true")
+		vmx = replace(vmx, "(ETH0)", "TRUE")
 	} else {
-		vmx = replace(vmx, "(ETH0)", "false")
+		vmx = replace(vmx, "(ETH0)", "FALSE")
 	}
 
 	if numberOfNetworkCards > 1 {
-		vmx = replace(vmx, "(ETH1)", "true")
+		vmx = replace(vmx, "(ETH1)", "TRUE")
 	} else {
-		vmx = replace(vmx, "(ETH1)", "false")
+		vmx = replace(vmx, "(ETH1)", "FALSE")
 	}
 
 	if numberOfNetworkCards > 2 {
-		vmx = replace(vmx, "(ETH2)", "true")
+		vmx = replace(vmx, "(ETH2)", "TRUE")
 	} else {
-		vmx = replace(vmx, "(ETH2)", "false")
+		vmx = replace(vmx, "(ETH2)", "FALSE")
 	}
 
 	if numberOfNetworkCards > 3 {
-		vmx = replace(vmx, "(ETH3)", "true")
+		vmx = replace(vmx, "(ETH3)", "TRUE")
 	} else {
-		vmx = replace(vmx, "(ETH3)", "false")
+		vmx = replace(vmx, "(ETH3)", "FALSE")
 	}
 
 	vmx = replace(vmx, "(NETTYPE)", networkType)

@@ -20,14 +20,14 @@ const DefaultTerminateSignal TerminateSignal = "SIGTERM"
 
 // TerminateSignals : Supported Signals
 var TerminateSignals = map[TerminateSignal]syscall.Signal{
-	"SIGINT":  syscall.SIGINT,  // Term    Interrupt from keyboard
-	"SIGKILL": syscall.SIGKILL, // Term    Kill signal
-	"SIGPWR":  syscall.SIGPWR,  // Term    Power failure (System V)
-	"SIGQUIT": syscall.SIGQUIT, // Core    Quit from keyboard
-	"SIGSTOP": syscall.SIGSTOP, // Stop    Stop process
-	"SIGTERM": syscall.SIGTERM, // Term    Termination signal
-	"SIGUSR1": syscall.SIGUSR1, // User-defined signal 1
-	"SIGUSR2": syscall.SIGUSR2, // User-defined signal 2
+	"SIGINT":  syscall.Signal(0x2),  // Term    Interrupt from keyboard
+	"SIGKILL": syscall.Signal(0x9),  // Term    Kill signal
+	"SIGQUIT": syscall.Signal(0x3),  // Core    Quit from keyboard
+	"SIGPWR":  syscall.Signal(0x1e), // Term	Power Failure (System V)
+	"SIGSTOP": syscall.Signal(0x13), // Stop    Stop process
+	"SIGTERM": syscall.Signal(0xf),  // Term    Termination signal
+	"SIGUSR1": syscall.Signal(0xa),  // User-defined signal 1
+	"SIGUSR2": syscall.Signal(0xc),  // User-defined signal 2
 }
 
 // Validate : Check if TerminateSignal is a supported signal

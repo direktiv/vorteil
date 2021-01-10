@@ -32,8 +32,8 @@ jobs:
         - go test -timeout 30s -coverprofile c.out ./...
         - export LDFLAGS="-X github.com/vorteil/vorteil/pkg/cli.release=$BUILD_TAG -X github.com/vorteil/vorteil/pkg/cli.commit=$BUILD_REF -X 'github.com/vorteil/vorteil/pkg/cli.date=$BUILD_DATE'"
         - echo $LDFLAGS
-        - go build -o vorteil -ldflags "$LDFLAGS" github.com/vorteil/vorteil/cmd/vorteil 
-        - GOOS=windows go build -o vorteil.exe -ldflags "$LDFLAGS" github.com/vorteil/vorteil/cmd/vorteil
+        - CGO_ENABLED=0 go build -o vorteil -ldflags "$LDFLAGS" github.com/vorteil/vorteil/cmd/vorteil 
+        - CGO_ENABLED=0 GOOS=windows go build -o vorteil.exe -ldflags "$LDFLAGS" github.com/vorteil/vorteil/cmd/vorteil
         - zip vorteil_windows-x86.zip vorteil.exe
         - tar -zcvf vorteil_linux-x86.tar.gz vorteil
       after_success:
@@ -70,7 +70,7 @@ jobs:
         - export BUILD_REF=$(git rev-parse --short HEAD)
         - export LDFLAGS="-X github.com/vorteil/vorteil/pkg/cli.release=$BUILD_TAG -X github.com/vorteil/vorteil/pkg/cli.commit=$BUILD_REF -X 'github.com/vorteil/vorteil/pkg/cli.date=$BUILD_DATE'"
         - echo $LDFLAGS
-        - go build -o vorteil -ldflags "$LDFLAGS" github.com/vorteil/vorteil/cmd/vorteil
+        - CGO_ENABLED=0 go build -o vorteil -ldflags "$LDFLAGS" github.com/vorteil/vorteil/cmd/vorteil
         - if [ "$TRAVIS_EVENT_TYPE" != "pull_request" ] && [ ! -z "$TRAVIS_TAG" ]; then codesign --sign "$OSX_APP_SIGN_ID" -v --timestamp --options runtime vorteil; fi;
         - mkdir -p build && mv vorteil build/
         - hdiutil create ./vorteil_darwin-x86.dmg -ov -volname "Vorteil CLI" -fs HFS+ -srcfolder ./build/

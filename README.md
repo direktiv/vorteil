@@ -8,7 +8,7 @@
 </p>
 <hr/>
 
-[![Build Status](https://travis-ci.org/vorteil/vorteil.svg?branch=master)](https://travis-ci.org/vorteil/vorteil) <a href="https://codeclimate.com/github/vorteil/vorteil/maintainability"><img src="https://api.codeclimate.com/v1/badges/bb819f04d7550b91f24d/maintainability" /></a> [![Go Report Card](https://goreportcard.com/badge/github.com/vorteil/vorteil)](https://goreportcard.com/report/github.com/vorteil/vorteil) [![](https://godoc.org/github.com/vorteil/vorteil?status.svg)](http://godoc.org/github.com/vorteil/vorteil) [![Discord](https://img.shields.io/badge/chat-on%20discord-6A7EC2)](https://discord.gg/VjF6wn4)
+[![Build Status](https://travis-ci.com/vorteil/vorteil.svg?branch=master)](https://travis-ci.com/vorteil/vorteil) <a href="https://codeclimate.com/github/vorteil/vorteil/maintainability"><img src="https://api.codeclimate.com/v1/badges/bb819f04d7550b91f24d/maintainability" /></a> [![Go Report Card](https://goreportcard.com/badge/github.com/vorteil/vorteil)](https://goreportcard.com/report/github.com/vorteil/vorteil) [![](https://godoc.org/github.com/vorteil/vorteil?status.svg)](http://godoc.org/github.com/vorteil/vorteil) [![Discord](https://img.shields.io/badge/chat-on%20discord-6A7EC2)](https://discord.gg/VjF6wn4)
 
 Vorteil is an operating system for running cloud applications on micro virtual machines. It takes only the files you need and runs them on a custom Linux kernel without any unnecessary background services: there's no ssh, no shell, and no login; just a toml file that Vorteil's init process (vinitd) uses to configure the system and launch your apps.
 

@@ -25,9 +25,7 @@ jobs:
         - export BUILD_DATE=$(date -R)
         - export BUILD_REF=$(git rev-parse --short HEAD)
         - echo "$BUILD_TAG-$BUILD_REF ($BUILD_DATE)"
-        - docker pull hello-world
         - sudo apt install containerd
-        - sudo ctr images pull docker.io/library/hello-world:latest
         - sudo chmod 0777 /run/containerd/containerd.sock
         - go test -timeout 30s -coverprofile c.out ./...
         - export LDFLAGS="-X github.com/vorteil/vorteil/pkg/cli.release=$BUILD_TAG -X github.com/vorteil/vorteil/pkg/cli.commit=$BUILD_REF -X 'github.com/vorteil/vorteil/pkg/cli.date=$BUILD_DATE'"

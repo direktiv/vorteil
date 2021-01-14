@@ -32,6 +32,21 @@ import (
 
 var ips *goque.Queue
 
+// saveDisk attempts to moves disk from sourceDisk to destDisk
+func saveDisk(sourceDisk, destDisk string) error {
+	p := log.NewProgress("Copying Disk to "+destDisk, "", 0)
+	err := os.Rename(sourceDisk, destDisk)
+	if err != nil {
+		log.Errorf("Failed to Copy Disk to '%s' error: %v\f", destDisk, err)
+		p.Finish(false)
+		return err
+	}
+
+	p.Finish(true)
+	log.Printf("Copied Disk")
+	return nil
+}
+
 // buildFirecracker does the same thing as vdisk.Build but it returns me a calver of the kernel being used
 func buildFirecracker(ctx context.Context, w io.WriteSeeker, cfg *vcfg.VCFG, args *vdisk.BuildArgs) (string, error) {
 	var err error
@@ -108,15 +123,7 @@ func runVMware(pkgReader vpkg.Reader, cfg *vcfg.VCFG, name, diskOutput string) e
 		f.Close()
 		// Move disk to diskOutput
 		if diskOutput != "" {
-			p := log.NewProgress("Copying Disk to "+diskOutput, "", 0)
-			err = os.Rename(f.Name(), diskOutput)
-			if err != nil {
-				log.Errorf("Failed to Copy Disk to '%s' error: %v\f", diskOutput, err)
-				p.Finish(false)
-			} else {
-				p.Finish(true)
-				log.Printf("Copied Disk")
-			}
+			saveDisk(f.Name(), diskOutput)
 		}
 		os.Remove(f.Name())
 		os.Remove(parent)
@@ -208,15 +215,7 @@ func runFirecracker(pkgReader vpkg.Reader, cfg *vcfg.VCFG, name, diskOutput stri
 		f.Close()
 		// Move disk to diskOutput
 		if diskOutput != "" {
-			p := log.NewProgress("Copying Disk to "+diskOutput, "", 0)
-			err = os.Rename(f.Name(), diskOutput)
-			if err != nil {
-				log.Errorf("Failed to Copy Disk to '%s' error: %v\f", diskOutput, err)
-				p.Finish(false)
-			} else {
-				p.Finish(true)
-				log.Printf("Copied Disk")
-			}
+			saveDisk(f.Name(), diskOutput)
 		}
 		os.Remove(f.Name())
 		os.Remove(parent)
@@ -301,15 +300,7 @@ func runHyperV(pkgReader vpkg.Reader, cfg *vcfg.VCFG, name, diskOutput string) e
 		f.Close()
 		// Move disk to diskOutput
 		if diskOutput != "" {
-			p := log.NewProgress("Copying Disk to "+diskOutput, "", 0)
-			err = os.Rename(f.Name(), diskOutput)
-			if err != nil {
-				log.Errorf("Failed to Copy Disk to '%s' error: %v\f", diskOutput, err)
-				p.Finish(false)
-			} else {
-				p.Finish(true)
-				log.Printf("Copied Disk")
-			}
+			saveDisk(f.Name(), diskOutput)
 		}
 		os.Remove(f.Name())
 		os.Remove(parent)
@@ -387,15 +378,7 @@ func runVirtualBox(pkgReader vpkg.Reader, cfg *vcfg.VCFG, name, diskOutput strin
 		f.Close()
 		// Move disk to diskOutput
 		if diskOutput != "" {
-			p := log.NewProgress("Copying Disk to "+diskOutput, "", 0)
-			err = os.Rename(f.Name(), diskOutput)
-			if err != nil {
-				log.Errorf("Failed to Copy Disk to '%s' error: %v\f", diskOutput, err)
-				p.Finish(false)
-			} else {
-				p.Finish(true)
-				log.Printf("Copied Disk")
-			}
+			saveDisk(f.Name(), diskOutput)
 		}
 		os.Remove(f.Name())
 		os.Remove(parent)
@@ -472,15 +455,7 @@ func runQEMU(pkgReader vpkg.Reader, cfg *vcfg.VCFG, name string, diskOutput stri
 		f.Close()
 		// Move disk to diskOutput
 		if diskOutput != "" {
-			p := log.NewProgress("Copying Disk to "+diskOutput, "", 0)
-			err = os.Rename(f.Name(), diskOutput)
-			if err != nil {
-				log.Errorf("Failed to Copy Disk to '%s' error: %v\f", diskOutput, err)
-				p.Finish(false)
-			} else {
-				p.Finish(true)
-				log.Printf("Copied Disk")
-			}
+			saveDisk(f.Name(), diskOutput)
 		}
 		os.Remove(f.Name())
 		os.Remove(parent)

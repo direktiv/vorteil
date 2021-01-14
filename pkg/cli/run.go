@@ -7,6 +7,7 @@ package cli
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -39,6 +40,34 @@ though the virtual machine is a child process of the CLI by handling interrupts
 and cleaning up the instance when it's done.`,
 	Args: cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
+		var err error
+
+		if flagSaveDisk != "" {
+			flagSaveDisk, err = filepath.Abs(flagSaveDisk)
+			if err != nil {
+				SetError(fmt.Errorf("save-disk could not format path, error: %v", err), 12)
+				return
+			}
+
+			_, err = os.Stat(flagSaveDisk)
+			if err == nil {
+				SetError(fmt.Errorf("save-disk points to file '%s' that already exists", flagSaveDisk), 13)
+				return
+			}
+
+			sdParent := filepath.Dir(flagSaveDisk)
+			stat, err := os.Stat(sdParent)
+			if os.IsNotExist(err) {
+				SetError(fmt.Errorf("save-disk path parent '%s' does not exist", sdParent), 14)
+				return
+			}
+
+			if !stat.IsDir() {
+				SetError(errors.New("save-disk path parent is not directory"), 15)
+				return
+			}
+
+		}
 
 		buildablePath := "."
 		if len(args) >= 1 {
@@ -114,31 +143,31 @@ and cleaning up the instance when it's done.`,
 
 		switch flagPlatform {
 		case platformQEMU:
-			err = runQEMU(pkgReader, cfg, name)
+			err = runQEMU(pkgReader, cfg, name, flagSaveDisk)
 			if err != nil {
 				SetError(err, 8)
 				return
 			}
 		case platformVMware:
-			err = runVMware(pkgReader, cfg, name)
+			err = runVMware(pkgReader, cfg, name, flagSaveDisk)
 			if err != nil {
 				SetError(err, 13)
 				return
 			}
 		case platformVirtualBox:
-			err = runVirtualBox(pkgReader, cfg, name)
+			err = runVirtualBox(pkgReader, cfg, name, flagSaveDisk)
 			if err != nil {
 				SetError(err, 9)
 				return
 			}
 		case platformHyperV:
-			err = runHyperV(pkgReader, cfg, name)
+			err = runHyperV(pkgReader, cfg, name, flagSaveDisk)
 			if err != nil {
 				SetError(err, 10)
 				return
 			}
 		case platformFirecracker:
-			err = runFirecracker(pkgReader, cfg, name)
+			err = runFirecracker(pkgReader, cfg, name, flagSaveDisk)
 			if err != nil {
 				SetError(err, 11)
 				return
@@ -157,6 +186,7 @@ and cleaning up the instance when it's done.`,
 func init() {
 	f := runCmd.Flags()
 	f.StringVar(&flagPlatform, "platform", defaultVirtualizer(), "run a virtual machine with appropriate hypervisor (qemu, firecracker, virtualbox, hyper-v)")
+	f.StringVar(&flagSaveDisk, "save-disk", "", "copy's a vorteil disk after a run operation to the given path")
 	f.StringVarP(&flagKey, "key", "k", "", "vrepo authentication key")
 	f.BoolVar(&flagGUI, "gui", false, "when running virtual machine show gui of hypervisor")
 	f.BoolVar(&flagShell, "shell", false, "add a busybox shell environment to the image")

@@ -81,7 +81,8 @@ func buildFirecracker(ctx context.Context, w io.WriteSeeker, cfg *vcfg.VCFG, arg
 }
 
 // runVMware
-func runVMware(pkgReader vpkg.Reader, cfg *vcfg.VCFG, name string) error {
+//	Saves resulting image to diskOutput if it's not an empty string
+func runVMware(pkgReader vpkg.Reader, cfg *vcfg.VCFG, name, diskOutput string) error {
 	if !vmware.Allocator.IsAvailable() {
 		return errors.New("vmware is not installed on your system")
 	}
@@ -103,10 +104,24 @@ func runVMware(pkgReader vpkg.Reader, cfg *vcfg.VCFG, name string) error {
 		return err
 	}
 
-	defer os.Remove(f.Name())
-	defer f.Close()
+	defer func() {
+		f.Close()
+		// Move disk to diskOutput
+		if diskOutput != "" {
+			p := log.NewProgress("Copying Disk to "+diskOutput, "", 0)
+			err = os.Rename(f.Name(), diskOutput)
+			if err != nil {
+				log.Errorf("Failed to Copy Disk to '%s' error: %v\f", diskOutput, err)
+				p.Finish(false)
+			} else {
+				p.Finish(true)
+				log.Printf("Copied Disk")
+			}
+		}
+		os.Remove(f.Name())
+		os.Remove(parent)
 
-	defer os.RemoveAll(parent)
+	}()
 
 	err = vdisk.Build(context.Background(), f, &vdisk.BuildArgs{
 		WithVCFGDefaults: true,
@@ -154,7 +169,8 @@ func runVMware(pkgReader vpkg.Reader, cfg *vcfg.VCFG, name string) error {
 }
 
 // runFirecracker needs a longer build process so we can pull the calver of the kernel used to build the disk
-func runFirecracker(pkgReader vpkg.Reader, cfg *vcfg.VCFG, name string) error {
+//	Saves resulting image to diskOutput if it's not an empty string
+func runFirecracker(pkgReader vpkg.Reader, cfg *vcfg.VCFG, name, diskOutput string) error {
 	var err error
 	if runtime.GOOS != "linux" {
 		return errors.New("firecracker is only available on linux")
@@ -187,10 +203,25 @@ func runFirecracker(pkgReader vpkg.Reader, cfg *vcfg.VCFG, name string) error {
 	if err != nil {
 		return err
 	}
-	defer os.Remove(f.Name())
-	defer f.Close()
 
-	defer os.Remove(parent)
+	defer func() {
+		f.Close()
+		// Move disk to diskOutput
+		if diskOutput != "" {
+			p := log.NewProgress("Copying Disk to "+diskOutput, "", 0)
+			err = os.Rename(f.Name(), diskOutput)
+			if err != nil {
+				log.Errorf("Failed to Copy Disk to '%s' error: %v\f", diskOutput, err)
+				p.Finish(false)
+			} else {
+				p.Finish(true)
+				log.Printf("Copied Disk")
+			}
+		}
+		os.Remove(f.Name())
+		os.Remove(parent)
+
+	}()
 
 	err = vcfg.WithDefaults(cfg, log)
 	if err != nil {
@@ -241,7 +272,9 @@ func runFirecracker(pkgReader vpkg.Reader, cfg *vcfg.VCFG, name string) error {
 	return run(virt, f.Name(), cfg, name)
 }
 
-func runHyperV(pkgReader vpkg.Reader, cfg *vcfg.VCFG, name string) error {
+// runHyperV
+//	Saves resulting image to diskOutput if it's not an empty string
+func runHyperV(pkgReader vpkg.Reader, cfg *vcfg.VCFG, name, diskOutput string) error {
 	if runtime.GOOS != "windows" {
 		return errors.New("hyper-v is only available on windows system")
 	}
@@ -264,10 +297,24 @@ func runHyperV(pkgReader vpkg.Reader, cfg *vcfg.VCFG, name string) error {
 		return err
 	}
 
-	defer os.Remove(f.Name())
-	defer f.Close()
+	defer func() {
+		f.Close()
+		// Move disk to diskOutput
+		if diskOutput != "" {
+			p := log.NewProgress("Copying Disk to "+diskOutput, "", 0)
+			err = os.Rename(f.Name(), diskOutput)
+			if err != nil {
+				log.Errorf("Failed to Copy Disk to '%s' error: %v\f", diskOutput, err)
+				p.Finish(false)
+			} else {
+				p.Finish(true)
+				log.Printf("Copied Disk")
+			}
+		}
+		os.Remove(f.Name())
+		os.Remove(parent)
 
-	defer os.RemoveAll(parent)
+	}()
 
 	err = vdisk.Build(context.Background(), f, &vdisk.BuildArgs{
 		WithVCFGDefaults: true,
@@ -314,7 +361,9 @@ func runHyperV(pkgReader vpkg.Reader, cfg *vcfg.VCFG, name string) error {
 	return run(virt, f.Name(), cfg, name)
 }
 
-func runVirtualBox(pkgReader vpkg.Reader, cfg *vcfg.VCFG, name string) error {
+// runVirtualBox
+//	Saves resulting image to diskOutput if it's not an empty string
+func runVirtualBox(pkgReader vpkg.Reader, cfg *vcfg.VCFG, name, diskOutput string) error {
 	if !virtualbox.Allocator.IsAvailable() {
 		return errors.New("virtualbox not found installed on system")
 	}
@@ -333,10 +382,25 @@ func runVirtualBox(pkgReader vpkg.Reader, cfg *vcfg.VCFG, name string) error {
 	if err != nil {
 		return err
 	}
-	defer os.Remove(f.Name())
-	defer f.Close()
 
-	defer os.Remove(parent)
+	defer func() {
+		f.Close()
+		// Move disk to diskOutput
+		if diskOutput != "" {
+			p := log.NewProgress("Copying Disk to "+diskOutput, "", 0)
+			err = os.Rename(f.Name(), diskOutput)
+			if err != nil {
+				log.Errorf("Failed to Copy Disk to '%s' error: %v\f", diskOutput, err)
+				p.Finish(false)
+			} else {
+				p.Finish(true)
+				log.Printf("Copied Disk")
+			}
+		}
+		os.Remove(f.Name())
+		os.Remove(parent)
+
+	}()
 
 	err = vdisk.Build(context.Background(), f, &vdisk.BuildArgs{
 		WithVCFGDefaults: true,
@@ -383,7 +447,9 @@ func runVirtualBox(pkgReader vpkg.Reader, cfg *vcfg.VCFG, name string) error {
 	return run(virt, f.Name(), cfg, name)
 }
 
-func runQEMU(pkgReader vpkg.Reader, cfg *vcfg.VCFG, name string) error {
+// runQEMU
+//	Saves resulting image to diskOutput if it's not an empty string
+func runQEMU(pkgReader vpkg.Reader, cfg *vcfg.VCFG, name string, diskOutput string) error {
 
 	if !qemu.Allocator.IsAvailable() {
 		return errors.New("qemu not installed on system")
@@ -401,9 +467,25 @@ func runQEMU(pkgReader vpkg.Reader, cfg *vcfg.VCFG, name string) error {
 	if err != nil {
 		return err
 	}
-	defer os.Remove(f.Name())
-	defer f.Close()
-	defer os.Remove(parent)
+
+	defer func() {
+		f.Close()
+		// Move disk to diskOutput
+		if diskOutput != "" {
+			p := log.NewProgress("Copying Disk to "+diskOutput, "", 0)
+			err = os.Rename(f.Name(), diskOutput)
+			if err != nil {
+				log.Errorf("Failed to Copy Disk to '%s' error: %v\f", diskOutput, err)
+				p.Finish(false)
+			} else {
+				p.Finish(true)
+				log.Printf("Copied Disk")
+			}
+		}
+		os.Remove(f.Name())
+		os.Remove(parent)
+
+	}()
 
 	err = vdisk.Build(context.Background(), f, &vdisk.BuildArgs{
 		WithVCFGDefaults: true,

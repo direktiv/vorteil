@@ -117,8 +117,9 @@ Supported disk formats include:
 		defer f.Close()
 
 		err = vdisk.Build(context.Background(), f, &vdisk.BuildArgs{
-			PackageReader: pkgReader,
-			Format:        format,
+			WithVCFGDefaults: true,
+			PackageReader:    pkgReader,
+			Format:           format,
 			KernelOptions: vdisk.KernelOptions{
 				Shell: flagShell,
 			},

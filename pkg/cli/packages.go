@@ -43,13 +43,23 @@ identify it and explain its purpose and its use.`,
 	Args: cobra.RangeArgs(0, 1),
 	Run: func(cmd *cobra.Command, args []string) {
 
-		packablePath := "."
+		wd, err := os.Getwd()
+		if err != nil {
+			SetError(err, 8)
+			return
+		}
+
+		packablePath := wd
+
 		if len(args) >= 1 {
-			packablePath = args[0]
+			if args[0] != "." {
+				packablePath = args[0]
+			}
 		}
 
 		suffix := ".vorteil"
 		_, base := filepath.Split(strings.TrimSuffix(filepath.ToSlash(packablePath), "/"))
+
 		outputPath := filepath.Join(".", strings.TrimSuffix(base, suffix)+suffix)
 		if flagOutput != "" {
 			outputPath = flagOutput
@@ -58,7 +68,7 @@ identify it and explain its purpose and its use.`,
 			}
 		}
 
-		err := checkValidNewFileOutput(outputPath, flagForce, "output", "-f")
+		err = checkValidNewFileOutput(outputPath, flagForce, "output", "-f")
 		if err != nil {
 			SetError(err, 1)
 			return

@@ -27,6 +27,7 @@ var (
 	flagFormat           string
 	flagOutput           string
 	flagPlatform         string
+	flagSaveDisk         string
 	flagName             string
 	flagKey              string
 	flagGUI              bool

@@ -88,6 +88,8 @@ func (b *Builder) calculateMinimumRootSize(ctx context.Context) error {
 		b.fs.IncreaseMinimumInodes(2000)
 	}
 
+	b.fs.IncreaseMinimumFreeSpace(int64(vcfg.MiB))
+
 	if b.vcfg.VM.DiskSize.IsDelta() {
 		delta := vcfg.Bytes(0)
 		delta.ApplyDelta(b.vcfg.VM.DiskSize)

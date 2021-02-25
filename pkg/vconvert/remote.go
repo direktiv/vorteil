@@ -75,10 +75,10 @@ func (cc *ContainerConverter) downloadManifest(manifest schema2.Manifest) (*cman
 	cc.logger.Printf("downloading manifest file")
 
 	reader, err := cc.registry.DownloadBlob(cc.imageRef.ShortName(), manifest.Target().Digest)
-	defer reader.Close()
 	if err != nil {
 		return nil, err
 	}
+	defer reader.Close()
 
 	buf := new(bytes.Buffer)
 	n, err := buf.ReadFrom(reader)

@@ -71,7 +71,7 @@ func (a *allocator) IsAvailable() bool {
 
 // DiskFormat return the format the hypervisor should be using.
 func (a *allocator) DiskFormat() vdisk.Format {
-	return vdisk.RAWFormat
+	return vdisk.QCOW2Format // vdisk.RAWFormat
 }
 
 // ValidateArgs check if valid args are passed to create a valid Virtualizer

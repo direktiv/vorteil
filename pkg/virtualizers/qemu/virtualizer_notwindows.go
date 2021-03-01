@@ -114,7 +114,7 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	o.id = strings.Split(filepath.Base(o.folder), "-")[1]
 
 	diskpath := filepath.ToSlash(args.ImagePath)
-	diskformat := "raw"
+	diskformat := "qcow2" // "raw"
 
 	argsCommand := createArgs(o.config.VM.CPUs, o.config.VM.RAM.Units(vcfg.MiB), o.headless, diskpath, diskformat)
 	argsCommand += fmt.Sprintf(" -monitor unix:%s,server,nowait", filepath.ToSlash(filepath.Join(o.folder, "monitor.sock")))
@@ -168,7 +168,7 @@ func (v *Virtualizer) GenerateScript(source string) error {
 
 	args := strings.Join(v.command.Args, " ")
 	//replace diskpath
-	args = strings.ReplaceAll(args, filepath.ToSlash(filepath.Join(v.folder, fmt.Sprintf("%s.raw", v.name))), fmt.Sprintf("\"%s\"", filepath.ToSlash(filepath.Join(source, name, fmt.Sprintf("%s.raw", v.name)))))
+	args = strings.ReplaceAll(args, filepath.ToSlash(filepath.Join(v.folder, fmt.Sprintf( /*"%s.raw"*/ "%s.qcow2", v.name))), fmt.Sprintf("\"%s\"", filepath.ToSlash(filepath.Join(source, name, fmt.Sprintf( /*"%s.raw"*/ "%s.qcow2", v.name)))))
 	// replace monitor with nothing
 	args = strings.ReplaceAll(args, fmt.Sprintf("-monitor unix:%s/monitor.sock,server,nowait", v.folder), "")
 

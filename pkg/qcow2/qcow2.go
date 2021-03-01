@@ -141,7 +141,7 @@ func (w *Writer) writeHeader() error {
 		Version:               2,
 		ClusterBits:           16, // Number of trailing zeroes on the w.clusterSize in binary (sys.Ctz)
 		Size:                  uint64(w.h.Size()),
-		L1Size:                uint32(w.l1Size), // TODO: should this be divided by 8? (bytes per entry)
+		L1Size:                uint32(w.l2Blocks), // TODO: should this be divided by 8? (bytes per entry)
 		L1TableOffset:         uint64((1 + w.refcountBlocks + w.refcountTableClusters) * w.clusterSize),
 		RefcountTableOffset:   uint64(w.clusterSize),
 		RefcountTableClusters: uint32(w.refcountTableClusters),

@@ -25,6 +25,7 @@ type Writer struct {
 
 	totalDataSectors      int64
 	totalDataClusters     int64
+	metadataClusters      int64
 	clusterSize           int64
 	sectorsPerCluster     int64
 	clusterOffsets        []int64
@@ -65,21 +66,28 @@ func (w *Writer) init() error {
 	w.totalDataSectors = divide(w.h.Size(), SectorSize)
 	w.totalDataClusters = divide(w.totalDataSectors, w.sectorsPerCluster)
 
+	w.l2Blocks = divide(w.totalDataClusters, w.clusterSize/8)
+	w.l2Size = w.clusterSize
+	w.l1Size = divide(w.l2Blocks, w.clusterSize/8)
+
 	w.refcountBlocks = divide(w.totalDataClusters, w.clusterSize/2)
 	w.refcountTableClusters = divide(w.refcountBlocks, w.clusterSize/8)
 
-	w.l2Size = w.clusterSize
-	w.l2Blocks = divide(w.totalDataClusters, w.clusterSize/8)
-	w.l1Size = divide(w.l2Blocks, w.clusterSize/8)
+	// NOTE: I think refcounts refer to the host file including metadata, so this is an attempt to include that.
+	w.metadataClusters = 1 + w.l1Size + w.l2Blocks + w.refcountBlocks + w.refcountTableClusters
+	for {
+		before := w.metadataClusters
+		w.refcountBlocks = divide(w.totalDataClusters+w.metadataClusters, w.clusterSize/2)
+		w.refcountTableClusters = divide(w.refcountBlocks, w.clusterSize/8)
+		w.metadataClusters = 1 + w.l1Size + w.l2Blocks + w.refcountBlocks + w.refcountTableClusters
+		if w.metadataClusters == before {
+			break
+		}
+	}
 
 	w.l2Offset = w.clusterSize * (1 + w.l1Size + w.refcountTableClusters + w.refcountBlocks)
 
 	err := w.writeHeader()
-	if err != nil {
-		return err
-	}
-
-	err = w.writeL1Table()
 	if err != nil {
 		return err
 	}
@@ -90,6 +98,11 @@ func (w *Writer) init() error {
 	}
 
 	err = w.writeRefcountBlocks()
+	if err != nil {
+		return err
+	}
+
+	err = w.writeL1Table()
 	if err != nil {
 		return err
 	}
@@ -110,8 +123,8 @@ func (w *Writer) writeHeader() error {
 		ClusterBits:           16, // Number of trailing zeroes on the w.clusterSize in binary (sys.Ctz)
 		Size:                  uint64(w.h.Size()),
 		L1Size:                uint32(w.l1Size), // TODO: should this be divided by 8? (bytes per entry)
-		L1TableOffset:         uint64(w.clusterSize),
-		RefcountTableOffset:   uint64(w.clusterSize * (1 + w.l1Size)),
+		L1TableOffset:         uint64((1 + w.refcountBlocks + w.refcountTableClusters) * w.clusterSize),
+		RefcountTableOffset:   uint64(w.clusterSize),
 		RefcountTableClusters: uint32(w.refcountTableClusters),
 		// SnapshotsOffset:       uint64(w.snapshotsOffset),
 	}
@@ -130,44 +143,10 @@ func (w *Writer) writeHeader() error {
 
 }
 
-func (w *Writer) writeL1Table() error {
-
-	l2Capacity := w.clusterSize * (w.clusterSize / 8)
-
-	buf := new(bytes.Buffer)
-
-	var l2 int64
-	var capacity int64
-	var required = w.h.Size()
-
-	for capacity < required {
-		l2Offset := w.l2Offset + w.clusterSize*l2
-		l2++
-		err := binary.Write(buf, binary.BigEndian, uint64(l2Offset)|qcow2.OFLAG_COPIED)
-		if err != nil {
-			return err
-		}
-		capacity += l2Capacity
-	}
-
-	_, err := io.Copy(w.w, bytes.NewReader(buf.Bytes()))
-	if err != nil {
-		return err
-	}
-
-	_, err = w.w.Seek((w.l1Size+1)*w.clusterSize, io.SeekStart)
-	if err != nil {
-		return err
-	}
-
-	return nil
-
-}
-
 func (w *Writer) writeRefcountTable() error {
 
 	buf := new(bytes.Buffer)
-	first := w.clusterSize * (1 + w.l1Size + w.refcountTableClusters)
+	first := w.clusterSize * (1 + w.refcountTableClusters)
 	offset := first
 	for block := int64(0); block < w.refcountBlocks; block++ {
 		err := binary.Write(buf, binary.BigEndian, uint64(offset))
@@ -200,6 +179,14 @@ func (w *Writer) writeRefcountBlocks() error {
 	w.clusterOffsets = make([]int64, w.totalDataClusters)
 	w.clusterInUse = make([]bool, w.totalDataClusters)
 
+	for cluster := int64(0); cluster < w.metadataClusters; cluster++ {
+		refs := uint16(1)
+		err := binary.Write(buf, binary.BigEndian, refs)
+		if err != nil {
+			return err
+		}
+	}
+
 	for cluster := int64(0); cluster < w.totalDataClusters; cluster++ {
 		w.clusterOffsets[cluster] = clusterOffset
 		refs := uint16(0)
@@ -212,6 +199,48 @@ func (w *Writer) writeRefcountBlocks() error {
 		if err != nil {
 			return err
 		}
+	}
+
+	_, err := io.Copy(w.w, bytes.NewReader(buf.Bytes()))
+	if err != nil {
+		return err
+	}
+
+	_, err = w.w.Seek((1+w.refcountBlocks+w.refcountTableClusters)*w.clusterSize, io.SeekStart)
+	if err != nil {
+		return err
+	}
+
+	return nil
+
+}
+
+func (w *Writer) writeL1Table() error {
+
+	l2Capacity := w.clusterSize * (w.clusterSize / 8)
+
+	buf := new(bytes.Buffer)
+
+	var l2 int64
+	var capacity int64
+	var required = w.h.Size()
+
+	for capacity < required {
+		l2Offset := w.l2Offset + w.clusterSize*l2
+
+		if w.h.RegionIsHole(l2*w.clusterSize, w.clusterSize) {
+			err := binary.Write(buf, binary.BigEndian, uint64(0))
+			if err != nil {
+				return err
+			}
+		} else {
+			err := binary.Write(buf, binary.BigEndian, uint64(l2Offset)|qcow2.OFLAG_COPIED)
+			if err != nil {
+				return err
+			}
+		}
+		l2++
+		capacity += l2Capacity
 	}
 
 	_, err := io.Copy(w.w, bytes.NewReader(buf.Bytes()))

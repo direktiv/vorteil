@@ -41,6 +41,8 @@ const (
 	VHDFixedFormat Format = "vhd-fixed"
 	// VHDDynamicFormat is a disk type that returns "vhd-dynamic"
 	VHDDynamicFormat Format = "vhd-dynamic"
+	// QCOW2Format is a disk type that returns "qcow2"
+	QCOW2Format = "qcow2"
 )
 
 // AllFormatStrings returns a list of all supported disk image formats.
@@ -66,6 +68,7 @@ var (
 		VHDFormat:                 ".vhd",
 		VHDFixedFormat:            ".vhd",
 		VHDDynamicFormat:          ".vhd",
+		QCOW2Format:               ".qcow2",
 	}
 
 	alignments = map[Format]int64{
@@ -78,6 +81,7 @@ var (
 		VHDFormat:                 0x200000,
 		VHDFixedFormat:            0x200000,
 		VHDDynamicFormat:          0x200000,
+		QCOW2Format:               0x200000,
 	}
 
 	defaultMTUs = map[Format]uint{
@@ -90,6 +94,7 @@ var (
 		VHDFormat:                 1500,
 		VHDFixedFormat:            1500,
 		VHDDynamicFormat:          1500,
+		QCOW2Format:               1500,
 	}
 
 	buildFuncs = map[Format]BuildWriterInstantiator{
@@ -102,6 +107,7 @@ var (
 		VHDFormat:                 buildFixedVHD,
 		VHDFixedFormat:            buildFixedVHD,
 		VHDDynamicFormat:          buildDynamicVHD,
+		QCOW2Format:               buildQCOW2,
 	}
 )
 

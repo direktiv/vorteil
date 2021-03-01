@@ -76,6 +76,7 @@ require (
 	github.com/vbauerster/mpb v3.4.0+incompatible
 	github.com/vbauerster/mpb/v5 v5.3.0
 	github.com/vishvananda/netlink v1.1.0
+	github.com/zchee/go-qcow2 v0.0.0-20170102190316-9a991fd172f0
 	golang.org/x/crypto v0.0.0-20200820211705-5c72a883971a
 	golang.org/x/oauth2 v0.0.0-20200107190931-bf48bf16ab8d
 	golang.org/x/sync v0.0.0-20200625203802-6e8e738ad208

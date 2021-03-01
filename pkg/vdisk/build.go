@@ -12,6 +12,7 @@ import (
 
 	"github.com/vorteil/vorteil/pkg/elog"
 	"github.com/vorteil/vorteil/pkg/gcparchive"
+	"github.com/vorteil/vorteil/pkg/qcow2"
 	"github.com/vorteil/vorteil/pkg/vcfg"
 	"github.com/vorteil/vorteil/pkg/vhd"
 	"github.com/vorteil/vorteil/pkg/vimg"
@@ -189,4 +190,8 @@ func buildFixedVHD(w io.WriteSeeker, b *vimg.Builder, cfg *vcfg.VCFG) (io.WriteS
 
 func buildDynamicVHD(w io.WriteSeeker, b *vimg.Builder, cfg *vcfg.VCFG) (io.WriteSeeker, error) {
 	return vhd.NewDynamicWriter(w, b)
+}
+
+func buildQCOW2(w io.WriteSeeker, b *vimg.Builder, cfg *vcfg.VCFG) (io.WriteSeeker, error) {
+	return qcow2.NewWriter(w, b)
 }

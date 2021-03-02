@@ -63,7 +63,7 @@ const (
 	// ProvisionerType for GCP provisioner
 	ProvisionerType = "google-compute"
 	statusDone      = "DONE"
-	waitInSecs      = 120
+	waitInSecs      = 1800 // 30 minutes
 )
 
 var scopes = []string{

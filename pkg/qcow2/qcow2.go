@@ -193,28 +193,26 @@ func (w *Writer) writeRefcountBlocks() error {
 
 	buf := new(bytes.Buffer)
 
+	var totalHostClusters int64
+
 	// NOTE: we also calculate cluster offsets here to avoid checking for holes twice
 	clusterOffset := w.l2Offset + w.l2Blocks*w.clusterSize
 	w.clusterOffsets = make([]int64, w.totalDataClusters)
 	w.clusterInUse = make([]bool, w.totalDataClusters)
 
-	for cluster := int64(0); cluster < w.metadataClusters; cluster++ {
-		refs := uint16(1)
-		err := binary.Write(buf, binary.BigEndian, refs)
-		if err != nil {
-			return err
-		}
-	}
+	totalHostClusters = w.metadataClusters
 
 	for cluster := int64(0); cluster < w.totalDataClusters; cluster++ {
 		w.clusterOffsets[cluster] = clusterOffset
-		refs := uint16(0)
 		if !w.h.RegionIsHole(cluster*w.clusterSize, w.clusterSize) {
-			refs = 1
+			totalHostClusters++
 			w.clusterInUse[cluster] = true
 			clusterOffset += w.clusterSize
 		}
-		err := binary.Write(buf, binary.BigEndian, refs)
+	}
+
+	for cluster := int64(0); cluster < totalHostClusters; cluster++ {
+		err := binary.Write(buf, binary.BigEndian, uint16(1))
 		if err != nil {
 			return err
 		}

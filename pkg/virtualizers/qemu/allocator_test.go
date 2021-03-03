@@ -21,6 +21,7 @@ func TestRegister(t *testing.T) {
 		t.Errorf("registering virtualizer failed, as map lookup returned nil")
 	}
 }
+
 func TestMarshalAndUnmarshal(t *testing.T) {
 	data := c.Marshal()
 	err := config.Unmarshal(data)
@@ -59,7 +60,7 @@ func TestDiskAlignment(t *testing.T) {
 func TestDiskFormat(t *testing.T) {
 	format := Allocator.DiskFormat()
 	var a vdisk.Format
-	a = vdisk.QCOW2Format
+	a = vdisk.RAWFormat
 	if format != a {
 		t.Errorf("disk format does not match %v got %v instead", a, format)
 	}

@@ -100,7 +100,7 @@ func (o *operation) prepare(args *virtualizers.PrepareArgs) {
 	o.id = strings.Split(filepath.Base(o.folder), "-")[1]
 
 	diskpath := filepath.ToSlash(args.ImagePath)
-	diskformat := "qcow2" // "raw"
+	diskformat := "raw"
 
 	argsCommand := createArgs(o.config.VM.CPUs, o.config.VM.RAM.Units(vcfg.MiB), o.headless, diskpath, diskformat)
 	argsCommand += fmt.Sprintf(" -monitor pipe:%s", o.id)
@@ -162,7 +162,7 @@ func (v *Virtualizer) GenerateScript(source string) error {
 
 	args := strings.Join(v.command.Args, " ")
 	// replace disk path
-	args = strings.ReplaceAll(args, filepath.ToSlash(filepath.Join(v.folder, fmt.Sprintf( /*"%s.raw"*/ "%s.qcow2", v.name))), fmt.Sprintf("\"%s\"", filepath.ToSlash(filepath.Join(source, name, fmt.Sprintf( /*"%s.raw"*/ "%s.qcow2", v.name)))))
+	args = strings.ReplaceAll(args, filepath.ToSlash(filepath.Join(v.folder, fmt.Sprintf("%s.raw", v.name))), fmt.Sprintf("\"%s\"", filepath.ToSlash(filepath.Join(source, name, fmt.Sprintf("%s.raw ", v.name)))))
 	// replace monitor with nothing
 	args = strings.ReplaceAll(args, fmt.Sprintf("-monitor pipe:%s", v.id), "")
 

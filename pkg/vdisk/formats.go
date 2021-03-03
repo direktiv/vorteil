@@ -42,7 +42,7 @@ const (
 	// VHDDynamicFormat is a disk type that returns "vhd-dynamic"
 	VHDDynamicFormat Format = "vhd-dynamic"
 	// QCOW2Format is a disk type that returns "qcow2"
-	QCOW2Format = "qcow2"
+	QCOW2Format Format = "qcow2"
 )
 
 // AllFormatStrings returns a list of all supported disk image formats.

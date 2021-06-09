@@ -39,7 +39,7 @@ type Provisioner struct {
 	jsonKey       []byte
 }
 
-// ProvisionerArgs TODO:
+// ProvisionerArgs ...
 type ProvisionerArgs struct {
 	Logger elog.View
 	Data   []byte

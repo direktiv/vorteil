@@ -158,7 +158,7 @@ func (v *Virtualizer) Serial() *logger.Logger {
 // ForceStop is the same as stop without the sleep so we get no logs and the disk is freed to be deleted quicker.
 func (v *Virtualizer) ForceStop() error {
 	v.logger.Debugf("Stopping VM")
-	if v.state != virtualizers.Ready {
+	if v.state != virtualizers.Ready && v.state != virtualizers.Deleted {
 		v.state = virtualizers.Changing
 
 		if v.sock != nil {
@@ -191,7 +191,7 @@ func (v *Virtualizer) ForceStop() error {
 // Stop stops the vm and changes the status back to 'ready'
 func (v *Virtualizer) Stop() error {
 	v.logger.Debugf("Stopping VM")
-	if v.state != virtualizers.Ready {
+	if v.state != virtualizers.Ready && v.state != virtualizers.Deleted {
 		v.state = virtualizers.Changing
 
 		if v.sock != nil {

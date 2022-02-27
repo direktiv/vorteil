@@ -306,6 +306,7 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG, name st
 	for {
 		select {
 		case <-time.After(time.Millisecond * 200):
+
 			// Check prepare error from vm operation
 			if prepareError != nil {
 				return prepareError
@@ -320,6 +321,7 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG, name st
 					}
 				}
 			}
+
 			// Check when vm has become alive
 			if virt.State() == virtualizers.Alive && !hasBeenAlive {
 				hasBeenAlive = true
@@ -328,6 +330,11 @@ func run(virt virtualizers.Virtualizer, diskpath string, cfg *vcfg.VCFG, name st
 			if virt.State() == virtualizers.Ready && hasBeenAlive {
 				return nil
 			}
+
+			if virt.State() == virtualizers.Deleted {
+				return nil
+			}
+
 		case msg, more := <-s:
 			if !more {
 				return nil

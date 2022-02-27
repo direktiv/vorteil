@@ -1,3 +1,4 @@
+//go:build linux || darwin
 // +build linux darwin
 
 package qemu
@@ -30,6 +31,7 @@ func (v *Virtualizer) Start() error {
 	v.command.SysProcAttr = &syscall.SysProcAttr{
 		Setpgid: true,
 	}
+
 	switch v.State() {
 
 	case "ready":
@@ -65,9 +67,10 @@ func (v *Virtualizer) Start() error {
 				count++
 				time.Sleep(time.Second * 1)
 			}
+
 			v.state = virtualizers.Alive
 
-			_, err = v.command.Process.Wait()
+			_, err := v.command.Process.Wait()
 			if err == nil || err.Error() != fmt.Errorf("wait: no child processes").Error() {
 				if err != nil {
 					v.logger.Errorf("Error Wait Command: %s", err.Error())
@@ -75,7 +78,6 @@ func (v *Virtualizer) Start() error {
 			}
 
 			v.state = virtualizers.Ready
-
 			if v.sock != nil {
 				v.sock.Close()
 
@@ -83,10 +85,14 @@ func (v *Virtualizer) Start() error {
 				v.errPipe.Close()
 				v.outPipe.Close()
 				v.disk.Close()
+
+				v.Close(false)
+
 			}
 
 		}()
 	}
+
 	return nil
 }
 

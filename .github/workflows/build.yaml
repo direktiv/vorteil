@@ -1,0 +1,65 @@
+name: Build
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+  push:
+    tags:
+      - v*
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Install Golang
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.15
+      - name: Set env
+        run: echo "RELEASE_VERSION=${GITHUB_REF#refs/*/}" >> $GITHUB_ENV
+      - name: build binaries
+        run: |
+          sudo apt-get -y install libseccomp-dev
+          export BUILD_DATE=$(date -R)
+          export BUILD_REF=$(git rev-parse --short HEAD)
+          echo "$RELEASE_VERSION-$BUILD_REF ($BUILD_DATE)"
+          export LDFLAGS="-X github.com/vorteil/vorteil/pkg/cli.release=$BUILD_TAG -X github.com/vorteil/vorteil/pkg/cli.commit=$BUILD_REF -X 'github.com/vorteil/vorteil/pkg/cli.date=$BUILD_DATE'"
+          echo $LDFLAGS
+          CGO_ENABLED=0 go build -o vorteil -ldflags "$LDFLAGS" github.com/vorteil/vorteil/cmd/vorteil 
+          CGO_ENABLED=0 GOOS=windows go build -o vorteil.exe -ldflags "$LDFLAGS" github.com/vorteil/vorteil/cmd/vorteil
+          zip vorteil_windows-x86.zip vorteil.exe
+          tar -zcvf vorteil_linux-x86.tar.gz vorteil
+      - name: Get the version tag
+        id: get_version
+        run: echo ::set-output name=VERSION::$(echo $GITHUB_REF | cut -d / -f 3)
+      - name: release direktiv
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Vorteil ${{ steps.get_version.outputs.VERSION }}
+          draft: true
+          prerelease: false
+      - name: Upload Release Asset Windows
+        id: upload-release-asset-windows
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }} # This pulls from the CREATE RELEASE step above, referencing it's ID to get its outputs object, which include a `upload_url`. See this blog post for more info: https://jasonet.co/posts/new-features-of-github-actions/#passing-data-to-future-steps 
+          asset_path: ./vorteil_windows-x86.zip
+          asset_name: vorteil_windows-x86.zip
+          asset_content_type: application/zip
+      - name: Upload Release Asset Linux
+        id: upload-release-asset-linux
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }} # This pulls from the CREATE RELEASE step above, referencing it's ID to get its outputs object, which include a `upload_url`. See this blog post for more info: https://jasonet.co/posts/new-features-of-github-actions/#passing-data-to-future-steps 
+          asset_path: ./vorteil_linux-x86.tar.gz
+          asset_name: vorteil_linux-x86.tar.gz
+          asset_content_type: application/tar+gzip
+    
